@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Mail, Phone, MapPin, Send } from "lucide-react";
+import { Mail, Phone, MapPin, Send, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,90 +11,104 @@ const ContactSection = () => {
     name: "",
     company: "",
     phone: "",
-    requirement: "",
+    productInterest: "",
+    message: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     toast.success("Thank you for your inquiry! We'll get back to you soon.");
-    setFormData({ name: "", company: "", phone: "", requirement: "" });
+    setFormData({ name: "", company: "", phone: "", productInterest: "", message: "" });
   };
 
   return (
-    <section id="contact" className="py-24 md:py-32 bg-steel-gradient relative">
-      <div className="container mx-auto px-4 md:px-6">
+    <section id="contact" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
+      {/* Background elements */}
+      <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-accent/5 rounded-full blur-3xl" />
+      <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/3 rounded-full blur-3xl" />
+
+      <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
           {/* Left Column - Info */}
           <motion.div
-            initial={{ opacity: 0, x: -30 }}
+            initial={{ opacity: 0, x: -25 }}
             whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.5 }}
           >
-            <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
-              Get in Touch
+            <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
+              Contact Us
             </span>
-            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-6">
-              Let's Discuss Your{" "}
-              <span className="text-gradient-accent">Requirements</span>
+            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-primary-foreground mb-6">
+              Let's Start a{" "}
+              <span className="text-accent">Conversation</span>
             </h2>
-            <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-              Ready to elevate your printing and signage capabilities? Our team is
-              here to understand your needs and provide tailored solutions.
+            <p className="text-steel-medium text-lg mb-8 leading-relaxed">
+              Ready to explore the right machinery for your business? Our team is here to understand your needs and provide honest, practical guidance.
             </p>
 
             {/* Contact Info */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-card border border-border">
-                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-primary-foreground/5 border border-primary-foreground/10">
+                <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <Mail className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
+                  <p className="text-sm text-steel-medium">Email</p>
                   <a
                     href="mailto:elkatech2021@gmail.com"
-                    className="text-foreground font-medium hover:text-accent transition-colors"
+                    className="text-primary-foreground font-medium hover:text-accent transition-colors"
                   >
                     elkatech2021@gmail.com
                   </a>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-card border border-border">
-                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-primary-foreground/5 border border-primary-foreground/10">
+                <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <Phone className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Phone / WhatsApp</p>
-                  <p className="text-foreground font-medium">Contact us directly</p>
+                  <p className="text-sm text-steel-medium">Phone / WhatsApp</p>
+                  <p className="text-primary-foreground font-medium">Contact via form or WhatsApp</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-card border border-border">
-                <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-primary-foreground/5 border border-primary-foreground/10">
+                <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Location</p>
-                  <p className="text-foreground font-medium">Ahmedabad, Gujarat, India</p>
+                  <p className="text-sm text-steel-medium">Location</p>
+                  <p className="text-primary-foreground font-medium">Ahmedabad, Gujarat, India</p>
                 </div>
               </div>
             </div>
+
+            {/* WhatsApp Button */}
+            <Button
+              variant="outline"
+              size="lg"
+              className="border-accent/50 text-accent hover:bg-accent/10 hover:border-accent"
+            >
+              <MessageCircle className="mr-2 w-5 h-5" />
+              Chat on WhatsApp
+            </Button>
           </motion.div>
 
           {/* Right Column - Form */}
           <motion.div
-            initial={{ opacity: 0, x: 30 }}
+            initial={{ opacity: 0, x: 25 }}
             whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 0.6, delay: 0.1 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.5, delay: 0.1 }}
           >
             <form
               onSubmit={handleSubmit}
-              className="bg-card rounded-2xl p-8 border border-border shadow-card"
+              className="bg-card rounded-2xl p-8 border border-border shadow-elevated"
             >
               <h3 className="font-display text-xl font-semibold text-foreground mb-6">
-                Request a Quote
+                Send an Inquiry
               </h3>
 
               <div className="space-y-4">
@@ -103,7 +117,7 @@ const ContactSection = () => {
                     Your Name *
                   </label>
                   <Input
-                    placeholder="John Doe"
+                    placeholder="Your full name"
                     value={formData.name}
                     onChange={(e) =>
                       setFormData({ ...formData, name: e.target.value })
@@ -118,7 +132,7 @@ const ContactSection = () => {
                     Company Name
                   </label>
                   <Input
-                    placeholder="Your Company"
+                    placeholder="Your company"
                     value={formData.company}
                     onChange={(e) =>
                       setFormData({ ...formData, company: e.target.value })
@@ -144,13 +158,27 @@ const ContactSection = () => {
 
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">
-                    Your Requirement *
+                    Product Interest
+                  </label>
+                  <Input
+                    placeholder="e.g., UV Printer, CNC Router"
+                    value={formData.productInterest}
+                    onChange={(e) =>
+                      setFormData({ ...formData, productInterest: e.target.value })
+                    }
+                    className="bg-background"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">
+                    Message *
                   </label>
                   <Textarea
-                    placeholder="Tell us about your printing or signage needs..."
-                    value={formData.requirement}
+                    placeholder="Tell us about your requirements..."
+                    value={formData.message}
                     onChange={(e) =>
-                      setFormData({ ...formData, requirement: e.target.value })
+                      setFormData({ ...formData, message: e.target.value })
                     }
                     required
                     rows={4}
@@ -166,6 +194,23 @@ const ContactSection = () => {
             </form>
           </motion.div>
         </div>
+
+        {/* Google Maps Placeholder */}
+        <motion.div
+          className="mt-16 rounded-2xl overflow-hidden border border-primary-foreground/10"
+          initial={{ opacity: 0, y: 25 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+        >
+          <div className="aspect-[21/9] bg-navy-medium flex items-center justify-center">
+            <div className="text-center">
+              <MapPin className="w-10 h-10 text-accent mx-auto mb-3 opacity-50" />
+              <p className="text-steel-medium text-sm">Google Maps</p>
+              <p className="text-primary-foreground/60 text-xs mt-1">Ahmedabad, Gujarat, India</p>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </section>
   );
