@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -62,8 +63,9 @@ const Header = () => {
             ))}
           </nav>
 
-          {/* CTA Button */}
-          <div className="hidden md:flex items-center gap-3">
+          {/* CTA Button & Theme Toggle */}
+          <div className="hidden md:flex items-center gap-2">
+            <ThemeToggle />
             <Button variant="cta" size="default">
               Request a Quote
             </Button>
@@ -102,8 +104,9 @@ const Header = () => {
                   {item.label}
                 </a>
               ))}
-              <div className="pt-3 px-3">
-                <Button variant="cta" size="default" className="w-full">
+              <div className="pt-3 px-3 flex items-center gap-2">
+                <ThemeToggle />
+                <Button variant="cta" size="default" className="flex-1">
                   Request a Quote
                 </Button>
               </div>
