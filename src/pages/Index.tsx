@@ -2,7 +2,11 @@ import { useState } from "react";
 import IntroAnimation from "@/components/IntroAnimation";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
-import SolutionsSection from "@/components/SolutionsSection";
+import FeaturedSolutions from "@/components/FeaturedSolutions";
+import AboutSection from "@/components/AboutSection";
+import WorkSolutionsSection from "@/components/WorkSolutionsSection";
+import BrandsSection from "@/components/BrandsSection";
+import InfrastructureSection from "@/components/InfrastructureSection";
 import WhyElkatech from "@/components/WhyElkatech";
 import ContactSection from "@/components/ContactSection";
 import Footer from "@/components/Footer";
@@ -16,7 +20,11 @@ const Index = () => {
       <Header />
       <main>
         <HeroSection />
-        <SolutionsSection />
+        <FeaturedSolutions />
+        <AboutSection />
+        <WorkSolutionsSection />
+        <BrandsSection />
+        <InfrastructureSection />
         <WhyElkatech />
         <ContactSection />
       </main>
