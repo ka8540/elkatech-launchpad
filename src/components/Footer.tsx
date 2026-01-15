@@ -32,11 +32,11 @@ const Footer = () => {
               </div>
               <span className="font-display text-2xl font-bold">Elkatech</span>
             </div>
-            <p className="text-steel-medium text-sm leading-relaxed mb-4">
+            <p className="text-primary-foreground/70 text-sm leading-relaxed mb-4">
               Your trusted partner for industrial printing and signage machinery. 
               Importer, wholesaler, and distributor serving businesses across India.
             </p>
-            <p className="text-xs text-steel-medium">
+            <p className="text-xs text-primary-foreground/50">
               Ahmedabad, Gujarat, India
             </p>
           </div>
@@ -51,7 +51,7 @@ const Footer = () => {
                 <li key={link.label}>
                   <a
                     href={link.href}
-                    className="text-sm text-steel-medium hover:text-accent transition-colors duration-200"
+                    className="text-sm text-primary-foreground/70 hover:text-accent transition-colors duration-200"
                   >
                     {link.label}
                   </a>
@@ -70,7 +70,7 @@ const Footer = () => {
                 <li key={link.label}>
                   <a
                     href={link.href}
-                    className="text-sm text-steel-medium hover:text-accent transition-colors duration-200"
+                    className="text-sm text-primary-foreground/70 hover:text-accent transition-colors duration-200"
                   >
                     {link.label}
                   </a>
@@ -89,14 +89,14 @@ const Footer = () => {
                 <Mail className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
                 <a
                   href="mailto:elkatech2021@gmail.com"
-                  className="text-sm text-steel-medium hover:text-accent transition-colors duration-200"
+                  className="text-sm text-primary-foreground/70 hover:text-accent transition-colors duration-200"
                 >
                   elkatech2021@gmail.com
                 </a>
               </li>
               <li className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
-                <span className="text-sm text-steel-medium">
+                <span className="text-sm text-primary-foreground/70">
                   Ahmedabad, Gujarat<br />India
                 </span>
               </li>
@@ -110,16 +110,16 @@ const Footer = () => {
         {/* Bottom Row */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="text-center md:text-left">
-            <p className="text-sm text-steel-medium">
+            <p className="text-sm text-primary-foreground/70">
               © {currentYear} ELKATECH INDIA PRIVATE LIMITED
             </p>
-            <p className="text-xs text-steel-medium/70 mt-1">
+            <p className="text-xs text-primary-foreground/50 mt-1">
               All rights reserved.
             </p>
           </div>
-          <div className="flex items-center gap-4 text-xs text-steel-medium">
+          <div className="flex items-center gap-4 text-xs text-primary-foreground/70">
             <span>ROC: Ahmedabad</span>
-            <span className="w-1 h-1 rounded-full bg-steel-medium" />
+            <span className="w-1 h-1 rounded-full bg-primary-foreground/50" />
             <span className="text-accent">Active Status</span>
           </div>
         </div>

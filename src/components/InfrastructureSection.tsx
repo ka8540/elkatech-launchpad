@@ -23,7 +23,7 @@ const InfrastructureSection = () => {
   return (
     <section id="infrastructure" className="py-24 md:py-32 bg-steel-gradient relative overflow-hidden">
       {/* Background pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(0,0,0,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,0,0,0.02)_1px,transparent_1px)] bg-[size:40px_40px]" />
+      <div className="absolute inset-0 bg-grid-pattern-sm" />
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
@@ -41,7 +41,7 @@ const InfrastructureSection = () => {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <Warehouse className="w-20 h-20 text-accent mx-auto mb-4 opacity-50" />
-                  <p className="text-steel-medium text-sm">Warehouse Facility</p>
+                  <p className="text-muted-foreground text-sm">Warehouse Facility</p>
                   <p className="text-primary-foreground/60 text-xs mt-1">Ahmedabad, Gujarat</p>
                 </div>
               </div>
@@ -51,7 +51,7 @@ const InfrastructureSection = () => {
               <div className="absolute bottom-4 left-4 w-16 h-16 rounded-full bg-accent/5 blur-xl" />
               
               {/* Grid overlay */}
-              <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px]" />
+              <div className="absolute inset-0 bg-grid-pattern-light" />
             </div>
 
             {/* Stats overlay */}

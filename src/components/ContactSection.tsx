@@ -43,7 +43,7 @@ const ContactSection = () => {
               Let's Start a{" "}
               <span className="text-accent">Conversation</span>
             </h2>
-            <p className="text-steel-medium text-lg mb-8 leading-relaxed">
+            <p className="text-primary-foreground/70 text-lg mb-8 leading-relaxed">
               Ready to explore the right machinery for your business? Our team is here to understand your needs and provide honest, practical guidance.
             </p>
 
@@ -54,7 +54,7 @@ const ContactSection = () => {
                   <Mail className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-steel-medium">Email</p>
+                  <p className="text-sm text-primary-foreground/60">Email</p>
                   <a
                     href="mailto:elkatech2021@gmail.com"
                     className="text-primary-foreground font-medium hover:text-accent transition-colors"
@@ -69,7 +69,7 @@ const ContactSection = () => {
                   <Phone className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-steel-medium">Phone / WhatsApp</p>
+                  <p className="text-sm text-primary-foreground/60">Phone / WhatsApp</p>
                   <p className="text-primary-foreground font-medium">Contact via form or WhatsApp</p>
                 </div>
               </div>
@@ -79,7 +79,7 @@ const ContactSection = () => {
                   <MapPin className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-steel-medium">Location</p>
+                  <p className="text-sm text-primary-foreground/60">Location</p>
                   <p className="text-primary-foreground font-medium">Ahmedabad, Gujarat, India</p>
                 </div>
               </div>
@@ -206,8 +206,8 @@ const ContactSection = () => {
           <div className="aspect-[21/9] bg-navy-medium flex items-center justify-center">
             <div className="text-center">
               <MapPin className="w-10 h-10 text-accent mx-auto mb-3 opacity-50" />
-              <p className="text-steel-medium text-sm">Google Maps</p>
-              <p className="text-primary-foreground/60 text-xs mt-1">Ahmedabad, Gujarat, India</p>
+              <p className="text-primary-foreground/60 text-sm">Google Maps</p>
+              <p className="text-primary-foreground/40 text-xs mt-1">Ahmedabad, Gujarat, India</p>
             </div>
           </div>
         </motion.div>
