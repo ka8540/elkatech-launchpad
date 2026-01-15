@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import IntroAnimation from "@/components/IntroAnimation";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
@@ -13,15 +13,6 @@ import Footer from "@/components/Footer";
 
 const Index = () => {
   const [showIntro, setShowIntro] = useState(true);
-  const [contentReady, setContentReady] = useState(false);
-
-  useEffect(() => {
-    if (!showIntro) {
-      // Small delay to ensure smooth transition after intro
-      const timer = setTimeout(() => setContentReady(true), 100);
-      return () => clearTimeout(timer);
-    }
-  }, [showIntro]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -29,7 +20,7 @@ const Index = () => {
       {!showIntro && (
         <>
           <Header />
-          <main className={contentReady ? "animate-in fade-in duration-500" : "opacity-0"}>
+          <main>
             <HeroSection />
             <FeaturedSolutions />
             <AboutSection />
