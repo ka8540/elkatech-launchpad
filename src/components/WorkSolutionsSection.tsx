@@ -96,7 +96,7 @@ const WorkSolutionsSection = () => {
             Complete Industrial{" "}
             <span className="text-accent">Machinery Solutions</span>
           </h2>
-          <p className="text-steel-medium text-lg">
+          <p className="text-primary-foreground/70 text-lg">
             Explore our comprehensive range of printing, signage, and fabrication equipment designed for commercial and industrial applications.
           </p>
         </motion.div>
@@ -122,7 +122,7 @@ const WorkSolutionsSection = () => {
                   alt={category.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0A1628] via-[#0A1628]/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent dark:from-[hsl(215,60%,6%)] dark:via-[hsl(215,60%,6%)]/40" />
               </div>
 
               {/* Content */}
@@ -132,14 +132,14 @@ const WorkSolutionsSection = () => {
                   <h3 className="font-display text-xl font-semibold text-primary-foreground mb-2">
                     {category.title}
                   </h3>
-                  <p className="text-steel-medium text-sm leading-relaxed">
+                  <p className="text-primary-foreground/70 text-sm leading-relaxed">
                     {category.description}
                   </p>
                 </div>
 
                 {/* Applications */}
                 <div className="mb-4">
-                  <p className="text-xs text-steel-medium uppercase tracking-wider mb-2">
+                  <p className="text-xs text-primary-foreground/60 uppercase tracking-wider mb-2">
                     Typical Applications
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -156,7 +156,7 @@ const WorkSolutionsSection = () => {
 
                 {/* Industries */}
                 <div className="mb-5">
-                  <p className="text-xs text-steel-medium uppercase tracking-wider mb-2">
+                  <p className="text-xs text-primary-foreground/60 uppercase tracking-wider mb-2">
                     Industries Served
                   </p>
                   <div className="flex flex-wrap gap-2">
