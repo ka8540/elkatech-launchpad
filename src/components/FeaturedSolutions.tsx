@@ -1,55 +1,55 @@
 import { motion, type Variants } from "framer-motion";
-import { Printer, Layers, Cpu, Scissors, Sparkles, Type, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 
 const solutions = [
   {
-    icon: Printer,
     title: "Solvent & Eco-Solvent Printers",
     description: "High-performance wide-format printing solutions for outdoor signage, banners, and vehicle wraps.",
+    image: "https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?w=600&h=400&fit=crop&q=80",
   },
   {
-    icon: Layers,
     title: "UV Printers",
     description: "Versatile roll-to-roll and flatbed UV printing for rigid and flexible substrates.",
+    image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=600&h=400&fit=crop&q=80",
   },
   {
-    icon: Cpu,
     title: "CNC Routers",
     description: "Precision routing and cutting for wood, acrylic, aluminum, and composite materials.",
+    image: "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=600&h=400&fit=crop&q=80",
   },
   {
-    icon: Scissors,
     title: "Laser Cutting Machines",
     description: "High-precision laser engraving and cutting for industrial and commercial applications.",
+    image: "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=600&h=400&fit=crop&q=80",
   },
   {
-    icon: Sparkles,
     title: "Lamination Machines",
     description: "Professional lamination and finishing equipment for print protection and enhancement.",
+    image: "https://images.unsplash.com/photo-1586864387789-628af9feed72?w=600&h=400&fit=crop&q=80",
   },
   {
-    icon: Type,
     title: "Letter Bending Solutions",
     description: "CNC channel letter bending machines for signage and fabrication shops.",
+    image: "https://images.unsplash.com/photo-1563694983011-6f4d90358083?w=600&h=400&fit=crop&q=80",
   },
 ];
 
 const containerVariants: Variants = {
-  hidden: { opacity: 0 },
+  hidden: {},
   visible: {
-    opacity: 1,
     transition: {
-      staggerChildren: 0.08,
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
     },
   },
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
   },
 };
 
@@ -63,10 +63,10 @@ const FeaturedSolutions = () => {
         {/* Section Header */}
         <motion.div
           className="text-center max-w-2xl mx-auto mb-16"
-          initial={{ opacity: 0, y: 25 }}
+          initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.6 }}
         >
           <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
             Our Solutions
@@ -86,27 +86,34 @@ const FeaturedSolutions = () => {
           variants={containerVariants}
           initial="hidden"
           whileInView="visible"
-          viewport={{ once: true, margin: "-80px" }}
+          viewport={{ once: true, amount: 0.1 }}
         >
           {solutions.map((solution) => (
             <motion.div
               key={solution.title}
               variants={itemVariants}
-              className="group relative bg-card rounded-2xl p-7 border border-border hover:border-accent/30 transition-all duration-300 hover:shadow-card cursor-pointer"
+              className="group relative bg-card rounded-2xl overflow-hidden border border-border hover:border-accent/30 transition-all duration-300 hover:shadow-card cursor-pointer"
             >
-              {/* Icon */}
-              <div className="w-12 h-12 rounded-xl bg-navy-gradient flex items-center justify-center mb-5 group-hover:shadow-glow transition-shadow duration-300">
-                <solution.icon className="w-6 h-6 text-accent" />
+              {/* Image */}
+              <div className="relative h-48 overflow-hidden">
+                <img 
+                  src={solution.image} 
+                  alt={solution.title}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-card via-card/20 to-transparent" />
               </div>
 
               {/* Content */}
-              <h3 className="font-display text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
-                {solution.title}
-                <ArrowUpRight className="w-4 h-4 text-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </h3>
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                {solution.description}
-              </p>
+              <div className="p-6">
+                <h3 className="font-display text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
+                  {solution.title}
+                  <ArrowUpRight className="w-4 h-4 text-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  {solution.description}
+                </p>
+              </div>
 
               {/* Hover gradient */}
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
