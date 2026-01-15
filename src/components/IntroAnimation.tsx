@@ -145,7 +145,7 @@ const IntroAnimation = ({ onComplete }: IntroAnimationProps) => {
 
         {/* Tagline */}
         <motion.p
-          className="mt-4 text-steel-medium text-sm tracking-[0.25em] uppercase"
+          className="mt-4 text-primary-foreground/70 text-sm tracking-[0.25em] uppercase"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.7 }}
