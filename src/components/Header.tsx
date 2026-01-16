@@ -27,18 +27,18 @@ const Header = () => {
   ];
 
   return (
-    <motion.header
-      className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
-        isScrolled
-          ? "bg-background/80 backdrop-blur-xl border-b border-border/50 shadow-soft"
-          : "bg-background/30 backdrop-blur-sm"
-      }`}
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5, delay: 2.6 }}
-    >
-      <div className="max-w-5xl mx-auto px-4 md:px-6">
-        <div className="flex items-center justify-between h-14 md:h-16">
+    <div className="fixed top-0 left-0 right-0 z-40 flex justify-center px-4 pt-3">
+      <motion.header
+        className={`transition-all duration-300 rounded-full px-4 md:px-6 ${
+          isScrolled
+            ? "bg-background/80 backdrop-blur-xl border border-border/50 shadow-soft"
+            : "bg-background/30 backdrop-blur-sm border border-transparent"
+        }`}
+        initial={{ y: -100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.5, delay: 2.6 }}
+      >
+        <div className="flex items-center justify-between h-12 md:h-14 gap-4 md:gap-8">
           {/* Logo */}
           <a href="#home" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-navy-gradient flex items-center justify-center relative overflow-hidden">
@@ -88,7 +88,7 @@ const Header = () => {
         {/* Mobile Menu */}
         {isMenuOpen && (
           <motion.div
-            className="lg:hidden py-4 border-t border-border bg-background"
+            className="lg:hidden py-4 border-t border-border bg-background rounded-b-2xl"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
@@ -113,8 +113,8 @@ const Header = () => {
             </nav>
           </motion.div>
         )}
-      </div>
-    </motion.header>
+      </motion.header>
+    </div>
   );
 };
 
