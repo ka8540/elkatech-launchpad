@@ -37,7 +37,7 @@ const Header = () => {
       animate={{ y: 0 }}
       transition={{ duration: 0.5, delay: 2.6 }}
     >
-      <div className="container mx-auto px-4 md:px-6">
+      <div className="max-w-5xl mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between h-14 md:h-16">
           {/* Logo */}
           <a href="#home" className="flex items-center gap-2">
