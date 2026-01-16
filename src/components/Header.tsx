@@ -27,12 +27,12 @@ const Header = () => {
   ];
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-40 flex justify-center px-4 pt-3">
+    <div className="fixed top-0 left-0 right-0 z-40 lg:flex lg:justify-center lg:px-4 lg:pt-3">
       <motion.header
-        className={`transition-all duration-300 rounded-full px-4 md:px-6 ${
+        className={`transition-all duration-300 px-4 md:px-6 lg:rounded-full ${
           isScrolled
-            ? "bg-background/80 backdrop-blur-xl border border-border/50 shadow-soft"
-            : "bg-background/30 backdrop-blur-sm border border-transparent"
+            ? "bg-background/80 backdrop-blur-xl lg:border lg:border-border/50 shadow-soft"
+            : "bg-background/30 backdrop-blur-sm lg:border lg:border-transparent"
         }`}
         initial={{ y: -100 }}
         animate={{ y: 0 }}
