@@ -41,10 +41,58 @@ const Header = () => {
         <div className="flex items-center justify-between h-12 md:h-14 gap-4 md:gap-8">
           {/* Logo */}
           <a href="#home" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-navy-gradient flex items-center justify-center relative overflow-hidden">
-              <span className="text-accent font-bold text-sm">E</span>
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent to-accent/10" />
-            </div>
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 100 100"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              {/* Outer frame */}
+              <rect
+                x="12"
+                y="12"
+                width="76"
+                height="76"
+                rx="12"
+                stroke="hsl(var(--accent))"
+                strokeWidth="2.5"
+                fill="none"
+              />
+              {/* E letter strokes */}
+              <path
+                d="M30 30 L55 30"
+                stroke="hsl(var(--foreground))"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <path
+                d="M30 50 L50 50"
+                stroke="hsl(var(--accent))"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <path
+                d="M30 70 L55 70"
+                stroke="hsl(var(--foreground))"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              {/* Vertical bar */}
+              <path
+                d="M30 30 L30 70"
+                stroke="hsl(var(--foreground))"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              {/* Tech dot accent */}
+              <circle
+                cx="68"
+                cy="50"
+                r="6"
+                fill="hsl(var(--accent))"
+              />
+            </svg>
             <span className="font-display text-lg font-bold text-foreground">
               Elkatech
             </span>
