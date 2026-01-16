@@ -78,10 +78,6 @@ const HeroSection = () => {
             variants={itemVariants}
             className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
           >
-            <Button variant="cta" size="lg" className="group min-w-[180px]">
-              Request a Quote
-              <ArrowRight className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
-            </Button>
             <Button variant="outline" size="lg" className="group min-w-[140px]">
               <Phone className="mr-2 w-4 h-4" />
               Call Now

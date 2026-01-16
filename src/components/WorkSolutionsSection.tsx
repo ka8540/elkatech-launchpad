@@ -8,7 +8,7 @@ const categories = [
     description: "Wide-format printing for outdoor advertising, vehicle wraps, and flex banners.",
     applications: ["Flex Banners", "Vehicle Graphics", "Outdoor Signage", "Backlit Displays"],
     industries: ["Advertising Agencies", "Print Houses", "Signage Companies"],
-    image: "https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?w=800&h=500&fit=crop&q=80",
+    image: "https://i0.wp.com/printfinish.com/wp-content/uploads/2023/11/eco-solvent-printers.jpg?fit=1900%2C1321&ssl=1",
   },
   {
     title: "UV Printing Solutions (RTR & Flatbed)",

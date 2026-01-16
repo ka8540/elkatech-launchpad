@@ -204,17 +204,20 @@ const ContactSection = () => {
           transition={{ duration: 0.5 }}
         >
           <iframe
-            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d235013.70717962675!2d72.43965535!3d23.02049465!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x395e848aba5bd449%3A0x4fcedd11614f6516!2sAhmedabad%2C%20Gujarat%2C%20India!5e0!3m2!1sen!2sus!4v1705347890123!5m2!1sen!2sus"
+            src="https://www.google.com/maps?q=3GWW%2B237%20Vandematram%20Prime%20Gota%20Ahmedabad&z=18&output=embed"
             width="100%"
             height="400"
             style={{ border: 0 }}
             allowFullScreen
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
-            title="Elkatech Office Location - Ahmedabad, Gujarat, India"
+            title="Elkatech Office Location – Vandematram Prime, Gota, Ahmedabad"
             className="w-full"
           />
         </motion.div>
+
+
+
       </div>
     </section>
   );

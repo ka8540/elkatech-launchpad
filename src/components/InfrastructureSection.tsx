@@ -38,13 +38,20 @@ const InfrastructureSection = () => {
             {/* Warehouse Visual */}
             <div className="aspect-[4/3] rounded-2xl bg-navy-gradient overflow-hidden relative">
               {/* Abstract warehouse representation */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <Warehouse className="w-20 h-20 text-accent mx-auto mb-4 opacity-50" />
-                  <p className="text-primary-foreground/70 text-sm">Warehouse Facility</p>
-                  <p className="text-primary-foreground/60 text-xs mt-1">Ahmedabad, Gujarat</p>
-                </div>
+              <div className="aspect-[4/3] rounded-2xl overflow-hidden relative">
+               <img
+                  src="/images/elkatech.png"
+                  alt="Elkatech Warehouse Facility, Ahmedabad, Gujarat"
+                  className="w-full h-full object-contain"
+                  loading="lazy"
+                />
+
+
+
+                {/* Optional dark overlay for text contrast */}
+                <div className="absolute inset-0 bg-black/20" />
               </div>
+
               
               {/* Decorative elements */}
               <div className="absolute top-4 right-4 w-20 h-20 rounded-full bg-accent/10 blur-2xl" />

@@ -5,33 +5,40 @@ const solutions = [
   {
     title: "Solvent & Eco-Solvent Printers",
     description: "High-performance wide-format printing solutions for outdoor signage, banners, and vehicle wraps.",
-    image: "https://images.unsplash.com/photo-1562654501-a0ccc0fc3fb1?w=600&h=400&fit=crop&q=80",
+    image: "images/Solvent.png",
   },
   {
     title: "UV Printers",
     description: "Versatile roll-to-roll and flatbed UV printing for rigid and flexible substrates.",
-    image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=600&h=400&fit=crop&q=80",
-  },
-  {
-    title: "CNC Routers",
-    description: "Precision routing and cutting for wood, acrylic, aluminum, and composite materials.",
-    image: "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=600&h=400&fit=crop&q=80",
+    image: "https://img.freepik.com/premium-photo/view-beautiful-digital-uv-printing-machine_994615-885.jpg",
   },
   {
     title: "Laser Cutting Machines",
     description: "High-precision laser engraving and cutting for industrial and commercial applications.",
-    image: "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=600&h=400&fit=crop&q=80",
+    image: "https://www.re-thinkingthefuture.com/wp-content/uploads/2025/06/gp5043-How-Fiber-Laser-Cutting-Machines-Are-Revolutionizing-Metal-Furniture-Manufacturing-web.jpg?w=999",
   },
   {
     title: "Lamination Machines",
-    description: "Professional lamination and finishing equipment for print protection and enhancement.",
-    image: "https://images.unsplash.com/photo-1586864387789-628af9feed72?w=600&h=400&fit=crop&q=80",
+    description: "Industrial lamination machines for print finishing, protection, and surface enhancement.",
+    image: "images/Laminatiom.png",
   },
   {
-    title: "Letter Bending Solutions",
-    description: "CNC channel letter bending machines for signage and fabrication shops.",
-    image: "https://images.unsplash.com/photo-1563694983011-6f4d90358083?w=600&h=400&fit=crop&q=80",
+    title: "Desktop UV Printer",
+    description: "Compact UV printers ideal for personalized printing on phone cases, gifts, tiles, and small rigid objects.",
+    image: "images/Desktop_Image.png",
   },
+  {
+    title: "Inject Printer",
+    description: "High-speed inkjet printers for commercial printing, signage, and large-format production.",
+    image: "images/inject.png",
+  },
+  {
+    title: "Flatbed UV Printer",
+    description: "Industrial flatbed UV printer designed for direct printing on rigid materials such as acrylic, glass, wood, metal, PVC, and boards.",
+    image: "images/Flatbed.png",
+  }
+
+
 ];
 
 const containerVariants: Variants = {

@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Header = () => {
@@ -36,7 +35,7 @@ const Header = () => {
         }`}
         initial={{ y: -100 }}
         animate={{ y: 0 }}
-        transition={{ duration: 0.5, delay: 2.6 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <div className="flex items-center justify-between h-12 md:h-14 gap-4 md:gap-8">
           {/* Logo */}
@@ -114,9 +113,6 @@ const Header = () => {
           {/* CTA Button & Theme Toggle */}
           <div className="hidden md:flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="cta" size="sm">
-              Request a Quote
-            </Button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -154,9 +150,6 @@ const Header = () => {
               ))}
               <div className="pt-3 px-3 flex items-center gap-2">
                 <ThemeToggle />
-                <Button variant="cta" size="default" className="flex-1">
-                  Request a Quote
-                </Button>
               </div>
             </nav>
           </motion.div>

@@ -1,5 +1,4 @@
-import { motion } from "framer-motion";
-import { Mail, MapPin, Phone } from "lucide-react";
+import { Mail, MapPin } from "lucide-react";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -27,18 +26,67 @@ const Footer = () => {
           {/* Brand Column */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
-                <span className="text-accent font-bold text-lg">E</span>
-              </div>
-              <span className="font-display text-2xl font-bold text-white">Elkatech</span>
+              <a href="#home" className="flex items-center gap-2 text-white">
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 100 100"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  {/* Outer frame */}
+                  <rect
+                    x="12"
+                    y="12"
+                    width="76"
+                    height="76"
+                    rx="12"
+                    stroke="hsl(var(--accent))"
+                    strokeWidth="2.5"
+                    fill="none"
+                  />
+                  {/* E letter strokes */}
+                  <path
+                    d="M30 30 L55 30"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M30 50 L50 50"
+                    stroke="hsl(var(--accent))"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M30 70 L55 70"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                  />
+                  {/* Vertical bar */}
+                  <path
+                    d="M30 30 L30 70"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                  />
+                  {/* Tech dot accent */}
+                  <circle cx="68" cy="50" r="6" fill="hsl(var(--accent))" />
+                </svg>
+
+                <span className="font-display text-lg font-bold text-white">
+                  Elkatech
+                </span>
+              </a>
             </div>
+
             <p className="text-white/70 text-sm leading-relaxed mb-4">
-              Your trusted partner for industrial printing and signage machinery. 
+              Your trusted partner for industrial printing and signage machinery.
               Importer, wholesaler, and distributor serving businesses across India.
             </p>
-            <p className="text-xs text-white/50">
-              Ahmedabad, Gujarat, India
-            </p>
+
+            <p className="text-xs text-white/50">Ahmedabad, Gujarat, India</p>
           </div>
 
           {/* Quick Links */}
@@ -94,10 +142,13 @@ const Footer = () => {
                   elkatech2021@gmail.com
                 </a>
               </li>
+
               <li className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
                 <span className="text-sm text-white/70">
-                  Ahmedabad, Gujarat<br />India
+                  Ahmedabad, Gujarat
+                  <br />
+                  India
                 </span>
               </li>
             </ul>
@@ -113,10 +164,9 @@ const Footer = () => {
             <p className="text-sm text-white/70">
               © {currentYear} ELKATECH INDIA PRIVATE LIMITED
             </p>
-            <p className="text-xs text-white/50 mt-1">
-              All rights reserved.
-            </p>
+            <p className="text-xs text-white/50 mt-1">All rights reserved.</p>
           </div>
+
           <div className="flex items-center gap-4 text-xs text-white/70">
             <span>ROC: Ahmedabad</span>
             <span className="w-1 h-1 rounded-full bg-white/50" />
