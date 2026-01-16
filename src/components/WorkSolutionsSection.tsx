@@ -92,11 +92,11 @@ const WorkSolutionsSection = () => {
           <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
             Work & Solutions
           </span>
-          <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-primary-foreground mb-4">
+          <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
             Complete Industrial{" "}
             <span className="text-accent">Machinery Solutions</span>
           </h2>
-          <p className="text-primary-foreground/70 text-lg">
+          <p className="text-white/70 text-lg">
             Explore our comprehensive range of printing, signage, and fabrication equipment designed for commercial and industrial applications.
           </p>
         </motion.div>
@@ -113,7 +113,7 @@ const WorkSolutionsSection = () => {
             <motion.div
               key={category.title}
               variants={itemVariants}
-              className="group bg-primary-foreground/5 backdrop-blur-sm rounded-2xl overflow-hidden border border-primary-foreground/10 hover:border-accent/30 hover:bg-primary-foreground/10 transition-all duration-300"
+              className="group bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden border border-white/10 hover:border-accent/30 hover:bg-white/10 transition-all duration-300"
             >
               {/* Image */}
               <div className="relative h-52 overflow-hidden">
@@ -129,24 +129,24 @@ const WorkSolutionsSection = () => {
               <div className="p-6 md:p-8">
                 {/* Header */}
                 <div className="mb-4">
-                  <h3 className="font-display text-xl font-semibold text-primary-foreground mb-2">
+                  <h3 className="font-display text-xl font-semibold text-white mb-2">
                     {category.title}
                   </h3>
-                  <p className="text-primary-foreground/70 text-sm leading-relaxed">
+                  <p className="text-white/70 text-sm leading-relaxed">
                     {category.description}
                   </p>
                 </div>
 
                 {/* Applications */}
                 <div className="mb-4">
-                  <p className="text-xs text-primary-foreground/60 uppercase tracking-wider mb-2">
+                  <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
                     Typical Applications
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {category.applications.map((app) => (
                       <span
                         key={app}
-                        className="px-2.5 py-1 rounded-full bg-primary-foreground/10 text-primary-foreground/80 text-xs"
+                        className="px-2.5 py-1 rounded-full bg-white/10 text-white/80 text-xs"
                       >
                         {app}
                       </span>
@@ -156,7 +156,7 @@ const WorkSolutionsSection = () => {
 
                 {/* Industries */}
                 <div className="mb-5">
-                  <p className="text-xs text-primary-foreground/60 uppercase tracking-wider mb-2">
+                  <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
                     Industries Served
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -175,7 +175,7 @@ const WorkSolutionsSection = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group/btn border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/10 hover:border-accent/50"
+                  className="group/btn border-white/20 text-white hover:bg-white/10 hover:border-accent/50"
                 >
                   Enquire for Details
                   <ArrowRight className="ml-2 w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />

@@ -39,48 +39,48 @@ const ContactSection = () => {
             <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
               Contact Us
             </span>
-            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-primary-foreground mb-6">
+            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6">
               Let's Start a{" "}
               <span className="text-accent">Conversation</span>
             </h2>
-            <p className="text-primary-foreground/70 text-lg mb-8 leading-relaxed">
+            <p className="text-white/70 text-lg mb-8 leading-relaxed">
               Ready to explore the right machinery for your business? Our team is here to understand your needs and provide honest, practical guidance.
             </p>
 
             {/* Contact Info */}
             <div className="space-y-4 mb-8">
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-primary-foreground/5 border border-primary-foreground/10">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <Mail className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-primary-foreground/60">Email</p>
+                  <p className="text-sm text-white/60">Email</p>
                   <a
                     href="mailto:elkatech2021@gmail.com"
-                    className="text-primary-foreground font-medium hover:text-accent transition-colors"
+                    className="text-white font-medium hover:text-accent transition-colors"
                   >
                     elkatech2021@gmail.com
                   </a>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-primary-foreground/5 border border-primary-foreground/10">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <Phone className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-primary-foreground/60">Phone / WhatsApp</p>
-                  <p className="text-primary-foreground font-medium">Contact via form or WhatsApp</p>
+                  <p className="text-sm text-white/60">Phone / WhatsApp</p>
+                  <p className="text-white font-medium">Contact via form or WhatsApp</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-primary-foreground/5 border border-primary-foreground/10">
+              <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-primary-foreground/60">Location</p>
-                  <p className="text-primary-foreground font-medium">Ahmedabad, Gujarat, India</p>
+                  <p className="text-sm text-white/60">Location</p>
+                  <p className="text-white font-medium">Ahmedabad, Gujarat, India</p>
                 </div>
               </div>
             </div>
@@ -197,7 +197,7 @@ const ContactSection = () => {
 
         {/* Google Maps Placeholder */}
         <motion.div
-          className="mt-16 rounded-2xl overflow-hidden border border-primary-foreground/10"
+          className="mt-16 rounded-2xl overflow-hidden border border-white/10"
           initial={{ opacity: 0, y: 25 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -206,8 +206,8 @@ const ContactSection = () => {
           <div className="aspect-[21/9] bg-[hsl(215,45%,12%)] flex items-center justify-center">
             <div className="text-center">
               <MapPin className="w-10 h-10 text-accent mx-auto mb-3 opacity-50" />
-              <p className="text-primary-foreground/60 text-sm">Google Maps</p>
-              <p className="text-primary-foreground/40 text-xs mt-1">Ahmedabad, Gujarat, India</p>
+              <p className="text-white/60 text-sm">Google Maps</p>
+              <p className="text-white/40 text-xs mt-1">Ahmedabad, Gujarat, India</p>
             </div>
           </div>
         </motion.div>
