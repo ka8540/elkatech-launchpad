@@ -1,5 +1,18 @@
 import { motion, type Variants } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+
+const solutionRoutes: Record<string, string> = {
+  "Solvent & Eco-Solvent Printers": "/solvent-printers",
+  "UV Printers": "/uv-printers",
+  "Laser Cutting Machines": "/laser-cutting-machines",
+  "Lamination Machines": "/lamination-machines",
+  "Desktop UV Printer": "/desktop-uv-printer",
+  "Inject Printer": "/inject-printer",
+  "Flatbed UV Printer": "/flatbed-uv-printer",
+};
+
 
 const solutions = [
   {
@@ -60,7 +73,11 @@ const itemVariants: Variants = {
   },
 };
 
+
+
+
 const FeaturedSolutions = () => {
+  const navigate = useNavigate();
   return (
     <section id="solutions" className="py-24 md:py-32 bg-background relative overflow-hidden">
       {/* Subtle background elements */}
@@ -95,37 +112,49 @@ const FeaturedSolutions = () => {
           whileInView="visible"
           viewport={{ once: true, amount: 0.1 }}
         >
-          {solutions.map((solution) => (
-            <motion.div
-              key={solution.title}
-              variants={itemVariants}
-              className="group relative bg-card rounded-2xl overflow-hidden border border-border hover:border-accent/30 transition-all duration-300 hover:shadow-card cursor-pointer"
-            >
-              {/* Image */}
-              <div className="relative h-48 overflow-hidden">
-                <img 
-                  src={solution.image} 
-                  alt={solution.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-card via-card/20 to-transparent" />
-              </div>
+          {solutions.map((solution) => {
+            const to = solutionRoutes[solution.title];
 
-              {/* Content */}
-              <div className="p-6">
-                <h3 className="font-display text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
-                  {solution.title}
-                  <ArrowUpRight className="w-4 h-4 text-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                </h3>
-                <p className="text-muted-foreground text-sm leading-relaxed">
-                  {solution.description}
-                </p>
-              </div>
+            return (
+              <motion.div
+                key={solution.title}
+                variants={itemVariants}
+                role="button"
+                tabIndex={0}
+                onClick={() => to && navigate(to)}
+                onKeyDown={(e) => {
+                  if (!to) return;
+                  if (e.key === "Enter" || e.key === " ") navigate(to);
+                }}
+                className="group relative bg-card rounded-2xl overflow-hidden border border-border hover:border-accent/30 transition-all duration-300 hover:shadow-card cursor-pointer"
+              >
+                {/* Image */}
+                <div className="relative h-48 overflow-hidden">
+                  <img
+                    src={solution.image}
+                    alt={solution.title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-card via-card/20 to-transparent" />
+                </div>
 
-              {/* Hover gradient */}
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-            </motion.div>
-          ))}
+                {/* Content */}
+                <div className="p-6">
+                  <h3 className="font-display text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
+                    {solution.title}
+                    <ArrowUpRight className="w-4 h-4 text-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  </h3>
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    {solution.description}
+                  </p>
+                </div>
+
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              </motion.div>
+            );
+          })}
+
+
         </motion.div>
       </div>
     </section>
