@@ -203,7 +203,7 @@ const ContactSection = () => {
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
-          <div className="aspect-[21/9] bg-navy-medium flex items-center justify-center">
+          <div className="aspect-[21/9] bg-[hsl(215,45%,12%)] flex items-center justify-center">
             <div className="text-center">
               <MapPin className="w-10 h-10 text-accent mx-auto mb-3 opacity-50" />
               <p className="text-primary-foreground/60 text-sm">Google Maps</p>

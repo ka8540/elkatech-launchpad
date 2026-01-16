@@ -41,7 +41,7 @@ const InfrastructureSection = () => {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center">
                   <Warehouse className="w-20 h-20 text-accent mx-auto mb-4 opacity-50" />
-                  <p className="text-muted-foreground text-sm">Warehouse Facility</p>
+                  <p className="text-primary-foreground/70 text-sm">Warehouse Facility</p>
                   <p className="text-primary-foreground/60 text-xs mt-1">Ahmedabad, Gujarat</p>
                 </div>
               </div>
