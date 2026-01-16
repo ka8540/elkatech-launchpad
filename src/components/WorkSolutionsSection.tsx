@@ -175,7 +175,7 @@ const WorkSolutionsSection = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="group/btn border-white/20 text-white hover:bg-white/10 hover:border-accent/50"
+                  className="group/btn border-white/20 bg-white/10 text-white hover:bg-white/15 hover:border-accent/50"
                 >
                   Enquire for Details
                   <ArrowRight className="ml-2 w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
