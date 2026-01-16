@@ -195,7 +195,7 @@ const ContactSection = () => {
           </motion.div>
         </div>
 
-        {/* Google Maps Placeholder */}
+        {/* Google Maps Embed */}
         <motion.div
           className="mt-16 rounded-2xl overflow-hidden border border-white/10"
           initial={{ opacity: 0, y: 25 }}
@@ -203,13 +203,17 @@ const ContactSection = () => {
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
-          <div className="aspect-[21/9] bg-[hsl(215,45%,12%)] flex items-center justify-center">
-            <div className="text-center">
-              <MapPin className="w-10 h-10 text-accent mx-auto mb-3 opacity-50" />
-              <p className="text-white/60 text-sm">Google Maps</p>
-              <p className="text-white/40 text-xs mt-1">Ahmedabad, Gujarat, India</p>
-            </div>
-          </div>
+          <iframe
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d235013.70717962675!2d72.43965535!3d23.02049465!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x395e848aba5bd449%3A0x4fcedd11614f6516!2sAhmedabad%2C%20Gujarat%2C%20India!5e0!3m2!1sen!2sus!4v1705347890123!5m2!1sen!2sus"
+            width="100%"
+            height="400"
+            style={{ border: 0 }}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            title="Elkatech Office Location - Ahmedabad, Gujarat, India"
+            className="w-full"
+          />
         </motion.div>
       </div>
     </section>
