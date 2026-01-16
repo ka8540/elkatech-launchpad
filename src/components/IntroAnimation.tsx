@@ -17,7 +17,7 @@ const IntroAnimation = ({ onComplete }: IntroAnimationProps) => {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-navy-gradient"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background"
       initial={{ opacity: 1 }}
       animate={{ opacity: 0 }}
       transition={{ duration: 0.5, delay: 1.8, ease: "easeInOut" }}
@@ -75,7 +75,7 @@ const IntroAnimation = ({ onComplete }: IntroAnimationProps) => {
             >
               <motion.path
                 d="M30 30 L55 30"
-                stroke="hsl(var(--primary-foreground))"
+                stroke="hsl(var(--foreground))"
                 strokeWidth="4"
                 strokeLinecap="round"
                 initial={{ pathLength: 0 }}
@@ -93,7 +93,7 @@ const IntroAnimation = ({ onComplete }: IntroAnimationProps) => {
               />
               <motion.path
                 d="M30 70 L55 70"
-                stroke="hsl(var(--primary-foreground))"
+                stroke="hsl(var(--foreground))"
                 strokeWidth="4"
                 strokeLinecap="round"
                 initial={{ pathLength: 0 }}
@@ -103,7 +103,7 @@ const IntroAnimation = ({ onComplete }: IntroAnimationProps) => {
               {/* Vertical bar */}
               <motion.path
                 d="M30 30 L30 70"
-                stroke="hsl(var(--primary-foreground))"
+                stroke="hsl(var(--foreground))"
                 strokeWidth="4"
                 strokeLinecap="round"
                 initial={{ pathLength: 0 }}
@@ -135,7 +135,7 @@ const IntroAnimation = ({ onComplete }: IntroAnimationProps) => {
 
         {/* Brand Name */}
         <motion.h1
-          className="font-display text-5xl md:text-6xl font-bold text-primary-foreground tracking-tight"
+          className="font-display text-5xl md:text-6xl font-bold text-foreground tracking-tight"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.3 }}
@@ -145,7 +145,7 @@ const IntroAnimation = ({ onComplete }: IntroAnimationProps) => {
 
         {/* Tagline */}
         <motion.p
-          className="mt-4 text-primary-foreground/70 text-sm tracking-[0.25em] uppercase"
+          className="mt-4 text-muted-foreground text-sm tracking-[0.25em] uppercase"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.7 }}
