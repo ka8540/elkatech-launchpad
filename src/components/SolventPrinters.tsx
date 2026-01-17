@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, FileText, Menu, X } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import IntroAnimation from "@/components/IntroAnimation";
+
 
 // -------------------- TYPES (THIS FIXES YOUR SPECS ERROR) --------------------
 type Spec = [string, string];
@@ -13,10 +15,12 @@ type Product = {
   price: string;
   cta: string;
   brochureLabel: string;
+  brochureUrl?: string; 
   images: string[];
   specs: Spec[];
   highlights: string[];
 };
+
 
 // -------------------- DATA --------------------
 const solventIntro =
@@ -29,6 +33,8 @@ const products: Product[] = [
     price: "₹ 18,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
+    brochureUrl:
+    "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Gongzheng+GZM3202ET+Solvent+Inkjet+Printer+-+PDF+Catalogue.pdf",
     images: [
       "/images/Gongzheng GZM3202ET Solvent Inkjet Printer/1.webp",
       "/images/Gongzheng GZM3202ET Solvent Inkjet Printer/3.webp",
@@ -71,6 +77,7 @@ const products: Product[] = [
     price: "₹ 13,00,000/Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Gongzheng+C3202SG+Starfire+Solvent+Inkjet+Printer+-+PDF+Catalogue.pdf",
     images: ["/images/Gongzheng C3202SG Starfire Solvent Inkjet Printer/2-1.webp", "/images/Gongzheng C3202SG Starfire Solvent Inkjet Printer/2-2.webp","/images/Gongzheng C3202SG Starfire Solvent Inkjet Printer/2-3.webp","/images/Gongzheng C3202SG Starfire Solvent Inkjet Printer/2-4.webp"],
     specs: [
       ["Printing Width", "3200 mm"],
@@ -96,6 +103,7 @@ const products: Product[] = [
     price: "₹ 4,00,000/Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Allwin+A180+Epson+13200+Eco+Solvent+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Allwin A180 Epson 13200 Eco Solvent Printer/3-1.webp",
       "images/Allwin A180 Epson 13200 Eco Solvent Printer/3-2.webp",
@@ -115,6 +123,7 @@ const products: Product[] = [
     price: "₹ 17,50,000/Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Gongzheng+GZM3204SG+Starfire+Solvent+Inkjet+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Gongzheng GZM3204SG Starfire Solvent Inkjet Printer/4-1.webp",
     ],
@@ -388,9 +397,19 @@ function Header() {
 
 // -------------------- PAGE --------------------
 export default function SolventPrintersPage() {
+  const [showIntro, setShowIntro] = useState(true);
+
+  useEffect(() => {
+    // Always start page at top when route loads
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, []);
+
+
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
       <Header />
+      
 
       {/* push content below fixed navbar */}
       <div className="pt-16 md:pt-20 lg:pt-24">
@@ -481,12 +500,18 @@ export default function SolventPrintersPage() {
                         >
                           {p.cta}
                         </button>
-                        <button
-                          className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted"
-                          type="button"
-                        >
-                          Download Brochure
-                        </button>
+                        {p.brochureUrl && (
+                          <a
+                            href={p.brochureUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted inline-flex items-center gap-2"
+                          >
+                            <FileText className="h-4 w-4" />
+                            Download Brochure
+                          </a>
+                        )}
+
                       </div>
                     </div>
                   </div>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, FileText, Menu, X } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import IntroAnimation from "@/components/IntroAnimation";
 
 // -------------------- TYPES --------------------
 type Spec = [string, string];
@@ -13,6 +14,7 @@ type Product = {
   price: string;
   cta: string;
   brochureLabel: string;
+  brochureUrl?: string;
   images: string[];
   specs: Spec[];
   highlights: string[];
@@ -30,7 +32,7 @@ const products: Product[] = [
     price: "₹ 26,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
-    // Put your real images in /public/images/inkjet/allwin-e520-8h/
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Allwin+E520-8H+5M+Giant+Inkjet+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Inkjet Printer/12-1.webp",
       "images/Inkjet Printer/12-2.webp"
@@ -61,7 +63,7 @@ const products: Product[] = [
     price: "₹ 11,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
-    // Put your real images in /public/images/inkjet/allwin-c8-pro/
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Allwin+C8+Pro+Inkjet+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Inkjet Printer/13-1.webp",
       "images/Inkjet Printer/13-2.webp"
@@ -319,8 +321,10 @@ function Header() {
 
 // -------------------- PAGE --------------------
 export default function InkjetPrintersPage() {
+    const [showIntro, setShowIntro] = useState(true);
   return (
     <div className="min-h-screen bg-background text-foreground">
+        {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
       <Header />
 
       <div className="pt-16 md:pt-20 lg:pt-24">
@@ -410,12 +414,18 @@ export default function InkjetPrintersPage() {
                         >
                           {p.cta}
                         </button>
-                        <button
-                          className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted"
-                          type="button"
-                        >
-                          Download Brochure
-                        </button>
+                        {p.brochureUrl && (
+                            <a
+                                href={p.brochureUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted inline-flex items-center gap-2"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Download Brochure
+                            </a>
+                            )}
+
                       </div>
                     </div>
                   </div>

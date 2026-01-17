@@ -4,53 +4,69 @@ import { Button } from "@/components/ui/button";
 
 const categories = [
   {
-    title: "Solvent & Eco-Solvent Printing Solutions",
-    description: "Wide-format printing for outdoor advertising, vehicle wraps, and flex banners.",
-    applications: ["Flex Banners", "Vehicle Graphics", "Outdoor Signage", "Backlit Displays"],
+    title: "Solvent & Eco-Solvent Printers",
+    description:
+      "Wide-format printing for outdoor advertising, flex banners, vinyl, and vehicle wraps.",
+    applications: ["Flex Banners", "Vinyl Printing", "Outdoor Signage", "Vehicle Wraps"],
     industries: ["Advertising Agencies", "Print Houses", "Signage Companies"],
-    image: "https://i0.wp.com/printfinish.com/wp-content/uploads/2023/11/eco-solvent-printers.jpg?fit=1900%2C1321&ssl=1",
+    image: "images/Solvent.png",
+    href: "/solvent-printers",
   },
   {
-    title: "UV Printing Solutions (RTR & Flatbed)",
-    description: "Versatile UV printing on rigid and flexible materials with instant curing.",
-    applications: ["Acrylic Printing", "PVC Boards", "Glass & Metal", "Packaging Prototypes"],
-    industries: ["Interior Designers", "Signage Manufacturers", "Packaging Industry"],
-    image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=500&fit=crop&q=80",
+    title: "UV Printers (Roll-to-Roll / Mesh Belt)",
+    description:
+      "UV printing for flexible media with instant curing—ideal for signage and specialty applications.",
+    applications: ["Backlit Media", "Flex & Vinyl", "Wall Graphics", "Promotional Prints"],
+    industries: ["Signage Manufacturers", "Commercial Printers", "Branding Agencies"],
+    image:
+      "https://img.freepik.com/premium-photo/view-beautiful-digital-uv-printing-machine_994615-885.jpg",
+    href: "/uv-printers",
   },
   {
-    title: "CNC Routing Solutions",
-    description: "Precision cutting and engraving for wood, acrylic, aluminum, and composites.",
-    applications: ["ACP Cutting", "Wood Carving", "3D Letters", "Furniture Components"],
-    industries: ["Fabrication Shops", "Furniture Manufacturers", "Sign Makers"],
-    image: "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=800&h=500&fit=crop&q=80",
+    title: "Laser Engraving & Cutting Machines (CO2)",
+    description:
+      "High-precision CO2 laser cutting & engraving for acrylic, MDF, wood, fabric, and more.",
+    applications: ["Acrylic Cutting", "Wood Engraving", "Signage Components", "Fabric Cutting"],
+    industries: ["Gift & Trophy Makers", "Sign Makers", "Industrial Manufacturers"],
+    image:
+      "https://www.re-thinkingthefuture.com/wp-content/uploads/2025/06/gp5043-How-Fiber-Laser-Cutting-Machines-Are-Revolutionizing-Metal-Furniture-Manufacturing-web.jpg?w=999",
+    href: "/laser-cutting-machines",
   },
   {
-    title: "Laser Engraving & Cutting Solutions",
-    description: "High-precision laser processing for intricate designs and industrial cutting.",
-    applications: ["Acrylic Cutting", "Wood Engraving", "Metal Marking", "Fabric Cutting"],
-    industries: ["Gift & Trophy Makers", "Industrial Manufacturers", "Textile Industry"],
-    image: "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=800&h=500&fit=crop&q=80",
-  },
-  {
-    title: "Digital Cutting Solutions",
-    description: "Automated cutting for vinyl, cardboard, foam, and flexible materials.",
-    applications: ["Vinyl Cutting", "Packaging Prototyping", "Sticker Cutting", "Foam Cutting"],
-    industries: ["Sign Shops", "Packaging Companies", "Craft & Print Shops"],
-    image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=500&fit=crop&q=80",
-  },
-  {
-    title: "Lamination & Finishing Solutions",
-    description: "Professional lamination for print protection, enhancement, and durability.",
-    applications: ["Hot & Cold Lamination", "UV Coating", "Photo Finishing", "Document Protection"],
+    title: "Lamination Machines (Cold / Heat)",
+    description:
+      "Print finishing and protection for banners, posters, and signage—durability that lasts.",
+    applications: ["Cold Lamination", "Heat Lamination", "Poster Protection", "Print Finishing"],
     industries: ["Print Houses", "Photo Studios", "Commercial Printers"],
-    image: "https://images.unsplash.com/photo-1586864387789-628af9feed72?w=800&h=500&fit=crop&q=80",
+    image: "images/Laminatiom.png",
+    href: "/lamination-machines",
   },
   {
-    title: "Letter Bending Solutions",
-    description: "CNC channel letter bending for professional signage fabrication.",
-    applications: ["Channel Letters", "3D Signage", "Metal Letters", "LED Signs"],
-    industries: ["Signage Manufacturers", "Advertising Agencies", "Fabricators"],
-    image: "https://images.unsplash.com/photo-1563694983011-6f4d90358083?w=800&h=500&fit=crop&q=80",
+    title: "Desktop UV Printer (A3)",
+    description:
+      "Compact UV printer for personalized printing on rigid items—phone cases, gifts, tiles, bottles.",
+    applications: ["Phone Cases", "Tiles", "Glass Bottles", "Acrylic & Wood"],
+    industries: ["Gift Shops", "Custom Printing", "Small Businesses"],
+    image: "images/Desktop_Image.png",
+    href: "/desktop-uv-printer",
+  },
+  {
+    title: "Giant Format Inkjet Printer (5M)",
+    description:
+      "High-speed, large-width inkjet printing for banners, hoardings, and large commercial jobs.",
+    applications: ["Hoardings", "Banners", "Outdoor Branding", "Large Format Signage"],
+    industries: ["Outdoor Advertising", "Commercial Printers", "Signage Companies"],
+    image: "images/inject.png",
+    href: "/inject-printer",
+  },
+  {
+    title: "UV Flatbed Printer (2513)",
+    description:
+      "Industrial flatbed UV printing on rigid substrates like acrylic, glass, PVC, wood, metal, boards.",
+    applications: ["Acrylic Boards", "PVC Boards", "Glass Printing", "Wood & Metal Printing"],
+    industries: ["Interior Fabrication", "Signage Manufacturers", "Acrylic Fabricators"],
+    image: "images/Flatbed.png",
+    href: "/flatbed-uv-printer",
   },
 ];
 
@@ -76,12 +92,10 @@ const itemVariants: Variants = {
 const WorkSolutionsSection = () => {
   return (
     <section id="work" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
-      {/* Background elements */}
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-3xl" />
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/3 rounded-full blur-3xl" />
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
-        {/* Section Header */}
         <motion.div
           className="text-center max-w-3xl mx-auto mb-16"
           initial={{ opacity: 0, y: 20 }}
@@ -93,15 +107,14 @@ const WorkSolutionsSection = () => {
             Work & Solutions
           </span>
           <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
-            Complete Industrial{" "}
-            <span className="text-accent">Machinery Solutions</span>
+            Complete Industrial <span className="text-accent">Machinery Solutions</span>
           </h2>
           <p className="text-white/70 text-lg">
-            Explore our comprehensive range of printing, signage, and fabrication equipment designed for commercial and industrial applications.
+            Explore our machinery categories tailored for commercial printing, signage, and
+            fabrication workflows.
           </p>
         </motion.div>
 
-        {/* Categories Grid */}
         <motion.div
           className="grid md:grid-cols-2 gap-6"
           variants={containerVariants}
@@ -115,19 +128,16 @@ const WorkSolutionsSection = () => {
               variants={itemVariants}
               className="group bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden border border-white/10 hover:border-accent/30 hover:bg-white/10 transition-all duration-300"
             >
-              {/* Image */}
-              <div className="relative h-52 overflow-hidden">
-                <img 
-                  src={category.image} 
+              <div className="relative h-72 md:h-80 overflow-hidden">
+                <img
+                  src={category.image}
                   alt={category.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[hsl(215,60%,8%)] via-[hsl(215,60%,8%)]/40 to-transparent" />
               </div>
 
-              {/* Content */}
               <div className="p-6 md:p-8">
-                {/* Header */}
                 <div className="mb-4">
                   <h3 className="font-display text-xl font-semibold text-white mb-2">
                     {category.title}
@@ -137,7 +147,6 @@ const WorkSolutionsSection = () => {
                   </p>
                 </div>
 
-                {/* Applications */}
                 <div className="mb-4">
                   <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
                     Typical Applications
@@ -154,7 +163,6 @@ const WorkSolutionsSection = () => {
                   </div>
                 </div>
 
-                {/* Industries */}
                 <div className="mb-5">
                   <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
                     Industries Served
@@ -171,14 +179,17 @@ const WorkSolutionsSection = () => {
                   </div>
                 </div>
 
-                {/* CTA */}
+                {/* CTA -> link to the category page */}
                 <Button
+                  asChild
                   variant="outline"
                   size="sm"
                   className="group/btn border-white/20 bg-white/10 text-white hover:bg-white/15 hover:border-accent/50"
                 >
-                  Enquire for Details
-                  <ArrowRight className="ml-2 w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
+                  <a href={category.href}>
+                    Explore Products
+                    <ArrowRight className="ml-2 w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
+                  </a>
                 </Button>
               </div>
             </motion.div>

@@ -1,8 +1,10 @@
 // src/pages/UVPrinters.tsx
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Menu, X } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import IntroAnimation from "@/components/IntroAnimation";
+
 
 // -------------------- TYPES --------------------
 type Spec = [string, string];
@@ -13,6 +15,7 @@ type Product = {
   price: string;
   cta: string;
   brochureLabel: string;
+  brochureUrl?: string;
   images: string[];
   specs: Spec[];
   highlights: string[];
@@ -29,6 +32,7 @@ const products: Product[] = [
     price: "₹ 14,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
+    brochureUrl:"https://elkatech-brochure.s3.us-east-1.amazonaws.com/Gongzheng+DC1800UV+Mesh+Belt+1.8M+UV+Inkjet+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Gongzheng DC1800UV Mesh Belt 1.8M UV Inkjet Printer/5-1.webp",
       "images/Gongzheng DC1800UV Mesh Belt 1.8M UV Inkjet Printer/5-2.webp",
@@ -63,6 +67,7 @@ const products: Product[] = [
     price: "₹ 35,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
+    brochureUrl:"https://elkatech-brochure.s3.us-east-1.amazonaws.com/Allwin+Giant+Hybrid+UV+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Allwin Giant Hybrid UV Printer/6-1.webp",
       "images/Allwin Giant Hybrid UV Printer/6-2.webp",
@@ -91,6 +96,7 @@ const products: Product[] = [
     price: "₹ 21,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
+    brochureUrl:"https://elkatech-brochure.s3.us-east-1.amazonaws.com/Allwin+3.2+Double+Rows+Pinch+Roller+UV+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Allwin 3.2 Double Rows Pinch Roller UV Printer/7-1.webp",
       "images/Allwin 3.2 Double Rows Pinch Roller UV Printer/7-2.webp",
@@ -324,6 +330,8 @@ function Header() {
 
 // -------------------- PAGE --------------------
 export default function UVPrintersPage() {
+   const [showIntro, setShowIntro] = useState(true);
+
   // ✅ Always start from top on navigation
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -331,6 +339,7 @@ export default function UVPrintersPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+        {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
       <Header />
 
       {/* push content below fixed navbar */}
@@ -420,12 +429,18 @@ export default function UVPrintersPage() {
                         >
                           {p.cta}
                         </button>
-                        <button
-                          className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted"
-                          type="button"
-                        >
-                          Download Brochure
-                        </button>
+                        {p.brochureUrl && (
+                           <a
+                                href={p.brochureUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted inline-flex items-center gap-2"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Download Brochure
+                            </a>
+                        )} 
+
                       </div>
                     </div>
                   </div>

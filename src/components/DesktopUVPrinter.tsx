@@ -1,8 +1,10 @@
 // src/pages/DesktopUVPrinter.tsx
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X, FileText } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import IntroAnimation from "@/components/IntroAnimation";
+
 
 // -------------------- TYPES --------------------
 type Spec = [string, string];
@@ -13,6 +15,7 @@ type Product = {
   price: string;
   cta: string;
   brochureLabel: string;
+  brochureUrl?: string;
   images: string[];
   specs: Spec[];
   highlights: string[];
@@ -29,7 +32,7 @@ const products: Product[] = [
     price: "₹ 7,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
-    // Put images in: /public/images/desktop-uv/gongzheng-a3hd/
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Gongzheng+A3+HD+Desktop+UV+Printer+-+PDF+Catalogue.pdf",
     images: [
       "images/Gongzheng A3 HD Desktop UV Printer/11-1.webp",
       "images/Gongzheng A3 HD Desktop UV Printer/11-2.webp",
@@ -255,6 +258,7 @@ function Header() {
 
 // -------------------- PAGE --------------------
 export default function DesktopUVPrinterPage() {
+    const [showIntro, setShowIntro] = useState(true);
   // ensures navigation opens at TOP, not mid-page
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -262,6 +266,7 @@ export default function DesktopUVPrinterPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+        {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
       <Header />
 
       <div className="pt-16 md:pt-20 lg:pt-24">
@@ -354,12 +359,18 @@ export default function DesktopUVPrinterPage() {
                         >
                           {p.cta}
                         </button>
-                        <button
-                          className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted"
-                          type="button"
-                        >
-                          Download Brochure
-                        </button>
+                        {p.brochureUrl && (
+                            <a
+                                href={p.brochureUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted inline-flex items-center gap-2"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Download Brochure
+                            </a>
+                            )}
+
                       </div>
                     </div>
                   </div>

@@ -1,8 +1,9 @@
 // src/pages/LaserCuttingMachines.tsx
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X, FileText } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import IntroAnimation from "@/components/IntroAnimation";
 
 // -------------------- TYPES --------------------
 type Spec = [string, string];
@@ -13,6 +14,7 @@ type Product = {
   price: string;
   cta: string;
   brochureLabel: string;
+  brochureUrl?: string;
   images: string[];
   specs: Spec[];
   highlights: string[];
@@ -29,6 +31,7 @@ const products: Product[] = [
     price: "₹ 6,50,000 / Piece",
     cta: "Get Best Quote",
     brochureLabel: "Product Brochure",
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/1325CCD+Laser+Engraving+Cutting+Machine+-+PDF+Catalogue.pdf",
     images: [
       "images/1325CCD Laser Engraving Cutting Machine/8-1.webp",
       "images/1325CCD Laser Engraving Cutting Machine/8-2.webp"
@@ -274,6 +277,8 @@ function Header() {
 
 // -------------------- PAGE --------------------
 export default function LaserCuttingMachinesPage() {
+
+  const [showIntro, setShowIntro] = useState(true);
   // ✅ start from top every time
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -281,6 +286,7 @@ export default function LaserCuttingMachinesPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+        {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
       <Header />
 
       <div className="pt-16 md:pt-20 lg:pt-24">
@@ -369,12 +375,18 @@ export default function LaserCuttingMachinesPage() {
                         >
                           {p.cta}
                         </button>
-                        <button
-                          className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted"
-                          type="button"
-                        >
-                          Download Brochure
-                        </button>
+                        {p.brochureUrl && (
+                            <a
+                                href={p.brochureUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted inline-flex items-center gap-2"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Download Brochure
+                            </a>
+                            )}
+
                       </div>
                     </div>
                   </div>

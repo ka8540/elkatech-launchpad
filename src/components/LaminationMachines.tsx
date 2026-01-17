@@ -1,8 +1,10 @@
 // src/pages/LaminationMachines.tsx
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X, FileText } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import IntroAnimation from "@/components/IntroAnimation";
+
 
 // -------------------- TYPES --------------------
 type Spec = [string, string];
@@ -13,6 +15,7 @@ type Product = {
   price: string;
   cta: string;
   brochureLabel: string;
+  brochureUrl?: string;
   images: string[];
   specs: Spec[];
   highlights: string[];
@@ -29,7 +32,7 @@ const products: Product[] = [
     price: "₹ 1,25,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
-    // Put your images in /public/images/lamination/molor-ml1600k/
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Molor+ML1600K+Cold+Heat+Lamination+Machine%2C+1630mm+(64+Inch)+-+PDF+Catalogue.pdf",
     images: [
       "images/Molor ML1600K Cold Heat Lamination Machine/9-1.webp",
       "images/Molor ML1600K Cold Heat Lamination Machine/9-2.webp",
@@ -61,7 +64,7 @@ const products: Product[] = [
     price: "₹ 17,00,000 / Piece",
     cta: "Get Latest Price",
     brochureLabel: "Product Brochure",
-    // Put your images in /public/images/lamination/inca-l4-1700/
+    brochureUrl: "https://elkatech-brochure.s3.us-east-1.amazonaws.com/Automatic+Inca+L4-1700+Electric+Laminating+Machine+-+PDF+Catalogue.pdf",
     images: [
       "images/Inca L4-1700 Electric Laminating Machine/10-1.webp",
       "images/Inca L4-1700 Electric Laminating Machine/10-2.webp",
@@ -279,6 +282,7 @@ function Header() {
 
 // -------------------- PAGE --------------------
 export default function LaminationMachinesPage() {
+    const [showIntro, setShowIntro] = useState(true);
   // IMPORTANT: ensures when you navigate from Home -> this page, it starts from TOP
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
@@ -286,6 +290,7 @@ export default function LaminationMachinesPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+        {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
       <Header />
 
       {/* push content below fixed navbar */}
@@ -376,12 +381,17 @@ export default function LaminationMachinesPage() {
                         >
                           {p.cta}
                         </button>
-                        <button
-                          className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted"
-                          type="button"
-                        >
-                          Download Brochure
-                        </button>
+                        {p.brochureUrl && (
+                            <a
+                                href={p.brochureUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted inline-flex items-center gap-2"
+                            >
+                                <FileText className="h-4 w-4" />
+                                Download Brochure
+                            </a>
+                            )}
                       </div>
                     </div>
                   </div>
