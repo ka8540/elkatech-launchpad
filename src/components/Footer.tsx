@@ -1,4 +1,7 @@
-import { Mail, MapPin } from "lucide-react";
+import { Mail, MapPin, Phone, MessageCircle } from "lucide-react";
+
+const PHONE_NUMBER = "+917203033486";
+const WHATSAPP_NUMBER = "917203033486";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -6,17 +9,19 @@ const Footer = () => {
   const quickLinks = [
     { label: "Home", href: "#home" },
     { label: "About", href: "#about" },
-    { label: "Solutions", href: "#solutions" },
-    { label: "Work", href: "#work" },
+    { label: "Work & Solutions", href: "#work" },
     { label: "Contact", href: "#contact" },
   ];
 
+  // Match what you actually sell on the site right now
   const solutions = [
-    { label: "Solvent Printers", href: "#work" },
-    { label: "UV Printers", href: "#work" },
-    { label: "CNC Routers", href: "#work" },
-    { label: "Laser Machines", href: "#work" },
-    { label: "Lamination", href: "#work" },
+    { label: "Solvent & Eco-Solvent Printers", href: "/solvent-printers" },
+    { label: "UV Printers (RTR / Mesh Belt)", href: "/uv-printers" },
+    { label: "Laser Cutting Machines (CO2)", href: "/laser-cutting-machines" },
+    { label: "Lamination Machines", href: "/lamination-machines" },
+    { label: "Desktop UV Printer (A3)", href: "/desktop-uv-printer" },
+    { label: "Giant Inkjet Printer (5M)", href: "/inject-printer" },
+    { label: "UV Flatbed Printer (2513)", href: "/flatbed-uv-printer" },
   ];
 
   return (
@@ -34,7 +39,6 @@ const Footer = () => {
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
                 >
-                  {/* Outer frame */}
                   <rect
                     x="12"
                     y="12"
@@ -45,7 +49,6 @@ const Footer = () => {
                     strokeWidth="2.5"
                     fill="none"
                   />
-                  {/* E letter strokes */}
                   <path
                     d="M30 30 L55 30"
                     stroke="currentColor"
@@ -64,14 +67,12 @@ const Footer = () => {
                     strokeWidth="4"
                     strokeLinecap="round"
                   />
-                  {/* Vertical bar */}
                   <path
                     d="M30 30 L30 70"
                     stroke="currentColor"
                     strokeWidth="4"
                     strokeLinecap="round"
                   />
-                  {/* Tech dot accent */}
                   <circle cx="68" cy="50" r="6" fill="hsl(var(--accent))" />
                 </svg>
 
@@ -133,6 +134,7 @@ const Footer = () => {
               Contact
             </h4>
             <ul className="space-y-3">
+              {/* Email */}
               <li className="flex items-start gap-2.5">
                 <Mail className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
                 <a
@@ -143,6 +145,33 @@ const Footer = () => {
                 </a>
               </li>
 
+              {/* Phone */}
+              <li className="flex items-start gap-2.5">
+                <Phone className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+                <a
+                  href={`tel:${PHONE_NUMBER}`}
+                  className="text-sm text-white/70 hover:text-accent transition-colors duration-200"
+                >
+                  {PHONE_NUMBER}
+                </a>
+              </li>
+
+              {/* WhatsApp */}
+              <li className="flex items-start gap-2.5">
+                <MessageCircle className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
+                <a
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+                    "Hi Elkatech, I am interested in your machinery. Please share details."
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-white/70 hover:text-accent transition-colors duration-200"
+                >
+                  WhatsApp Chat
+                </a>
+              </li>
+
+              {/* Location */}
               <li className="flex items-start gap-2.5">
                 <MapPin className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
                 <span className="text-sm text-white/70">

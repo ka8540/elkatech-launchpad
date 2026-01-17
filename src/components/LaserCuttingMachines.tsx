@@ -170,8 +170,7 @@ function Header() {
   const navItems = [
     { label: "Home", href: "/" },
     { label: "About", href: "/#about" },
-    { label: "Solutions", href: "/#solutions" },
-    { label: "Work", href: "/#work" },
+    { label: "Work & Solutions", href: "/#work" },
     { label: "Brands", href: "/#brands" },
     { label: "Why Us", href: "/#why-us" },
     { label: "Contact", href: "/#contact" },
@@ -318,12 +317,6 @@ export default function LaserCuttingMachinesPage() {
               >
                 View Products
               </a>
-              <a
-                href="#enquiry"
-                className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-muted"
-              >
-                Send Enquiry
-              </a>
             </div>
           </div>
         </section>
@@ -369,12 +362,7 @@ export default function LaserCuttingMachinesPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-3">
-                        <button
-                          className="rounded-xl bg-foreground px-5 py-3 text-sm font-semibold text-background hover:opacity-90"
-                          type="button"
-                        >
-                          {p.cta}
-                        </button>
+                
                         {p.brochureUrl && (
                             <a
                                 href={p.brochureUrl}

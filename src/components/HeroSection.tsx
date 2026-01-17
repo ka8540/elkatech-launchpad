@@ -78,15 +78,37 @@ const HeroSection = () => {
             variants={itemVariants}
             className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
           >
-            <Button variant="outline" size="lg" className="group min-w-[140px]">
-              <Phone className="mr-2 w-4 h-4" />
-              Call Now
+            {/* Call Button */}
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="group min-w-[140px]"
+            >
+              <a href="tel:+917203033486">
+                <Phone className="mr-2 w-4 h-4" />
+                Call Now
+              </a>
             </Button>
-            <Button variant="outline" size="lg" className="group min-w-[160px]">
-              <MessageCircle className="mr-2 w-4 h-4" />
-              WhatsApp Us
+
+            {/* WhatsApp Button */}
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="group min-w-[160px]"
+            >
+              <a
+                href="https://wa.me/917203033486"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <MessageCircle className="mr-2 w-4 h-4" />
+                WhatsApp Us
+              </a>
             </Button>
           </motion.div>
+
 
           {/* Trust Highlights */}
           <motion.div

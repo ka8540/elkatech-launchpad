@@ -6,6 +6,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { toast } from "sonner";
 
+const WHATSAPP_NUMBER = "917203033486";
+const PHONE_NUMBER = "+917203033486";
+
 const ContactSection = () => {
   const [formData, setFormData] = useState({
     name: "",
@@ -17,9 +20,18 @@ const ContactSection = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // ⚠️ This does NOT submit anywhere. It's just UI feedback.
     toast.success("Thank you for your inquiry! We'll get back to you soon.");
+
     setFormData({ name: "", company: "", phone: "", productInterest: "", message: "" });
   };
+
+  const whatsappPrefill = encodeURIComponent(
+    `Hi Elkatech,\n\nName: ${formData.name || "-"}\nCompany: ${formData.company || "-"}\nPhone: ${
+      formData.phone || "-"
+    }\nInterest: ${formData.productInterest || "-"}\n\nMessage:\n${formData.message || "-"}`
+  );
 
   return (
     <section id="contact" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
@@ -40,15 +52,16 @@ const ContactSection = () => {
               Contact Us
             </span>
             <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6">
-              Let's Start a{" "}
-              <span className="text-accent">Conversation</span>
+              Let's Start a <span className="text-accent">Conversation</span>
             </h2>
             <p className="text-white/70 text-lg mb-8 leading-relaxed">
-              Ready to explore the right machinery for your business? Our team is here to understand your needs and provide honest, practical guidance.
+              Ready to explore the right machinery for your business? Our team is here to understand
+              your needs and provide honest, practical guidance.
             </p>
 
             {/* Contact Info */}
             <div className="space-y-4 mb-8">
+              {/* Email */}
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <Mail className="w-5 h-5 text-accent" />
@@ -64,16 +77,23 @@ const ContactSection = () => {
                 </div>
               </div>
 
+              {/* Phone */}
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <Phone className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <p className="text-sm text-white/60">Phone / WhatsApp</p>
-                  <p className="text-white font-medium">Contact via form or WhatsApp</p>
+                  <p className="text-sm text-white/60">Phone</p>
+                  <a
+                    href={`tel:${PHONE_NUMBER}`}
+                    className="text-white font-medium hover:text-accent transition-colors"
+                  >
+                    {PHONE_NUMBER}
+                  </a>
                 </div>
               </div>
 
+              {/* Location */}
               <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-accent" />
@@ -87,12 +107,19 @@ const ContactSection = () => {
 
             {/* WhatsApp Button */}
             <Button
+              asChild
               variant="outline"
               size="lg"
               className="border-accent/50 text-accent hover:bg-accent/10 hover:border-accent"
             >
-              <MessageCircle className="mr-2 w-5 h-5" />
-              Chat on WhatsApp
+              <a
+                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappPrefill}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <MessageCircle className="mr-2 w-5 h-5" />
+                Chat on WhatsApp
+              </a>
             </Button>
           </motion.div>
 
@@ -119,9 +146,7 @@ const ContactSection = () => {
                   <Input
                     placeholder="Your full name"
                     value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                     className="bg-background"
                   />
@@ -134,9 +159,7 @@ const ContactSection = () => {
                   <Input
                     placeholder="Your company"
                     value={formData.company}
-                    onChange={(e) =>
-                      setFormData({ ...formData, company: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
                     className="bg-background"
                   />
                 </div>
@@ -148,9 +171,7 @@ const ContactSection = () => {
                   <Input
                     placeholder="+91 98765 43210"
                     value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     required
                     className="bg-background"
                   />
@@ -177,9 +198,7 @@ const ContactSection = () => {
                   <Textarea
                     placeholder="Tell us about your requirements..."
                     value={formData.message}
-                    onChange={(e) =>
-                      setFormData({ ...formData, message: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                     required
                     rows={4}
                     className="bg-background resize-none"
@@ -189,6 +208,23 @@ const ContactSection = () => {
                 <Button type="submit" variant="cta" size="lg" className="w-full group">
                   Send Inquiry
                   <Send className="ml-2 w-4 h-4 transition-transform group-hover:translate-x-1" />
+                </Button>
+
+                {/* Optional: One-click WhatsApp using form data */}
+                <Button
+                  asChild
+                  variant="outline"
+                  size="lg"
+                  className="w-full border-accent/50 text-accent hover:bg-accent/10 hover:border-accent"
+                >
+                  <a
+                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappPrefill}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MessageCircle className="mr-2 w-5 h-5" />
+                    Send via WhatsApp Instead
+                  </a>
                 </Button>
               </div>
             </form>
@@ -215,9 +251,6 @@ const ContactSection = () => {
             className="w-full"
           />
         </motion.div>
-
-
-
       </div>
     </section>
   );
