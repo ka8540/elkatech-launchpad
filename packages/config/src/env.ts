@@ -31,6 +31,17 @@ let cachedEnv: AppEnv | null = null;
 export function getEnv(): AppEnv {
   if (!cachedEnv) {
     cachedEnv = envSchema.parse(process.env);
+    
+    // Automatically securely route traffic across Vercel infrastructure when deployed
+    if (process.env.VERCEL === "1" && process.env.VERCEL_URL) {
+      const publicUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL}`;
+      cachedEnv.APP_BASE_URL = publicUrl;
+      cachedEnv.GATEWAY_URL = `${publicUrl}/api`;
+      cachedEnv.AUTH_SERVICE_URL = `${publicUrl}/api/internal-auth`;
+      cachedEnv.CATALOG_SERVICE_URL = `${publicUrl}/api/internal-catalog`;
+      cachedEnv.SERVICE_DESK_URL = `${publicUrl}/api/internal-service-desk`;
+      cachedEnv.NOTIFICATION_SERVICE_URL = `${publicUrl}/api/internal-notification`;
+    }
   }
 
   return cachedEnv;

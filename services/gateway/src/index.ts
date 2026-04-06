@@ -359,7 +359,14 @@ app.post("/api/admin/users/invite", async (request, reply) => {
 
 const port = Number(new URL(env.GATEWAY_URL).port || "4000");
 
-app.listen({ port, host: "127.0.0.1" }).catch((error) => {
-  app.log.error(error);
-  process.exit(1);
-});
+if (!process.env.VERCEL) {
+  app.listen({ port, host: "127.0.0.1" }).catch((error) => {
+    app.log.error(error);
+    process.exit(1);
+  });
+}
+
+export default async function handler(req: any, res: any) {
+  await app.ready();
+  app.server.emit('request', req, res);
+}
