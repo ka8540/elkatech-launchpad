@@ -1,7 +1,6 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build --workspaces --if-present",
   "outputDirectory": "apps/web/dist",
-
   "rewrites": [
     {
       "source": "/api/internal-auth/(.*)",
