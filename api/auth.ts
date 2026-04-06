@@ -1,1 +1,1 @@
-export { default } from "../services/auth/src/index";
+export { default } from "../services/auth/src/index.js";
