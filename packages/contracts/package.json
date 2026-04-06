@@ -2,9 +2,12 @@
   "name": "@elkatech/contracts",
   "version": "1.0.0",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "dist/index.js",
   "types": "./src/index.ts",
   "dependencies": {
     "zod": "^3.25.76"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
   }
 }

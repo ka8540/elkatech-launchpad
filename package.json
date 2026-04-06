@@ -17,7 +17,7 @@
     "dev:service-desk": "npm run dev -w @elkatech/service-desk",
     "dev:notification": "npm run dev -w @elkatech/notification",
     "dev:infra": "docker compose up -d postgres mailpit",
-    "build": "npm run build -w @elkatech/web",
+    "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "db:migrate": "tsx scripts/db-migrate.ts",

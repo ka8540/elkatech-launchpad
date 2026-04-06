@@ -2,12 +2,15 @@
   "name": "@elkatech/config",
   "version": "1.0.0",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "dist/index.js",
   "types": "./src/index.ts",
   "dependencies": {
     "dotenv": "^16.4.7",
     "ioredis": "^5.10.1",
     "postgres": "^3.4.7",
     "zod": "^3.25.76"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
   }
 }
