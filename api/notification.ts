@@ -1,1 +1,2 @@
-export { default } from "../services/notification/src/index.js";
+import handler from "../services/notification/src/index.ts";
+export default handler;

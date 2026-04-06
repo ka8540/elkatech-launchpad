@@ -1,1 +1,2 @@
-export { default } from "../services/auth/src/index.js";
+import handler from "../services/auth/src/index.ts";
+export default handler;
