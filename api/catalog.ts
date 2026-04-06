@@ -1,1 +1,1 @@
-export { default } from "../services/catalog/src/index";
+export { default } from "../services/catalog/src/index.js";

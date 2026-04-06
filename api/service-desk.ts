@@ -1,1 +1,1 @@
-export { default } from "../services/service-desk/src/index";
+export { default } from "../services/service-desk/src/index.js";

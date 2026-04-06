@@ -1,1 +1,1 @@
-export { default } from "../services/gateway/src/index";
+export { default } from "../services/gateway/src/index.js";
