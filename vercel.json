@@ -2,30 +2,30 @@
   "buildCommand": "npm run build",
   "outputDirectory": "apps/web/dist",
   "functions": {
-    "api/**/*.ts": {
+    "api/**/*.mjs": {
       "includeFiles": "{services,packages}/**/dist/**"
     }
   },
   "rewrites": [
     {
       "source": "/api/internal-auth/(.*)",
-      "destination": "/api/auth.ts"
+      "destination": "/api/auth.mjs"
     },
     {
       "source": "/api/internal-catalog/(.*)",
-      "destination": "/api/catalog.ts"
+      "destination": "/api/catalog.mjs"
     },
     {
       "source": "/api/internal-service-desk/(.*)",
-      "destination": "/api/service-desk.ts"
+      "destination": "/api/service-desk.mjs"
     },
     {
       "source": "/api/internal-notification/(.*)",
-      "destination": "/api/notification.ts"
+      "destination": "/api/notification.mjs"
     },
     {
       "source": "/api/(.*)",
-      "destination": "/api/gateway.ts"
+      "destination": "/api/gateway.mjs"
     },
     {
       "source": "/(.*)",
