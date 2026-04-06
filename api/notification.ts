@@ -1,2 +1,2 @@
-import handler from "../services/notification/dist/index.js";
+import handler from "@elkatech/notification";
 export default handler;

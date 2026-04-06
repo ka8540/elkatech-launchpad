@@ -1,2 +1,2 @@
-import handler from "../services/catalog/dist/index.js";
+import handler from "@elkatech/catalog";
 export default handler;

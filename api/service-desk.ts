@@ -1,2 +1,2 @@
-import handler from "../services/service-desk/dist/index.js";
+import handler from "@elkatech/service-desk";
 export default handler;
