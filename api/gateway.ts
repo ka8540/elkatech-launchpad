@@ -1,1 +1,2 @@
-export { default } from "../services/gateway/src/index.js";
+import handler from "../services/gateway/src/index.ts";
+export default handler;
