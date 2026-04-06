@@ -1,7 +1,10 @@
-if (typeof process !== "undefined" && !process.env.VERCEL) {
-  try { await import("dotenv/config"); } catch (e) {}
+// Only load dotenv when running locally — on Vercel, env vars come from the dashboard
+if (!process.env.VERCEL) {
+  const { config } = await import("dotenv");
+  config();
 }
 import { z } from "zod";
+
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
