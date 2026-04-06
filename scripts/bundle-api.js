@@ -12,7 +12,7 @@ async function run() {
         format: 'esm',
         target: 'node18',
         outfile: `api/${svc}.mjs`,
-        external: ['fastify', 'postgres', 'ioredis', 'zod', '@fastify/*', 'dotenv', 'fs', 'path', 'crypto'],
+        external: ['fastify', 'postgres', 'ioredis', 'zod', '@fastify/*', 'dotenv', 'dotenv/*', 'fs', 'path', 'crypto'],
         loader: { '.ts': 'ts' }
       });
       console.log(`Bundled ${svc} successfully into api/${svc}.mjs`);
