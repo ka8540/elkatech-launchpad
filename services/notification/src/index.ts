@@ -187,7 +187,17 @@ setInterval(() => {
 
 const port = Number(new URL(env.NOTIFICATION_SERVICE_URL).port || "4004");
 
-app.listen({ port, host: "127.0.0.1" }).catch((error) => {
-  app.log.error(error);
-  process.exit(1);
-});
+if (!process.env.VERCEL) {
+  app.listen({ port, host: "127.0.0.1" }).catch((error) => {
+    app.log.error(error);
+    process.exit(1);
+  });
+}
+
+export default async function handler(req: any, res: any) {
+  await app.ready();
+  if (req.url?.startsWith('/api/internal-notification')) {
+    req.url = req.url.replace('/api/internal-notification', '') || '/';
+  }
+  app.server.emit('request', req, res);
+}

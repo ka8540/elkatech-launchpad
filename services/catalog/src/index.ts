@@ -170,7 +170,17 @@ app.get("/products/:productId", async (request, reply) => {
 
 const port = Number(new URL(env.CATALOG_SERVICE_URL).port || "4002");
 
-app.listen({ port, host: "127.0.0.1" }).catch((error) => {
-  app.log.error(error);
-  process.exit(1);
-});
+if (!process.env.VERCEL) {
+  app.listen({ port, host: "127.0.0.1" }).catch((error) => {
+    app.log.error(error);
+    process.exit(1);
+  });
+}
+
+export default async function handler(req: any, res: any) {
+  await app.ready();
+  if (req.url?.startsWith('/api/internal-catalog')) {
+    req.url = req.url.replace('/api/internal-catalog', '') || '/';
+  }
+  app.server.emit('request', req, res);
+}

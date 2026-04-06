@@ -2,9 +2,11 @@
   "buildCommand": "npm run build -w @elkatech/web",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/internal-auth/(.*)", "destination": "/services/auth/src/index.ts" },
+    { "source": "/api/internal-catalog/(.*)", "destination": "/services/catalog/src/index.ts" },
+    { "source": "/api/internal-service-desk/(.*)", "destination": "/services/service-desk/src/index.ts" },
+    { "source": "/api/internal-notification/(.*)", "destination": "/services/notification/src/index.ts" },
+    { "source": "/api/(.*)", "destination": "/services/gateway/src/index.ts" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

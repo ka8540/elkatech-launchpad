@@ -42,12 +42,12 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   if (!response.ok) {
     let message = response.statusText;
+    const bodyText = await response.text();
     try {
-      const payload = (await response.json()) as { message?: string };
+      const payload = JSON.parse(bodyText) as { message?: string };
       message = payload.message ?? message;
     } catch {
-      const fallback = await response.text();
-      message = fallback || message;
+      message = bodyText || message;
     }
     throw new ApiError(message, response.status);
   }
