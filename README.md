@@ -1,73 +1,121 @@
-# Welcome to your Lovable project
+# Elkatech Service Platform
 
-## Project info
+Elkatech is now structured as a microservice-based service platform inside a single npm workspace monorepo.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+The public marketing website still lives in the same codebase and keeps the existing visual language. On top of that, the repo now includes a protected service portal with customer authentication, service requests, engineer/admin workflows, and outbound email notifications.
 
-## How can I edit this code?
+## Architecture
 
-There are several ways of editing your application.
+### Apps
 
-**Use Lovable**
+- `apps/web`: Vite + React frontend for both the public website and the protected service portal
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### Services
 
-Changes made via Lovable will be committed automatically to this repo.
+- `services/gateway`: public-facing BFF/API gateway with cookie auth, CSRF checks, rate limiting, and RBAC
+- `services/auth`: users, invitations, password auth, sessions, verification, password reset
+- `services/catalog`: read-only product/category APIs seeded from the current website catalog
+- `services/service-desk`: service requests, assignment, statuses, messages, internal notes, history
+- `services/notification`: outbox consumer that delivers email notifications
 
-**Use your preferred IDE**
+### Shared Packages
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- `packages/contracts`: shared Zod schemas, TypeScript contracts, and seed catalog data
+- `packages/config`: shared environment, database, crypto, and internal HTTP helpers
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Database Layout
 
-Follow these steps:
+One Postgres instance is used in development, with separate schemas per service:
+
+- `auth`
+- `catalog`
+- `service_desk`
+- `notification`
+
+Async service-to-service notifications use a Postgres outbox pattern in v1.
+
+## Portal Features
+
+- Public customer signup and login
+- Invite-only engineer/admin onboarding
+- Email verification and password reset
+- Product-linked `Request Service` actions from catalog pages
+- Protected customer portal under `/app/requests`
+- Engineer queue under `/app/queue`
+- Admin user invitation screen under `/app/users`
+- Customer-visible replies and staff-only internal notes
+- Email notifications for verification, password reset, request creation, assignment, replies, and status updates
+
+## Local Setup
+
+1. Install dependencies:
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+2. Copy environment defaults:
 
-# Step 3: Install the necessary dependencies.
-npm i
+```sh
+cp .env.example .env
+```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+3. Start Postgres and Mailpit:
+
+```sh
+docker compose up -d postgres mailpit
+```
+
+4. Apply database migrations:
+
+```sh
+npm run db:migrate
+```
+
+5. Seed the product catalog:
+
+```sh
+npm run db:seed
+```
+
+6. Bootstrap the first admin account:
+
+```sh
+npm run db:bootstrap-admin
+```
+
+7. Start the full platform:
+
+```sh
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Useful URLs
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- Public site: `http://127.0.0.1:8080`
+- Gateway API: `http://127.0.0.1:4000`
+- Auth service: `http://127.0.0.1:4001`
+- Catalog service: `http://127.0.0.1:4002`
+- Service Desk service: `http://127.0.0.1:4003`
+- Notification service: `http://127.0.0.1:4004`
+- Mailpit inbox: `http://127.0.0.1:8025`
 
-**Use GitHub Codespaces**
+## Verification
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Build everything:
 
-## What technologies are used for this project?
+```sh
+npm run build
+```
 
-This project is built with:
+Run tests:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```sh
+npm test
+```
 
-## How can I deploy this project?
+## Notes
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- The marketing site still uses the existing fonts, theme tokens, Tailwind utilities, shadcn components, and overall visual language.
+- The product catalog shown on the public site remains visually unchanged, while the service portal uses the same styling system for continuity.
+- Docker is the expected local infrastructure path for Postgres and Mailpit.
