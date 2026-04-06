@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import argon2 from "argon2";
+import bcrypt from "bcryptjs";
 import Fastify from "fastify";
 import { z } from "zod";
 import {
@@ -78,7 +78,7 @@ app.get("/health", async () => ({ ok: true, service: "auth" }));
 
 app.post("/signup", async (request, reply) => {
   const input = signUpInputSchema.parse(request.body);
-  const passwordHash = await argon2.hash(input.password);
+  const passwordHash = await bcrypt.hash(input.password, 12);
 
   if (input.inviteToken) {
     const inviteRows = await sql<{
@@ -202,7 +202,7 @@ app.post("/login", async (request, reply) => {
     return reply.code(401).send({ message: "Invalid email or password." });
   }
 
-  const validPassword = await argon2.verify(user.password_hash, input.password);
+  const validPassword = await bcrypt.compare(input.password, user.password_hash);
   if (!validPassword) {
     return reply.code(401).send({ message: "Invalid email or password." });
   }
@@ -310,7 +310,7 @@ app.post("/reset-password", async (request, reply) => {
     return reply.code(400).send({ message: "Password reset link is invalid or expired." });
   }
 
-  const passwordHash = await argon2.hash(input.password);
+  const passwordHash = await bcrypt.hash(input.password, 12);
   await sql.begin(async (transaction) => {
     await transaction`
       update auth.users

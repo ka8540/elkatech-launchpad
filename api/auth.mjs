@@ -42,464 +42,6 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/@phc/format/index.js
-var require_format = __commonJS({
-  "node_modules/@phc/format/index.js"(exports, module) {
-    var idRegex = /^[a-z0-9-]{1,32}$/;
-    var nameRegex = /^[a-z0-9-]{1,32}$/;
-    var valueRegex = /^[a-zA-Z0-9/+.-]+$/;
-    var b64Regex = /^([a-zA-Z0-9/+.-]+|)$/;
-    var decimalRegex = /^((-)?[1-9]\d*|0)$/;
-    var versionRegex = /^v=(\d+)$/;
-    function objToKeyVal(obj) {
-      return objectKeys(obj).map((k) => [k, obj[k]].join("=")).join(",");
-    }
-    function keyValtoObj(str) {
-      const obj = {};
-      str.split(",").forEach((ps) => {
-        const pss = ps.split("=");
-        if (pss.length < 2) {
-          throw new TypeError(`params must be in the format name=value`);
-        }
-        obj[pss.shift()] = pss.join("=");
-      });
-      return obj;
-    }
-    function objectKeys(object) {
-      return Object.keys(object);
-    }
-    function objectValues(object) {
-      if (typeof Object.values === "function") return Object.values(object);
-      return objectKeys(object).map((k) => object[k]);
-    }
-    function serialize(opts) {
-      const fields = [""];
-      if (typeof opts !== "object" || opts === null) {
-        throw new TypeError("opts must be an object");
-      }
-      if (typeof opts.id !== "string") {
-        throw new TypeError("id must be a string");
-      }
-      if (!idRegex.test(opts.id)) {
-        throw new TypeError(`id must satisfy ${idRegex}`);
-      }
-      fields.push(opts.id);
-      if (typeof opts.version !== "undefined") {
-        if (typeof opts.version !== "number" || opts.version < 0 || !Number.isInteger(opts.version)) {
-          throw new TypeError("version must be a positive integer number");
-        }
-        fields.push(`v=${opts.version}`);
-      }
-      if (typeof opts.params !== "undefined") {
-        if (typeof opts.params !== "object" || opts.params === null) {
-          throw new TypeError("params must be an object");
-        }
-        const pk = objectKeys(opts.params);
-        if (!pk.every((p) => nameRegex.test(p))) {
-          throw new TypeError(`params names must satisfy ${nameRegex}`);
-        }
-        pk.forEach((k) => {
-          if (typeof opts.params[k] === "number") {
-            opts.params[k] = opts.params[k].toString();
-          } else if (Buffer.isBuffer(opts.params[k])) {
-            opts.params[k] = opts.params[k].toString("base64").split("=")[0];
-          }
-        });
-        const pv = objectValues(opts.params);
-        if (!pv.every((v) => typeof v === "string")) {
-          throw new TypeError("params values must be strings");
-        }
-        if (!pv.every((v) => valueRegex.test(v))) {
-          throw new TypeError(`params values must satisfy ${valueRegex}`);
-        }
-        const strpar = objToKeyVal(opts.params);
-        fields.push(strpar);
-      }
-      if (typeof opts.salt !== "undefined") {
-        if (!Buffer.isBuffer(opts.salt)) {
-          throw new TypeError("salt must be a Buffer");
-        }
-        fields.push(opts.salt.toString("base64").split("=")[0]);
-        if (typeof opts.hash !== "undefined") {
-          if (!Buffer.isBuffer(opts.hash)) {
-            throw new TypeError("hash must be a Buffer");
-          }
-          fields.push(opts.hash.toString("base64").split("=")[0]);
-        }
-      }
-      const phcstr = fields.join("$");
-      return phcstr;
-    }
-    function deserialize(phcstr) {
-      if (typeof phcstr !== "string" || phcstr === "") {
-        throw new TypeError("pchstr must be a non-empty string");
-      }
-      if (phcstr[0] !== "$") {
-        throw new TypeError("pchstr must contain a $ as first char");
-      }
-      const fields = phcstr.split("$");
-      fields.shift();
-      let maxf = 5;
-      if (!versionRegex.test(fields[1])) maxf--;
-      if (fields.length > maxf) {
-        throw new TypeError(
-          `pchstr contains too many fileds: ${fields.length}/${maxf}`
-        );
-      }
-      const id = fields.shift();
-      if (!idRegex.test(id)) {
-        throw new TypeError(`id must satisfy ${idRegex}`);
-      }
-      let version;
-      if (versionRegex.test(fields[0])) {
-        version = parseInt(fields.shift().match(versionRegex)[1], 10);
-      }
-      let hash;
-      let salt;
-      if (b64Regex.test(fields[fields.length - 1])) {
-        if (fields.length > 1 && b64Regex.test(fields[fields.length - 2])) {
-          hash = Buffer.from(fields.pop(), "base64");
-          salt = Buffer.from(fields.pop(), "base64");
-        } else {
-          salt = Buffer.from(fields.pop(), "base64");
-        }
-      }
-      let params;
-      if (fields.length > 0) {
-        const parstr = fields.pop();
-        params = keyValtoObj(parstr);
-        if (!objectKeys(params).every((p) => nameRegex.test(p))) {
-          throw new TypeError(`params names must satisfy ${nameRegex}`);
-        }
-        const pv = objectValues(params);
-        if (!pv.every((v) => valueRegex.test(v))) {
-          throw new TypeError(`params values must satisfy ${valueRegex}`);
-        }
-        const pk = objectKeys(params);
-        pk.forEach((k) => {
-          params[k] = decimalRegex.test(params[k]) ? parseInt(params[k], 10) : params[k];
-        });
-      }
-      if (fields.length > 0) {
-        throw new TypeError(`pchstr contains unrecognized fileds: ${fields}`);
-      }
-      const phcobj = { id };
-      if (version) phcobj.version = version;
-      if (params) phcobj.params = params;
-      if (salt) phcobj.salt = salt;
-      if (hash) phcobj.hash = hash;
-      return phcobj;
-    }
-    module.exports = {
-      serialize,
-      deserialize
-    };
-  }
-});
-
-// node_modules/node-gyp-build/node-gyp-build.js
-var require_node_gyp_build = __commonJS({
-  "node_modules/node-gyp-build/node-gyp-build.js"(exports, module) {
-    var fs2 = __require("fs");
-    var path = __require("path");
-    var os2 = __require("os");
-    var runtimeRequire = typeof __webpack_require__ === "function" ? __non_webpack_require__ : __require;
-    var vars = process.config && process.config.variables || {};
-    var prebuildsOnly = !!process.env.PREBUILDS_ONLY;
-    var abi = process.versions.modules;
-    var runtime = isElectron() ? "electron" : isNwjs() ? "node-webkit" : "node";
-    var arch = process.env.npm_config_arch || os2.arch();
-    var platform = process.env.npm_config_platform || os2.platform();
-    var libc = process.env.LIBC || (isAlpine(platform) ? "musl" : "glibc");
-    var armv = process.env.ARM_VERSION || (arch === "arm64" ? "8" : vars.arm_version) || "";
-    var uv = (process.versions.uv || "").split(".")[0];
-    module.exports = load;
-    function load(dir) {
-      return runtimeRequire(load.resolve(dir));
-    }
-    load.resolve = load.path = function(dir) {
-      dir = path.resolve(dir || ".");
-      try {
-        var name = runtimeRequire(path.join(dir, "package.json")).name.toUpperCase().replace(/-/g, "_");
-        if (process.env[name + "_PREBUILD"]) dir = process.env[name + "_PREBUILD"];
-      } catch (err) {
-      }
-      if (!prebuildsOnly) {
-        var release = getFirst(path.join(dir, "build/Release"), matchBuild);
-        if (release) return release;
-        var debug = getFirst(path.join(dir, "build/Debug"), matchBuild);
-        if (debug) return debug;
-      }
-      var prebuild = resolve(dir);
-      if (prebuild) return prebuild;
-      var nearby = resolve(path.dirname(process.execPath));
-      if (nearby) return nearby;
-      var target = [
-        "platform=" + platform,
-        "arch=" + arch,
-        "runtime=" + runtime,
-        "abi=" + abi,
-        "uv=" + uv,
-        armv ? "armv=" + armv : "",
-        "libc=" + libc,
-        "node=" + process.versions.node,
-        process.versions.electron ? "electron=" + process.versions.electron : "",
-        typeof __webpack_require__ === "function" ? "webpack=true" : ""
-        // eslint-disable-line
-      ].filter(Boolean).join(" ");
-      throw new Error("No native build was found for " + target + "\n    loaded from: " + dir + "\n");
-      function resolve(dir2) {
-        var tuples2 = readdirSync(path.join(dir2, "prebuilds")).map(parseTuple);
-        var tuple = tuples2.filter(matchTuple(platform, arch)).sort(compareTuples)[0];
-        if (!tuple) return;
-        var prebuilds = path.join(dir2, "prebuilds", tuple.name);
-        var parsed = readdirSync(prebuilds).map(parseTags);
-        var candidates = parsed.filter(matchTags(runtime, abi));
-        var winner = candidates.sort(compareTags(runtime))[0];
-        if (winner) return path.join(prebuilds, winner.file);
-      }
-    };
-    function readdirSync(dir) {
-      try {
-        return fs2.readdirSync(dir);
-      } catch (err) {
-        return [];
-      }
-    }
-    function getFirst(dir, filter) {
-      var files = readdirSync(dir).filter(filter);
-      return files[0] && path.join(dir, files[0]);
-    }
-    function matchBuild(name) {
-      return /\.node$/.test(name);
-    }
-    function parseTuple(name) {
-      var arr = name.split("-");
-      if (arr.length !== 2) return;
-      var platform2 = arr[0];
-      var architectures = arr[1].split("+");
-      if (!platform2) return;
-      if (!architectures.length) return;
-      if (!architectures.every(Boolean)) return;
-      return { name, platform: platform2, architectures };
-    }
-    function matchTuple(platform2, arch2) {
-      return function(tuple) {
-        if (tuple == null) return false;
-        if (tuple.platform !== platform2) return false;
-        return tuple.architectures.includes(arch2);
-      };
-    }
-    function compareTuples(a, b2) {
-      return a.architectures.length - b2.architectures.length;
-    }
-    function parseTags(file) {
-      var arr = file.split(".");
-      var extension = arr.pop();
-      var tags = { file, specificity: 0 };
-      if (extension !== "node") return;
-      for (var i = 0; i < arr.length; i++) {
-        var tag = arr[i];
-        if (tag === "node" || tag === "electron" || tag === "node-webkit") {
-          tags.runtime = tag;
-        } else if (tag === "napi") {
-          tags.napi = true;
-        } else if (tag.slice(0, 3) === "abi") {
-          tags.abi = tag.slice(3);
-        } else if (tag.slice(0, 2) === "uv") {
-          tags.uv = tag.slice(2);
-        } else if (tag.slice(0, 4) === "armv") {
-          tags.armv = tag.slice(4);
-        } else if (tag === "glibc" || tag === "musl") {
-          tags.libc = tag;
-        } else {
-          continue;
-        }
-        tags.specificity++;
-      }
-      return tags;
-    }
-    function matchTags(runtime2, abi2) {
-      return function(tags) {
-        if (tags == null) return false;
-        if (tags.runtime && tags.runtime !== runtime2 && !runtimeAgnostic(tags)) return false;
-        if (tags.abi && tags.abi !== abi2 && !tags.napi) return false;
-        if (tags.uv && tags.uv !== uv) return false;
-        if (tags.armv && tags.armv !== armv) return false;
-        if (tags.libc && tags.libc !== libc) return false;
-        return true;
-      };
-    }
-    function runtimeAgnostic(tags) {
-      return tags.runtime === "node" && tags.napi;
-    }
-    function compareTags(runtime2) {
-      return function(a, b2) {
-        if (a.runtime !== b2.runtime) {
-          return a.runtime === runtime2 ? -1 : 1;
-        } else if (a.abi !== b2.abi) {
-          return a.abi ? -1 : 1;
-        } else if (a.specificity !== b2.specificity) {
-          return a.specificity > b2.specificity ? -1 : 1;
-        } else {
-          return 0;
-        }
-      };
-    }
-    function isNwjs() {
-      return !!(process.versions && process.versions.nw);
-    }
-    function isElectron() {
-      if (process.versions && process.versions.electron) return true;
-      if (process.env.ELECTRON_RUN_AS_NODE) return true;
-      return typeof window !== "undefined" && window.process && window.process.type === "renderer";
-    }
-    function isAlpine(platform2) {
-      return platform2 === "linux" && fs2.existsSync("/etc/alpine-release");
-    }
-    load.parseTags = parseTags;
-    load.matchTags = matchTags;
-    load.compareTags = compareTags;
-    load.parseTuple = parseTuple;
-    load.matchTuple = matchTuple;
-    load.compareTuples = compareTuples;
-  }
-});
-
-// node_modules/node-gyp-build/index.js
-var require_node_gyp_build2 = __commonJS({
-  "node_modules/node-gyp-build/index.js"(exports, module) {
-    var runtimeRequire = typeof __webpack_require__ === "function" ? __non_webpack_require__ : __require;
-    if (typeof runtimeRequire.addon === "function") {
-      module.exports = runtimeRequire.addon.bind(runtimeRequire);
-    } else {
-      module.exports = require_node_gyp_build();
-    }
-  }
-});
-
-// node_modules/argon2/argon2.cjs
-var require_argon2 = __commonJS({
-  "node_modules/argon2/argon2.cjs"(exports, module) {
-    var assert = __require("node:assert");
-    var { randomBytes: randomBytes2, timingSafeEqual } = __require("node:crypto");
-    var { promisify } = __require("node:util");
-    var { deserialize, serialize } = require_format();
-    var gypBuild = require_node_gyp_build2();
-    var { hash: bindingsHash } = gypBuild(__dirname);
-    var generateSalt = promisify(randomBytes2);
-    var argon2d = 0;
-    var argon2i = 1;
-    var argon2id = 2;
-    module.exports.argon2d = argon2d;
-    module.exports.argon2i = argon2i;
-    module.exports.argon2id = argon2id;
-    var types2 = Object.freeze({ argon2d, argon2i, argon2id });
-    var names = Object.freeze({
-      [types2.argon2d]: "argon2d",
-      [types2.argon2i]: "argon2i",
-      [types2.argon2id]: "argon2id"
-    });
-    var defaults = Object.freeze({
-      hashLength: 32,
-      timeCost: 3,
-      memoryCost: 1 << 16,
-      parallelism: 4,
-      type: argon2id,
-      version: 19
-    });
-    var limits = Object.freeze({
-      hashLength: { min: 4, max: 2 ** 32 - 1 },
-      memoryCost: { min: 1 << 10, max: 2 ** 32 - 1 },
-      timeCost: { min: 2, max: 2 ** 32 - 1 },
-      parallelism: { min: 1, max: 2 ** 24 - 1 }
-    });
-    module.exports.limits = limits;
-    async function hash(password, options) {
-      let { raw, salt, ...rest } = { ...defaults, ...options };
-      for (const [key, { min, max }] of Object.entries(limits)) {
-        const value = rest[key];
-        assert(
-          min <= value && value <= max,
-          `Invalid ${key}, must be between ${min} and ${max}.`
-        );
-      }
-      salt = salt ?? await generateSalt(16);
-      const {
-        hashLength,
-        secret = Buffer.alloc(0),
-        type,
-        version,
-        memoryCost: m,
-        timeCost: t,
-        parallelism: p,
-        associatedData: data = Buffer.alloc(0)
-      } = rest;
-      const hash2 = await bindingsHash({
-        password: Buffer.from(password),
-        salt,
-        secret,
-        data,
-        hashLength,
-        m,
-        t,
-        p,
-        version,
-        type
-      });
-      if (raw) {
-        return hash2;
-      }
-      return serialize({
-        id: names[type],
-        version,
-        params: { m, t, p, ...data.byteLength > 0 ? { data } : {} },
-        salt,
-        hash: hash2
-      });
-    }
-    module.exports.hash = hash;
-    function needsRehash(digest, options = {}) {
-      const { memoryCost, timeCost, version } = { ...defaults, ...options };
-      const {
-        version: v,
-        params: { m, t }
-      } = deserialize(digest);
-      return +v !== +version || +m !== +memoryCost || +t !== +timeCost;
-    }
-    module.exports.needsRehash = needsRehash;
-    async function verify(digest, password, options = {}) {
-      const { id, ...rest } = deserialize(digest);
-      if (!(id in types2)) {
-        return false;
-      }
-      const {
-        version = 16,
-        params: { m, t, p, data = "" },
-        salt,
-        hash: hash2
-      } = rest;
-      const { secret = Buffer.alloc(0) } = options;
-      return timingSafeEqual(
-        await bindingsHash({
-          password: Buffer.from(password),
-          salt,
-          secret,
-          data: Buffer.from(data, "base64"),
-          hashLength: hash2.byteLength,
-          m: +m,
-          t: +t,
-          p: +p,
-          version: +version,
-          type: types2[id]
-        }),
-        hash2
-      );
-    }
-    module.exports.verify = verify;
-  }
-});
-
 // node_modules/reusify/reusify.js
 var require_reusify = __commonJS({
   "node_modules/reusify/reusify.js"(exports, module) {
@@ -13753,10 +13295,10 @@ var require_util = __commonJS({
     var codegen_1 = require_codegen();
     var code_1 = require_code();
     function toHash(arr) {
-      const hash = {};
+      const hash2 = {};
       for (const item of arr)
-        hash[item] = true;
-      return hash;
+        hash2[item] = true;
+      return hash2;
     }
     exports.toHash = toHash;
     function alwaysValidSchema(it, schema) {
@@ -18686,7 +18228,7 @@ var require_applicator = __commonJS({
 });
 
 // node_modules/@fastify/ajv-compiler/node_modules/ajv/dist/vocabularies/format/format.js
-var require_format2 = __commonJS({
+var require_format = __commonJS({
   "node_modules/@fastify/ajv-compiler/node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -18776,11 +18318,11 @@ var require_format2 = __commonJS({
 });
 
 // node_modules/@fastify/ajv-compiler/node_modules/ajv/dist/vocabularies/format/index.js
-var require_format3 = __commonJS({
+var require_format2 = __commonJS({
   "node_modules/@fastify/ajv-compiler/node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var format_1 = require_format2();
+    var format_1 = require_format();
     var format = [format_1.default];
     exports.default = format;
   }
@@ -18817,7 +18359,7 @@ var require_draft7 = __commonJS({
     var core_1 = require_core2();
     var validation_1 = require_validation2();
     var applicator_1 = require_applicator();
-    var format_1 = require_format3();
+    var format_1 = require_format2();
     var metadata_1 = require_metadata();
     var draft7Vocabularies = [
       core_1.default,
@@ -20896,8 +20438,8 @@ var require_formats = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.formatNames = exports.fastFormats = exports.fullFormats = void 0;
-    function fmtDef(validate, compare) {
-      return { validate, compare };
+    function fmtDef(validate, compare2) {
+      return { validate, compare: compare2 };
     }
     exports.fullFormats = {
       // date: http://tools.ietf.org/html/rfc3339#section-5.6
@@ -22121,10 +21663,10 @@ var require_util2 = __commonJS({
     var codegen_1 = require_codegen2();
     var code_1 = require_code3();
     function toHash(arr) {
-      const hash = {};
+      const hash2 = {};
       for (const item of arr)
-        hash[item] = true;
-      return hash;
+        hash2[item] = true;
+      return hash2;
     }
     exports.toHash = toHash;
     function alwaysValidSchema(it, schema) {
@@ -26297,7 +25839,7 @@ var require_applicator2 = __commonJS({
 });
 
 // node_modules/ajv-formats/node_modules/ajv/dist/vocabularies/format/format.js
-var require_format4 = __commonJS({
+var require_format3 = __commonJS({
   "node_modules/ajv-formats/node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -26387,11 +25929,11 @@ var require_format4 = __commonJS({
 });
 
 // node_modules/ajv-formats/node_modules/ajv/dist/vocabularies/format/index.js
-var require_format5 = __commonJS({
+var require_format4 = __commonJS({
   "node_modules/ajv-formats/node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var format_1 = require_format4();
+    var format_1 = require_format3();
     var format = [format_1.default];
     exports.default = format;
   }
@@ -26428,7 +25970,7 @@ var require_draft72 = __commonJS({
     var core_1 = require_core4();
     var validation_1 = require_validation3();
     var applicator_1 = require_applicator2();
-    var format_1 = require_format5();
+    var format_1 = require_format4();
     var metadata_1 = require_metadata3();
     var draft7Vocabularies = [
       core_1.default,
@@ -28498,10 +28040,10 @@ var require_util3 = __commonJS({
     var codegen_1 = require_codegen3();
     var code_1 = require_code5();
     function toHash(arr) {
-      const hash = {};
+      const hash2 = {};
       for (const item of arr)
-        hash[item] = true;
-      return hash;
+        hash2[item] = true;
+      return hash2;
     }
     exports.toHash = toHash;
     function alwaysValidSchema(it, schema) {
@@ -32674,7 +32216,7 @@ var require_applicator3 = __commonJS({
 });
 
 // node_modules/fast-json-stringify/node_modules/ajv/dist/vocabularies/format/format.js
-var require_format6 = __commonJS({
+var require_format5 = __commonJS({
   "node_modules/fast-json-stringify/node_modules/ajv/dist/vocabularies/format/format.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -32764,11 +32306,11 @@ var require_format6 = __commonJS({
 });
 
 // node_modules/fast-json-stringify/node_modules/ajv/dist/vocabularies/format/index.js
-var require_format7 = __commonJS({
+var require_format6 = __commonJS({
   "node_modules/fast-json-stringify/node_modules/ajv/dist/vocabularies/format/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    var format_1 = require_format6();
+    var format_1 = require_format5();
     var format = [format_1.default];
     exports.default = format;
   }
@@ -32805,7 +32347,7 @@ var require_draft73 = __commonJS({
     var core_1 = require_core6();
     var validation_1 = require_validation4();
     var applicator_1 = require_applicator3();
-    var format_1 = require_format7();
+    var format_1 = require_format6();
     var metadata_1 = require_metadata4();
     var draft7Vocabularies = [
       core_1.default,
@@ -36734,8 +36276,8 @@ var require_compare = __commonJS({
   "node_modules/semver/functions/compare.js"(exports, module) {
     "use strict";
     var SemVer = require_semver();
-    var compare = (a, b2, loose) => new SemVer(a, loose).compare(new SemVer(b2, loose));
-    module.exports = compare;
+    var compare2 = (a, b2, loose) => new SemVer(a, loose).compare(new SemVer(b2, loose));
+    module.exports = compare2;
   }
 });
 
@@ -36743,8 +36285,8 @@ var require_compare = __commonJS({
 var require_rcompare = __commonJS({
   "node_modules/semver/functions/rcompare.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var rcompare = (a, b2, loose) => compare(b2, a, loose);
+    var compare2 = require_compare();
+    var rcompare = (a, b2, loose) => compare2(b2, a, loose);
     module.exports = rcompare;
   }
 });
@@ -36753,8 +36295,8 @@ var require_rcompare = __commonJS({
 var require_compare_loose = __commonJS({
   "node_modules/semver/functions/compare-loose.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var compareLoose = (a, b2) => compare(a, b2, true);
+    var compare2 = require_compare();
+    var compareLoose = (a, b2) => compare2(a, b2, true);
     module.exports = compareLoose;
   }
 });
@@ -36797,8 +36339,8 @@ var require_rsort = __commonJS({
 var require_gt = __commonJS({
   "node_modules/semver/functions/gt.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var gt = (a, b2, loose) => compare(a, b2, loose) > 0;
+    var compare2 = require_compare();
+    var gt = (a, b2, loose) => compare2(a, b2, loose) > 0;
     module.exports = gt;
   }
 });
@@ -36807,8 +36349,8 @@ var require_gt = __commonJS({
 var require_lt = __commonJS({
   "node_modules/semver/functions/lt.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var lt = (a, b2, loose) => compare(a, b2, loose) < 0;
+    var compare2 = require_compare();
+    var lt = (a, b2, loose) => compare2(a, b2, loose) < 0;
     module.exports = lt;
   }
 });
@@ -36817,8 +36359,8 @@ var require_lt = __commonJS({
 var require_eq = __commonJS({
   "node_modules/semver/functions/eq.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var eq = (a, b2, loose) => compare(a, b2, loose) === 0;
+    var compare2 = require_compare();
+    var eq = (a, b2, loose) => compare2(a, b2, loose) === 0;
     module.exports = eq;
   }
 });
@@ -36827,8 +36369,8 @@ var require_eq = __commonJS({
 var require_neq = __commonJS({
   "node_modules/semver/functions/neq.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var neq = (a, b2, loose) => compare(a, b2, loose) !== 0;
+    var compare2 = require_compare();
+    var neq = (a, b2, loose) => compare2(a, b2, loose) !== 0;
     module.exports = neq;
   }
 });
@@ -36837,8 +36379,8 @@ var require_neq = __commonJS({
 var require_gte = __commonJS({
   "node_modules/semver/functions/gte.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var gte = (a, b2, loose) => compare(a, b2, loose) >= 0;
+    var compare2 = require_compare();
+    var gte = (a, b2, loose) => compare2(a, b2, loose) >= 0;
     module.exports = gte;
   }
 });
@@ -36847,8 +36389,8 @@ var require_gte = __commonJS({
 var require_lte = __commonJS({
   "node_modules/semver/functions/lte.js"(exports, module) {
     "use strict";
-    var compare = require_compare();
-    var lte = (a, b2, loose) => compare(a, b2, loose) <= 0;
+    var compare2 = require_compare();
+    var lte = (a, b2, loose) => compare2(a, b2, loose) <= 0;
     module.exports = lte;
   }
 });
@@ -37745,12 +37287,12 @@ var require_simplify = __commonJS({
   "node_modules/semver/ranges/simplify.js"(exports, module) {
     "use strict";
     var satisfies = require_satisfies();
-    var compare = require_compare();
+    var compare2 = require_compare();
     module.exports = (versions, range, options) => {
       const set = [];
       let first = null;
       let prev = null;
-      const v = versions.sort((a, b2) => compare(a, b2, options));
+      const v = versions.sort((a, b2) => compare2(a, b2, options));
       for (const version of v) {
         const included = satisfies(version, range, options);
         if (included) {
@@ -37798,7 +37340,7 @@ var require_subset = __commonJS({
     var Comparator = require_comparator();
     var { ANY } = Comparator;
     var satisfies = require_satisfies();
-    var compare = require_compare();
+    var compare2 = require_compare();
     var subset = (sub, dom, options = {}) => {
       if (sub === dom) {
         return true;
@@ -37858,7 +37400,7 @@ var require_subset = __commonJS({
       }
       let gtltComp;
       if (gt && lt) {
-        gtltComp = compare(gt.semver, lt.semver, options);
+        gtltComp = compare2(gt.semver, lt.semver, options);
         if (gtltComp > 0) {
           return null;
         } else if (gtltComp === 0 && (gt.operator !== ">=" || lt.operator !== "<=")) {
@@ -37938,14 +37480,14 @@ var require_subset = __commonJS({
       if (!a) {
         return b2;
       }
-      const comp = compare(a.semver, b2.semver, options);
+      const comp = compare2(a.semver, b2.semver, options);
       return comp > 0 ? a : comp < 0 ? b2 : b2.operator === ">" && a.operator === ">=" ? b2 : a;
     };
     var lowerLT = (a, b2, options) => {
       if (!a) {
         return b2;
       }
-      const comp = compare(a.semver, b2.semver, options);
+      const comp = compare2(a.semver, b2.semver, options);
       return comp < 0 ? a : comp > 0 ? b2 : b2.operator === "<" && a.operator === "<=" ? b2 : a;
     };
     module.exports = subset;
@@ -37969,7 +37511,7 @@ var require_semver2 = __commonJS({
     var minor = require_minor();
     var patch = require_patch();
     var prerelease = require_prerelease();
-    var compare = require_compare();
+    var compare2 = require_compare();
     var rcompare = require_rcompare();
     var compareLoose = require_compare_loose();
     var compareBuild = require_compare_build();
@@ -38007,7 +37549,7 @@ var require_semver2 = __commonJS({
       minor,
       patch,
       prerelease,
-      compare,
+      compare: compare2,
       rcompare,
       compareLoose,
       compareBuild,
@@ -46140,7 +45682,7 @@ var require_main = __commonJS({
     var fs2 = __require("fs");
     var path = __require("path");
     var os2 = __require("os");
-    var crypto2 = __require("crypto");
+    var crypto3 = __require("crypto");
     var packageJson = require_package2();
     var version = packageJson.version;
     var LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
@@ -46359,7 +45901,7 @@ var require_main = __commonJS({
       const authTag = ciphertext.subarray(-16);
       ciphertext = ciphertext.subarray(12, -16);
       try {
-        const aesgcm = crypto2.createDecipheriv("aes-256-gcm", key, nonce);
+        const aesgcm = crypto3.createDecipheriv("aes-256-gcm", key, nonce);
         aesgcm.setAuthTag(authTag);
         return `${aesgcm.update(ciphertext)}${aesgcm.final()}`;
       } catch (error) {
@@ -49193,9 +48735,9 @@ var require_built = __commonJS({
   }
 });
 
-// packages/config/node_modules/standard-as-callback/built/utils.js
+// node_modules/standard-as-callback/built/utils.js
 var require_utils2 = __commonJS({
-  "packages/config/node_modules/standard-as-callback/built/utils.js"(exports) {
+  "node_modules/standard-as-callback/built/utils.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.tryCatch = exports.errorObj = void 0;
@@ -49219,9 +48761,9 @@ var require_utils2 = __commonJS({
   }
 });
 
-// packages/config/node_modules/standard-as-callback/built/index.js
+// node_modules/standard-as-callback/built/index.js
 var require_built2 = __commonJS({
-  "packages/config/node_modules/standard-as-callback/built/index.js"(exports) {
+  "node_modules/standard-as-callback/built/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var utils_1 = require_utils2();
@@ -49260,9 +48802,9 @@ var require_built2 = __commonJS({
   }
 });
 
-// packages/config/node_modules/redis-errors/lib/old.js
+// node_modules/redis-errors/lib/old.js
 var require_old = __commonJS({
-  "packages/config/node_modules/redis-errors/lib/old.js"(exports, module) {
+  "node_modules/redis-errors/lib/old.js"(exports, module) {
     "use strict";
     var assert = __require("assert");
     var util2 = __require("util");
@@ -49356,9 +48898,9 @@ var require_old = __commonJS({
   }
 });
 
-// packages/config/node_modules/redis-errors/lib/modern.js
+// node_modules/redis-errors/lib/modern.js
 var require_modern = __commonJS({
-  "packages/config/node_modules/redis-errors/lib/modern.js"(exports, module) {
+  "node_modules/redis-errors/lib/modern.js"(exports, module) {
     "use strict";
     var assert = __require("assert");
     var RedisError = class extends Error {
@@ -49412,18 +48954,18 @@ var require_modern = __commonJS({
   }
 });
 
-// packages/config/node_modules/redis-errors/index.js
+// node_modules/redis-errors/index.js
 var require_redis_errors = __commonJS({
-  "packages/config/node_modules/redis-errors/index.js"(exports, module) {
+  "node_modules/redis-errors/index.js"(exports, module) {
     "use strict";
     var Errors2 = process.version.charCodeAt(1) < 55 && process.version.charCodeAt(2) === 46 ? require_old() : require_modern();
     module.exports = Errors2;
   }
 });
 
-// packages/config/node_modules/cluster-key-slot/lib/index.js
+// node_modules/cluster-key-slot/lib/index.js
 var require_lib2 = __commonJS({
-  "packages/config/node_modules/cluster-key-slot/lib/index.js"(exports, module) {
+  "node_modules/cluster-key-slot/lib/index.js"(exports, module) {
     var lookup = [
       0,
       4129,
@@ -49744,9 +49286,9 @@ var require_lib2 = __commonJS({
   }
 });
 
-// packages/config/node_modules/lodash.defaults/index.js
+// node_modules/lodash.defaults/index.js
 var require_lodash = __commonJS({
-  "packages/config/node_modules/lodash.defaults/index.js"(exports, module) {
+  "node_modules/lodash.defaults/index.js"(exports, module) {
     var MAX_SAFE_INTEGER = 9007199254740991;
     var argsTag = "[object Arguments]";
     var funcTag = "[object Function]";
@@ -49923,9 +49465,9 @@ var require_lodash = __commonJS({
   }
 });
 
-// packages/config/node_modules/lodash.isarguments/index.js
+// node_modules/lodash.isarguments/index.js
 var require_lodash2 = __commonJS({
-  "packages/config/node_modules/lodash.isarguments/index.js"(exports, module) {
+  "node_modules/lodash.isarguments/index.js"(exports, module) {
     var MAX_SAFE_INTEGER = 9007199254740991;
     var argsTag = "[object Arguments]";
     var funcTag = "[object Function]";
@@ -49961,9 +49503,9 @@ var require_lodash2 = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/utils/lodash.js
+// node_modules/ioredis/built/utils/lodash.js
 var require_lodash3 = __commonJS({
-  "packages/config/node_modules/ioredis/built/utils/lodash.js"(exports) {
+  "node_modules/ioredis/built/utils/lodash.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.isArguments = exports.defaults = exports.noop = void 0;
@@ -49977,9 +49519,9 @@ var require_lodash3 = __commonJS({
   }
 });
 
-// packages/config/node_modules/ms/index.js
+// node_modules/ms/index.js
 var require_ms = __commonJS({
-  "packages/config/node_modules/ms/index.js"(exports, module) {
+  "node_modules/ms/index.js"(exports, module) {
     var s = 1e3;
     var m = s * 60;
     var h = m * 60;
@@ -50093,9 +49635,9 @@ var require_ms = __commonJS({
   }
 });
 
-// packages/config/node_modules/debug/src/common.js
+// node_modules/debug/src/common.js
 var require_common = __commonJS({
-  "packages/config/node_modules/debug/src/common.js"(exports, module) {
+  "node_modules/debug/src/common.js"(exports, module) {
     function setup(env2) {
       createDebug.debug = createDebug;
       createDebug.default = createDebug;
@@ -50112,12 +49654,12 @@ var require_common = __commonJS({
       createDebug.skips = [];
       createDebug.formatters = {};
       function selectColor(namespace) {
-        let hash = 0;
+        let hash2 = 0;
         for (let i = 0; i < namespace.length; i++) {
-          hash = (hash << 5) - hash + namespace.charCodeAt(i);
-          hash |= 0;
+          hash2 = (hash2 << 5) - hash2 + namespace.charCodeAt(i);
+          hash2 |= 0;
         }
-        return createDebug.colors[Math.abs(hash) % createDebug.colors.length];
+        return createDebug.colors[Math.abs(hash2) % createDebug.colors.length];
       }
       createDebug.selectColor = selectColor;
       function createDebug(namespace) {
@@ -50270,9 +49812,9 @@ var require_common = __commonJS({
   }
 });
 
-// packages/config/node_modules/debug/src/browser.js
+// node_modules/debug/src/browser.js
 var require_browser = __commonJS({
-  "packages/config/node_modules/debug/src/browser.js"(exports, module) {
+  "node_modules/debug/src/browser.js"(exports, module) {
     exports.formatArgs = formatArgs;
     exports.save = save;
     exports.load = load;
@@ -50567,9 +50109,9 @@ var require_supports_color = __commonJS({
   }
 });
 
-// packages/config/node_modules/debug/src/node.js
+// node_modules/debug/src/node.js
 var require_node2 = __commonJS({
-  "packages/config/node_modules/debug/src/node.js"(exports, module) {
+  "node_modules/debug/src/node.js"(exports, module) {
     var tty = __require("tty");
     var util2 = __require("util");
     exports.init = init;
@@ -50741,9 +50283,9 @@ var require_node2 = __commonJS({
   }
 });
 
-// packages/config/node_modules/debug/src/index.js
+// node_modules/debug/src/index.js
 var require_src = __commonJS({
-  "packages/config/node_modules/debug/src/index.js"(exports, module) {
+  "node_modules/debug/src/index.js"(exports, module) {
     if (typeof process === "undefined" || process.type === "renderer" || process.browser === true || process.__nwjs) {
       module.exports = require_browser();
     } else {
@@ -50752,9 +50294,9 @@ var require_src = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/utils/debug.js
+// node_modules/ioredis/built/utils/debug.js
 var require_debug3 = __commonJS({
-  "packages/config/node_modules/ioredis/built/utils/debug.js"(exports) {
+  "node_modules/ioredis/built/utils/debug.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.genRedactedString = exports.getStringValue = exports.MAX_ARGUMENT_LENGTH = void 0;
@@ -50838,9 +50380,9 @@ var require_debug3 = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/constants/TLSProfiles.js
+// node_modules/ioredis/built/constants/TLSProfiles.js
 var require_TLSProfiles = __commonJS({
-  "packages/config/node_modules/ioredis/built/constants/TLSProfiles.js"(exports) {
+  "node_modules/ioredis/built/constants/TLSProfiles.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var RedisCloudCA = `-----BEGIN CERTIFICATE-----
@@ -50990,9 +50532,9 @@ WD9f
   }
 });
 
-// packages/config/node_modules/ioredis/built/utils/index.js
+// node_modules/ioredis/built/utils/index.js
 var require_utils3 = __commonJS({
-  "packages/config/node_modules/ioredis/built/utils/index.js"(exports) {
+  "node_modules/ioredis/built/utils/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.noop = exports.defaults = exports.Debug = exports.getPackageMeta = exports.zipMap = exports.CONNECTION_CLOSED_ERROR_MSG = exports.shuffle = exports.sample = exports.resolveTLSProfile = exports.parseURL = exports.optimizeErrorStack = exports.toArg = exports.convertMapToArray = exports.convertObjectToArray = exports.timeout = exports.packObject = exports.isInt = exports.wrapMultiResult = exports.convertBufferToString = void 0;
@@ -51219,9 +50761,9 @@ var require_utils3 = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/utils/argumentParsers.js
+// node_modules/ioredis/built/utils/argumentParsers.js
 var require_argumentParsers = __commonJS({
-  "packages/config/node_modules/ioredis/built/utils/argumentParsers.js"(exports) {
+  "node_modules/ioredis/built/utils/argumentParsers.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.parseBlockOption = exports.parseSecondsArgument = void 0;
@@ -51278,9 +50820,9 @@ var require_argumentParsers = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/Command.js
+// node_modules/ioredis/built/Command.js
 var require_Command = __commonJS({
-  "packages/config/node_modules/ioredis/built/Command.js"(exports) {
+  "node_modules/ioredis/built/Command.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var commands_1 = require_built();
@@ -51673,9 +51215,9 @@ var require_Command = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/errors/ClusterAllFailedError.js
+// node_modules/ioredis/built/errors/ClusterAllFailedError.js
 var require_ClusterAllFailedError = __commonJS({
-  "packages/config/node_modules/ioredis/built/errors/ClusterAllFailedError.js"(exports) {
+  "node_modules/ioredis/built/errors/ClusterAllFailedError.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var redis_errors_1 = require_redis_errors();
@@ -51694,9 +51236,9 @@ var require_ClusterAllFailedError = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/ScanStream.js
+// node_modules/ioredis/built/ScanStream.js
 var require_ScanStream = __commonJS({
-  "packages/config/node_modules/ioredis/built/ScanStream.js"(exports) {
+  "node_modules/ioredis/built/ScanStream.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var stream_1 = __require("stream");
@@ -51748,9 +51290,9 @@ var require_ScanStream = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/autoPipelining.js
+// node_modules/ioredis/built/autoPipelining.js
 var require_autoPipelining = __commonJS({
-  "packages/config/node_modules/ioredis/built/autoPipelining.js"(exports) {
+  "node_modules/ioredis/built/autoPipelining.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.executeWithAutoPipelining = exports.getFirstValueInFlattenedArray = exports.shouldUseAutoPipelining = exports.notAllowedAutoPipelineCommands = exports.kCallbacks = exports.kExec = void 0;
@@ -51876,9 +51418,9 @@ var require_autoPipelining = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/Script.js
+// node_modules/ioredis/built/Script.js
 var require_Script = __commonJS({
-  "packages/config/node_modules/ioredis/built/Script.js"(exports) {
+  "node_modules/ioredis/built/Script.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var crypto_1 = __require("crypto");
@@ -51941,9 +51483,9 @@ var require_Script = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/utils/Commander.js
+// node_modules/ioredis/built/utils/Commander.js
 var require_Commander = __commonJS({
-  "packages/config/node_modules/ioredis/built/utils/Commander.js"(exports) {
+  "node_modules/ioredis/built/utils/Commander.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var commands_1 = require_built();
@@ -52057,9 +51599,9 @@ var require_Commander = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/Pipeline.js
+// node_modules/ioredis/built/Pipeline.js
 var require_Pipeline = __commonJS({
-  "packages/config/node_modules/ioredis/built/Pipeline.js"(exports) {
+  "node_modules/ioredis/built/Pipeline.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var calculateSlot = require_lib2();
@@ -52367,9 +51909,9 @@ var require_Pipeline = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/transaction.js
+// node_modules/ioredis/built/transaction.js
 var require_transaction = __commonJS({
-  "packages/config/node_modules/ioredis/built/transaction.js"(exports) {
+  "node_modules/ioredis/built/transaction.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.addTransactionSupport = void 0;
@@ -52460,9 +52002,9 @@ var require_transaction = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/utils/applyMixin.js
+// node_modules/ioredis/built/utils/applyMixin.js
 var require_applyMixin = __commonJS({
-  "packages/config/node_modules/ioredis/built/utils/applyMixin.js"(exports) {
+  "node_modules/ioredis/built/utils/applyMixin.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function applyMixin(derivedConstructor, mixinConstructor) {
@@ -52474,9 +52016,9 @@ var require_applyMixin = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/ClusterOptions.js
+// node_modules/ioredis/built/cluster/ClusterOptions.js
 var require_ClusterOptions = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/ClusterOptions.js"(exports) {
+  "node_modules/ioredis/built/cluster/ClusterOptions.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DEFAULT_CLUSTER_OPTIONS = void 0;
@@ -52502,9 +52044,9 @@ var require_ClusterOptions = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/util.js
+// node_modules/ioredis/built/cluster/util.js
 var require_util5 = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/util.js"(exports) {
+  "node_modules/ioredis/built/cluster/util.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.getConnectionName = exports.weightSrvRecords = exports.groupSrvRecords = exports.getUniqueHostnamesFromOptions = exports.normalizeNodeOptions = exports.nodeKeyToRedisOptions = exports.getNodeKey = void 0;
@@ -52602,9 +52144,9 @@ var require_util5 = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/ClusterSubscriber.js
+// node_modules/ioredis/built/cluster/ClusterSubscriber.js
 var require_ClusterSubscriber = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/ClusterSubscriber.js"(exports) {
+  "node_modules/ioredis/built/cluster/ClusterSubscriber.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util5();
@@ -52788,9 +52330,9 @@ var require_ClusterSubscriber = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/ConnectionPool.js
+// node_modules/ioredis/built/cluster/ConnectionPool.js
 var require_ConnectionPool = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/ConnectionPool.js"(exports) {
+  "node_modules/ioredis/built/cluster/ConnectionPool.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var events_1 = __require("events");
@@ -52941,9 +52483,9 @@ var require_ConnectionPool = __commonJS({
   }
 });
 
-// packages/config/node_modules/denque/index.js
+// node_modules/denque/index.js
 var require_denque = __commonJS({
-  "packages/config/node_modules/denque/index.js"(exports, module) {
+  "node_modules/denque/index.js"(exports, module) {
     "use strict";
     function Denque(array, options) {
       var options = options || {};
@@ -53256,9 +52798,9 @@ var require_denque = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/DelayQueue.js
+// node_modules/ioredis/built/cluster/DelayQueue.js
 var require_DelayQueue = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/DelayQueue.js"(exports) {
+  "node_modules/ioredis/built/cluster/DelayQueue.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var utils_1 = require_utils3();
@@ -53312,9 +52854,9 @@ var require_DelayQueue = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/ShardedSubscriber.js
+// node_modules/ioredis/built/cluster/ShardedSubscriber.js
 var require_ShardedSubscriber = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/ShardedSubscriber.js"(exports) {
+  "node_modules/ioredis/built/cluster/ShardedSubscriber.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var util_1 = require_util5();
@@ -53457,9 +52999,9 @@ var require_ShardedSubscriber = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/ClusterSubscriberGroup.js
+// node_modules/ioredis/built/cluster/ClusterSubscriberGroup.js
 var require_ClusterSubscriberGroup = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/ClusterSubscriberGroup.js"(exports) {
+  "node_modules/ioredis/built/cluster/ClusterSubscriberGroup.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var utils_1 = require_utils3();
@@ -53773,9 +53315,9 @@ var require_ClusterSubscriberGroup = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/cluster/index.js
+// node_modules/ioredis/built/cluster/index.js
 var require_cluster = __commonJS({
-  "packages/config/node_modules/ioredis/built/cluster/index.js"(exports) {
+  "node_modules/ioredis/built/cluster/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var commands_1 = require_built();
@@ -54620,9 +54162,9 @@ var require_cluster = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/connectors/AbstractConnector.js
+// node_modules/ioredis/built/connectors/AbstractConnector.js
 var require_AbstractConnector = __commonJS({
-  "packages/config/node_modules/ioredis/built/connectors/AbstractConnector.js"(exports) {
+  "node_modules/ioredis/built/connectors/AbstractConnector.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var utils_1 = require_utils3();
@@ -54652,9 +54194,9 @@ var require_AbstractConnector = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/connectors/StandaloneConnector.js
+// node_modules/ioredis/built/connectors/StandaloneConnector.js
 var require_StandaloneConnector = __commonJS({
-  "packages/config/node_modules/ioredis/built/connectors/StandaloneConnector.js"(exports) {
+  "node_modules/ioredis/built/connectors/StandaloneConnector.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var net_1 = __require("net");
@@ -54717,9 +54259,9 @@ var require_StandaloneConnector = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/connectors/SentinelConnector/SentinelIterator.js
+// node_modules/ioredis/built/connectors/SentinelConnector/SentinelIterator.js
 var require_SentinelIterator = __commonJS({
-  "packages/config/node_modules/ioredis/built/connectors/SentinelConnector/SentinelIterator.js"(exports) {
+  "node_modules/ioredis/built/connectors/SentinelConnector/SentinelIterator.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     function isSentinelEql(a, b2) {
@@ -54757,9 +54299,9 @@ var require_SentinelIterator = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/connectors/SentinelConnector/FailoverDetector.js
+// node_modules/ioredis/built/connectors/SentinelConnector/FailoverDetector.js
 var require_FailoverDetector = __commonJS({
-  "packages/config/node_modules/ioredis/built/connectors/SentinelConnector/FailoverDetector.js"(exports) {
+  "node_modules/ioredis/built/connectors/SentinelConnector/FailoverDetector.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.FailoverDetector = void 0;
@@ -54805,9 +54347,9 @@ var require_FailoverDetector = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/connectors/SentinelConnector/index.js
+// node_modules/ioredis/built/connectors/SentinelConnector/index.js
 var require_SentinelConnector = __commonJS({
-  "packages/config/node_modules/ioredis/built/connectors/SentinelConnector/index.js"(exports) {
+  "node_modules/ioredis/built/connectors/SentinelConnector/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SentinelIterator = void 0;
@@ -55071,9 +54613,9 @@ var require_SentinelConnector = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/connectors/index.js
+// node_modules/ioredis/built/connectors/index.js
 var require_connectors = __commonJS({
-  "packages/config/node_modules/ioredis/built/connectors/index.js"(exports) {
+  "node_modules/ioredis/built/connectors/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SentinelConnector = exports.StandaloneConnector = void 0;
@@ -55084,9 +54626,9 @@ var require_connectors = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/errors/MaxRetriesPerRequestError.js
+// node_modules/ioredis/built/errors/MaxRetriesPerRequestError.js
 var require_MaxRetriesPerRequestError = __commonJS({
-  "packages/config/node_modules/ioredis/built/errors/MaxRetriesPerRequestError.js"(exports) {
+  "node_modules/ioredis/built/errors/MaxRetriesPerRequestError.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var redis_errors_1 = require_redis_errors();
@@ -55104,9 +54646,9 @@ var require_MaxRetriesPerRequestError = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/errors/index.js
+// node_modules/ioredis/built/errors/index.js
 var require_errors7 = __commonJS({
-  "packages/config/node_modules/ioredis/built/errors/index.js"(exports) {
+  "node_modules/ioredis/built/errors/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.MaxRetriesPerRequestError = void 0;
@@ -55115,9 +54657,9 @@ var require_errors7 = __commonJS({
   }
 });
 
-// packages/config/node_modules/redis-parser/lib/parser.js
+// node_modules/redis-parser/lib/parser.js
 var require_parser = __commonJS({
-  "packages/config/node_modules/redis-parser/lib/parser.js"(exports, module) {
+  "node_modules/redis-parser/lib/parser.js"(exports, module) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var StringDecoder = __require("string_decoder").StringDecoder;
@@ -55516,17 +55058,17 @@ var require_parser = __commonJS({
   }
 });
 
-// packages/config/node_modules/redis-parser/index.js
+// node_modules/redis-parser/index.js
 var require_redis_parser = __commonJS({
-  "packages/config/node_modules/redis-parser/index.js"(exports, module) {
+  "node_modules/redis-parser/index.js"(exports, module) {
     "use strict";
     module.exports = require_parser();
   }
 });
 
-// packages/config/node_modules/ioredis/built/SubscriptionSet.js
+// node_modules/ioredis/built/SubscriptionSet.js
 var require_SubscriptionSet = __commonJS({
-  "packages/config/node_modules/ioredis/built/SubscriptionSet.js"(exports) {
+  "node_modules/ioredis/built/SubscriptionSet.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var SubscriptionSet = class {
@@ -55566,9 +55108,9 @@ var require_SubscriptionSet = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/DataHandler.js
+// node_modules/ioredis/built/DataHandler.js
 var require_DataHandler = __commonJS({
-  "packages/config/node_modules/ioredis/built/DataHandler.js"(exports) {
+  "node_modules/ioredis/built/DataHandler.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var Command_1 = require_Command();
@@ -55774,9 +55316,9 @@ var require_DataHandler = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/redis/event_handler.js
+// node_modules/ioredis/built/redis/event_handler.js
 var require_event_handler = __commonJS({
-  "packages/config/node_modules/ioredis/built/redis/event_handler.js"(exports) {
+  "node_modules/ioredis/built/redis/event_handler.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.readyHandler = exports.errorHandler = exports.closeHandler = exports.connectHandler = void 0;
@@ -56054,9 +55596,9 @@ var require_event_handler = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/redis/RedisOptions.js
+// node_modules/ioredis/built/redis/RedisOptions.js
 var require_RedisOptions = __commonJS({
-  "packages/config/node_modules/ioredis/built/redis/RedisOptions.js"(exports) {
+  "node_modules/ioredis/built/redis/RedisOptions.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DEFAULT_REDIS_OPTIONS = void 0;
@@ -56113,9 +55655,9 @@ var require_RedisOptions = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/Redis.js
+// node_modules/ioredis/built/Redis.js
 var require_Redis = __commonJS({
-  "packages/config/node_modules/ioredis/built/Redis.js"(exports) {
+  "node_modules/ioredis/built/Redis.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var commands_1 = require_built();
@@ -56761,9 +56303,9 @@ var require_Redis = __commonJS({
   }
 });
 
-// packages/config/node_modules/ioredis/built/index.js
+// node_modules/ioredis/built/index.js
 var require_built3 = __commonJS({
-  "packages/config/node_modules/ioredis/built/index.js"(exports, module) {
+  "node_modules/ioredis/built/index.js"(exports, module) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.print = exports.ReplyError = exports.SentinelIterator = exports.SentinelConnector = exports.AbstractConnector = exports.Pipeline = exports.ScanStream = exports.Command = exports.Cluster = exports.Redis = exports.default = void 0;
@@ -56825,9 +56367,1733 @@ var require_built3 = __commonJS({
 });
 
 // services/auth/src/index.ts
-var import_argon2 = __toESM(require_argon2(), 1);
-var import_fastify = __toESM(require_fastify(), 1);
 import { randomUUID } from "node:crypto";
+
+// node_modules/bcryptjs/index.js
+import nodeCrypto from "crypto";
+var randomFallback = null;
+function randomBytes(len) {
+  try {
+    return crypto.getRandomValues(new Uint8Array(len));
+  } catch {
+  }
+  try {
+    return nodeCrypto.randomBytes(len);
+  } catch {
+  }
+  if (!randomFallback) {
+    throw Error(
+      "Neither WebCryptoAPI nor a crypto module is available. Use bcrypt.setRandomFallback to set an alternative"
+    );
+  }
+  return randomFallback(len);
+}
+function setRandomFallback(random) {
+  randomFallback = random;
+}
+function genSaltSync(rounds, seed_length) {
+  rounds = rounds || GENSALT_DEFAULT_LOG2_ROUNDS;
+  if (typeof rounds !== "number")
+    throw Error(
+      "Illegal arguments: " + typeof rounds + ", " + typeof seed_length
+    );
+  if (rounds < 4) rounds = 4;
+  else if (rounds > 31) rounds = 31;
+  var salt = [];
+  salt.push("$2b$");
+  if (rounds < 10) salt.push("0");
+  salt.push(rounds.toString());
+  salt.push("$");
+  salt.push(base64_encode(randomBytes(BCRYPT_SALT_LEN), BCRYPT_SALT_LEN));
+  return salt.join("");
+}
+function genSalt(rounds, seed_length, callback) {
+  if (typeof seed_length === "function")
+    callback = seed_length, seed_length = void 0;
+  if (typeof rounds === "function") callback = rounds, rounds = void 0;
+  if (typeof rounds === "undefined") rounds = GENSALT_DEFAULT_LOG2_ROUNDS;
+  else if (typeof rounds !== "number")
+    throw Error("illegal arguments: " + typeof rounds);
+  function _async(callback2) {
+    nextTick(function() {
+      try {
+        callback2(null, genSaltSync(rounds));
+      } catch (err) {
+        callback2(err);
+      }
+    });
+  }
+  if (callback) {
+    if (typeof callback !== "function")
+      throw Error("Illegal callback: " + typeof callback);
+    _async(callback);
+  } else
+    return new Promise(function(resolve, reject) {
+      _async(function(err, res) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(res);
+      });
+    });
+}
+function hashSync(password, salt) {
+  if (typeof salt === "undefined") salt = GENSALT_DEFAULT_LOG2_ROUNDS;
+  if (typeof salt === "number") salt = genSaltSync(salt);
+  if (typeof password !== "string" || typeof salt !== "string")
+    throw Error("Illegal arguments: " + typeof password + ", " + typeof salt);
+  return _hash(password, salt);
+}
+function hash(password, salt, callback, progressCallback) {
+  function _async(callback2) {
+    if (typeof password === "string" && typeof salt === "number")
+      genSalt(salt, function(err, salt2) {
+        _hash(password, salt2, callback2, progressCallback);
+      });
+    else if (typeof password === "string" && typeof salt === "string")
+      _hash(password, salt, callback2, progressCallback);
+    else
+      nextTick(
+        callback2.bind(
+          this,
+          Error("Illegal arguments: " + typeof password + ", " + typeof salt)
+        )
+      );
+  }
+  if (callback) {
+    if (typeof callback !== "function")
+      throw Error("Illegal callback: " + typeof callback);
+    _async(callback);
+  } else
+    return new Promise(function(resolve, reject) {
+      _async(function(err, res) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(res);
+      });
+    });
+}
+function safeStringCompare(known, unknown) {
+  var diff = known.length ^ unknown.length;
+  for (var i = 0; i < known.length; ++i) {
+    diff |= known.charCodeAt(i) ^ unknown.charCodeAt(i);
+  }
+  return diff === 0;
+}
+function compareSync(password, hash2) {
+  if (typeof password !== "string" || typeof hash2 !== "string")
+    throw Error("Illegal arguments: " + typeof password + ", " + typeof hash2);
+  if (hash2.length !== 60) return false;
+  return safeStringCompare(
+    hashSync(password, hash2.substring(0, hash2.length - 31)),
+    hash2
+  );
+}
+function compare(password, hashValue, callback, progressCallback) {
+  function _async(callback2) {
+    if (typeof password !== "string" || typeof hashValue !== "string") {
+      nextTick(
+        callback2.bind(
+          this,
+          Error(
+            "Illegal arguments: " + typeof password + ", " + typeof hashValue
+          )
+        )
+      );
+      return;
+    }
+    if (hashValue.length !== 60) {
+      nextTick(callback2.bind(this, null, false));
+      return;
+    }
+    hash(
+      password,
+      hashValue.substring(0, 29),
+      function(err, comp) {
+        if (err) callback2(err);
+        else callback2(null, safeStringCompare(comp, hashValue));
+      },
+      progressCallback
+    );
+  }
+  if (callback) {
+    if (typeof callback !== "function")
+      throw Error("Illegal callback: " + typeof callback);
+    _async(callback);
+  } else
+    return new Promise(function(resolve, reject) {
+      _async(function(err, res) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(res);
+      });
+    });
+}
+function getRounds(hash2) {
+  if (typeof hash2 !== "string")
+    throw Error("Illegal arguments: " + typeof hash2);
+  return parseInt(hash2.split("$")[2], 10);
+}
+function getSalt(hash2) {
+  if (typeof hash2 !== "string")
+    throw Error("Illegal arguments: " + typeof hash2);
+  if (hash2.length !== 60)
+    throw Error("Illegal hash length: " + hash2.length + " != 60");
+  return hash2.substring(0, 29);
+}
+function truncates(password) {
+  if (typeof password !== "string")
+    throw Error("Illegal arguments: " + typeof password);
+  return utf8Length(password) > 72;
+}
+var nextTick = typeof setImmediate === "function" ? setImmediate : typeof scheduler === "object" && typeof scheduler.postTask === "function" ? scheduler.postTask.bind(scheduler) : setTimeout;
+function utf8Length(string) {
+  var len = 0, c = 0;
+  for (var i = 0; i < string.length; ++i) {
+    c = string.charCodeAt(i);
+    if (c < 128) len += 1;
+    else if (c < 2048) len += 2;
+    else if ((c & 64512) === 55296 && (string.charCodeAt(i + 1) & 64512) === 56320) {
+      ++i;
+      len += 4;
+    } else len += 3;
+  }
+  return len;
+}
+function utf8Array(string) {
+  var offset = 0, c1, c2;
+  var buffer2 = new Array(utf8Length(string));
+  for (var i = 0, k = string.length; i < k; ++i) {
+    c1 = string.charCodeAt(i);
+    if (c1 < 128) {
+      buffer2[offset++] = c1;
+    } else if (c1 < 2048) {
+      buffer2[offset++] = c1 >> 6 | 192;
+      buffer2[offset++] = c1 & 63 | 128;
+    } else if ((c1 & 64512) === 55296 && ((c2 = string.charCodeAt(i + 1)) & 64512) === 56320) {
+      c1 = 65536 + ((c1 & 1023) << 10) + (c2 & 1023);
+      ++i;
+      buffer2[offset++] = c1 >> 18 | 240;
+      buffer2[offset++] = c1 >> 12 & 63 | 128;
+      buffer2[offset++] = c1 >> 6 & 63 | 128;
+      buffer2[offset++] = c1 & 63 | 128;
+    } else {
+      buffer2[offset++] = c1 >> 12 | 224;
+      buffer2[offset++] = c1 >> 6 & 63 | 128;
+      buffer2[offset++] = c1 & 63 | 128;
+    }
+  }
+  return buffer2;
+}
+var BASE64_CODE = "./ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".split("");
+var BASE64_INDEX = [
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  0,
+  1,
+  54,
+  55,
+  56,
+  57,
+  58,
+  59,
+  60,
+  61,
+  62,
+  63,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20,
+  21,
+  22,
+  23,
+  24,
+  25,
+  26,
+  27,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  28,
+  29,
+  30,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  37,
+  38,
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46,
+  47,
+  48,
+  49,
+  50,
+  51,
+  52,
+  53,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1
+];
+function base64_encode(b2, len) {
+  var off = 0, rs = [], c1, c2;
+  if (len <= 0 || len > b2.length) throw Error("Illegal len: " + len);
+  while (off < len) {
+    c1 = b2[off++] & 255;
+    rs.push(BASE64_CODE[c1 >> 2 & 63]);
+    c1 = (c1 & 3) << 4;
+    if (off >= len) {
+      rs.push(BASE64_CODE[c1 & 63]);
+      break;
+    }
+    c2 = b2[off++] & 255;
+    c1 |= c2 >> 4 & 15;
+    rs.push(BASE64_CODE[c1 & 63]);
+    c1 = (c2 & 15) << 2;
+    if (off >= len) {
+      rs.push(BASE64_CODE[c1 & 63]);
+      break;
+    }
+    c2 = b2[off++] & 255;
+    c1 |= c2 >> 6 & 3;
+    rs.push(BASE64_CODE[c1 & 63]);
+    rs.push(BASE64_CODE[c2 & 63]);
+  }
+  return rs.join("");
+}
+function base64_decode(s, len) {
+  var off = 0, slen = s.length, olen = 0, rs = [], c1, c2, c3, c4, o, code;
+  if (len <= 0) throw Error("Illegal len: " + len);
+  while (off < slen - 1 && olen < len) {
+    code = s.charCodeAt(off++);
+    c1 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    code = s.charCodeAt(off++);
+    c2 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    if (c1 == -1 || c2 == -1) break;
+    o = c1 << 2 >>> 0;
+    o |= (c2 & 48) >> 4;
+    rs.push(String.fromCharCode(o));
+    if (++olen >= len || off >= slen) break;
+    code = s.charCodeAt(off++);
+    c3 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    if (c3 == -1) break;
+    o = (c2 & 15) << 4 >>> 0;
+    o |= (c3 & 60) >> 2;
+    rs.push(String.fromCharCode(o));
+    if (++olen >= len || off >= slen) break;
+    code = s.charCodeAt(off++);
+    c4 = code < BASE64_INDEX.length ? BASE64_INDEX[code] : -1;
+    o = (c3 & 3) << 6 >>> 0;
+    o |= c4;
+    rs.push(String.fromCharCode(o));
+    ++olen;
+  }
+  var res = [];
+  for (off = 0; off < olen; off++) res.push(rs[off].charCodeAt(0));
+  return res;
+}
+var BCRYPT_SALT_LEN = 16;
+var GENSALT_DEFAULT_LOG2_ROUNDS = 10;
+var BLOWFISH_NUM_ROUNDS = 16;
+var MAX_EXECUTION_TIME = 100;
+var P_ORIG = [
+  608135816,
+  2242054355,
+  320440878,
+  57701188,
+  2752067618,
+  698298832,
+  137296536,
+  3964562569,
+  1160258022,
+  953160567,
+  3193202383,
+  887688300,
+  3232508343,
+  3380367581,
+  1065670069,
+  3041331479,
+  2450970073,
+  2306472731
+];
+var S_ORIG = [
+  3509652390,
+  2564797868,
+  805139163,
+  3491422135,
+  3101798381,
+  1780907670,
+  3128725573,
+  4046225305,
+  614570311,
+  3012652279,
+  134345442,
+  2240740374,
+  1667834072,
+  1901547113,
+  2757295779,
+  4103290238,
+  227898511,
+  1921955416,
+  1904987480,
+  2182433518,
+  2069144605,
+  3260701109,
+  2620446009,
+  720527379,
+  3318853667,
+  677414384,
+  3393288472,
+  3101374703,
+  2390351024,
+  1614419982,
+  1822297739,
+  2954791486,
+  3608508353,
+  3174124327,
+  2024746970,
+  1432378464,
+  3864339955,
+  2857741204,
+  1464375394,
+  1676153920,
+  1439316330,
+  715854006,
+  3033291828,
+  289532110,
+  2706671279,
+  2087905683,
+  3018724369,
+  1668267050,
+  732546397,
+  1947742710,
+  3462151702,
+  2609353502,
+  2950085171,
+  1814351708,
+  2050118529,
+  680887927,
+  999245976,
+  1800124847,
+  3300911131,
+  1713906067,
+  1641548236,
+  4213287313,
+  1216130144,
+  1575780402,
+  4018429277,
+  3917837745,
+  3693486850,
+  3949271944,
+  596196993,
+  3549867205,
+  258830323,
+  2213823033,
+  772490370,
+  2760122372,
+  1774776394,
+  2652871518,
+  566650946,
+  4142492826,
+  1728879713,
+  2882767088,
+  1783734482,
+  3629395816,
+  2517608232,
+  2874225571,
+  1861159788,
+  326777828,
+  3124490320,
+  2130389656,
+  2716951837,
+  967770486,
+  1724537150,
+  2185432712,
+  2364442137,
+  1164943284,
+  2105845187,
+  998989502,
+  3765401048,
+  2244026483,
+  1075463327,
+  1455516326,
+  1322494562,
+  910128902,
+  469688178,
+  1117454909,
+  936433444,
+  3490320968,
+  3675253459,
+  1240580251,
+  122909385,
+  2157517691,
+  634681816,
+  4142456567,
+  3825094682,
+  3061402683,
+  2540495037,
+  79693498,
+  3249098678,
+  1084186820,
+  1583128258,
+  426386531,
+  1761308591,
+  1047286709,
+  322548459,
+  995290223,
+  1845252383,
+  2603652396,
+  3431023940,
+  2942221577,
+  3202600964,
+  3727903485,
+  1712269319,
+  422464435,
+  3234572375,
+  1170764815,
+  3523960633,
+  3117677531,
+  1434042557,
+  442511882,
+  3600875718,
+  1076654713,
+  1738483198,
+  4213154764,
+  2393238008,
+  3677496056,
+  1014306527,
+  4251020053,
+  793779912,
+  2902807211,
+  842905082,
+  4246964064,
+  1395751752,
+  1040244610,
+  2656851899,
+  3396308128,
+  445077038,
+  3742853595,
+  3577915638,
+  679411651,
+  2892444358,
+  2354009459,
+  1767581616,
+  3150600392,
+  3791627101,
+  3102740896,
+  284835224,
+  4246832056,
+  1258075500,
+  768725851,
+  2589189241,
+  3069724005,
+  3532540348,
+  1274779536,
+  3789419226,
+  2764799539,
+  1660621633,
+  3471099624,
+  4011903706,
+  913787905,
+  3497959166,
+  737222580,
+  2514213453,
+  2928710040,
+  3937242737,
+  1804850592,
+  3499020752,
+  2949064160,
+  2386320175,
+  2390070455,
+  2415321851,
+  4061277028,
+  2290661394,
+  2416832540,
+  1336762016,
+  1754252060,
+  3520065937,
+  3014181293,
+  791618072,
+  3188594551,
+  3933548030,
+  2332172193,
+  3852520463,
+  3043980520,
+  413987798,
+  3465142937,
+  3030929376,
+  4245938359,
+  2093235073,
+  3534596313,
+  375366246,
+  2157278981,
+  2479649556,
+  555357303,
+  3870105701,
+  2008414854,
+  3344188149,
+  4221384143,
+  3956125452,
+  2067696032,
+  3594591187,
+  2921233993,
+  2428461,
+  544322398,
+  577241275,
+  1471733935,
+  610547355,
+  4027169054,
+  1432588573,
+  1507829418,
+  2025931657,
+  3646575487,
+  545086370,
+  48609733,
+  2200306550,
+  1653985193,
+  298326376,
+  1316178497,
+  3007786442,
+  2064951626,
+  458293330,
+  2589141269,
+  3591329599,
+  3164325604,
+  727753846,
+  2179363840,
+  146436021,
+  1461446943,
+  4069977195,
+  705550613,
+  3059967265,
+  3887724982,
+  4281599278,
+  3313849956,
+  1404054877,
+  2845806497,
+  146425753,
+  1854211946,
+  1266315497,
+  3048417604,
+  3681880366,
+  3289982499,
+  290971e4,
+  1235738493,
+  2632868024,
+  2414719590,
+  3970600049,
+  1771706367,
+  1449415276,
+  3266420449,
+  422970021,
+  1963543593,
+  2690192192,
+  3826793022,
+  1062508698,
+  1531092325,
+  1804592342,
+  2583117782,
+  2714934279,
+  4024971509,
+  1294809318,
+  4028980673,
+  1289560198,
+  2221992742,
+  1669523910,
+  35572830,
+  157838143,
+  1052438473,
+  1016535060,
+  1802137761,
+  1753167236,
+  1386275462,
+  3080475397,
+  2857371447,
+  1040679964,
+  2145300060,
+  2390574316,
+  1461121720,
+  2956646967,
+  4031777805,
+  4028374788,
+  33600511,
+  2920084762,
+  1018524850,
+  629373528,
+  3691585981,
+  3515945977,
+  2091462646,
+  2486323059,
+  586499841,
+  988145025,
+  935516892,
+  3367335476,
+  2599673255,
+  2839830854,
+  265290510,
+  3972581182,
+  2759138881,
+  3795373465,
+  1005194799,
+  847297441,
+  406762289,
+  1314163512,
+  1332590856,
+  1866599683,
+  4127851711,
+  750260880,
+  613907577,
+  1450815602,
+  3165620655,
+  3734664991,
+  3650291728,
+  3012275730,
+  3704569646,
+  1427272223,
+  778793252,
+  1343938022,
+  2676280711,
+  2052605720,
+  1946737175,
+  3164576444,
+  3914038668,
+  3967478842,
+  3682934266,
+  1661551462,
+  3294938066,
+  4011595847,
+  840292616,
+  3712170807,
+  616741398,
+  312560963,
+  711312465,
+  1351876610,
+  322626781,
+  1910503582,
+  271666773,
+  2175563734,
+  1594956187,
+  70604529,
+  3617834859,
+  1007753275,
+  1495573769,
+  4069517037,
+  2549218298,
+  2663038764,
+  504708206,
+  2263041392,
+  3941167025,
+  2249088522,
+  1514023603,
+  1998579484,
+  1312622330,
+  694541497,
+  2582060303,
+  2151582166,
+  1382467621,
+  776784248,
+  2618340202,
+  3323268794,
+  2497899128,
+  2784771155,
+  503983604,
+  4076293799,
+  907881277,
+  423175695,
+  432175456,
+  1378068232,
+  4145222326,
+  3954048622,
+  3938656102,
+  3820766613,
+  2793130115,
+  2977904593,
+  26017576,
+  3274890735,
+  3194772133,
+  1700274565,
+  1756076034,
+  4006520079,
+  3677328699,
+  720338349,
+  1533947780,
+  354530856,
+  688349552,
+  3973924725,
+  1637815568,
+  332179504,
+  3949051286,
+  53804574,
+  2852348879,
+  3044236432,
+  1282449977,
+  3583942155,
+  3416972820,
+  4006381244,
+  1617046695,
+  2628476075,
+  3002303598,
+  1686838959,
+  431878346,
+  2686675385,
+  1700445008,
+  1080580658,
+  1009431731,
+  832498133,
+  3223435511,
+  2605976345,
+  2271191193,
+  2516031870,
+  1648197032,
+  4164389018,
+  2548247927,
+  300782431,
+  375919233,
+  238389289,
+  3353747414,
+  2531188641,
+  2019080857,
+  1475708069,
+  455242339,
+  2609103871,
+  448939670,
+  3451063019,
+  1395535956,
+  2413381860,
+  1841049896,
+  1491858159,
+  885456874,
+  4264095073,
+  4001119347,
+  1565136089,
+  3898914787,
+  1108368660,
+  540939232,
+  1173283510,
+  2745871338,
+  3681308437,
+  4207628240,
+  3343053890,
+  4016749493,
+  1699691293,
+  1103962373,
+  3625875870,
+  2256883143,
+  3830138730,
+  1031889488,
+  3479347698,
+  1535977030,
+  4236805024,
+  3251091107,
+  2132092099,
+  1774941330,
+  1199868427,
+  1452454533,
+  157007616,
+  2904115357,
+  342012276,
+  595725824,
+  1480756522,
+  206960106,
+  497939518,
+  591360097,
+  863170706,
+  2375253569,
+  3596610801,
+  1814182875,
+  2094937945,
+  3421402208,
+  1082520231,
+  3463918190,
+  2785509508,
+  435703966,
+  3908032597,
+  1641649973,
+  2842273706,
+  3305899714,
+  1510255612,
+  2148256476,
+  2655287854,
+  3276092548,
+  4258621189,
+  236887753,
+  3681803219,
+  274041037,
+  1734335097,
+  3815195456,
+  3317970021,
+  1899903192,
+  1026095262,
+  4050517792,
+  356393447,
+  2410691914,
+  3873677099,
+  3682840055,
+  3913112168,
+  2491498743,
+  4132185628,
+  2489919796,
+  1091903735,
+  1979897079,
+  3170134830,
+  3567386728,
+  3557303409,
+  857797738,
+  1136121015,
+  1342202287,
+  507115054,
+  2535736646,
+  337727348,
+  3213592640,
+  1301675037,
+  2528481711,
+  1895095763,
+  1721773893,
+  3216771564,
+  62756741,
+  2142006736,
+  835421444,
+  2531993523,
+  1442658625,
+  3659876326,
+  2882144922,
+  676362277,
+  1392781812,
+  170690266,
+  3921047035,
+  1759253602,
+  3611846912,
+  1745797284,
+  664899054,
+  1329594018,
+  3901205900,
+  3045908486,
+  2062866102,
+  2865634940,
+  3543621612,
+  3464012697,
+  1080764994,
+  553557557,
+  3656615353,
+  3996768171,
+  991055499,
+  499776247,
+  1265440854,
+  648242737,
+  3940784050,
+  980351604,
+  3713745714,
+  1749149687,
+  3396870395,
+  4211799374,
+  3640570775,
+  1161844396,
+  3125318951,
+  1431517754,
+  545492359,
+  4268468663,
+  3499529547,
+  1437099964,
+  2702547544,
+  3433638243,
+  2581715763,
+  2787789398,
+  1060185593,
+  1593081372,
+  2418618748,
+  4260947970,
+  69676912,
+  2159744348,
+  86519011,
+  2512459080,
+  3838209314,
+  1220612927,
+  3339683548,
+  133810670,
+  1090789135,
+  1078426020,
+  1569222167,
+  845107691,
+  3583754449,
+  4072456591,
+  1091646820,
+  628848692,
+  1613405280,
+  3757631651,
+  526609435,
+  236106946,
+  48312990,
+  2942717905,
+  3402727701,
+  1797494240,
+  859738849,
+  992217954,
+  4005476642,
+  2243076622,
+  3870952857,
+  3732016268,
+  765654824,
+  3490871365,
+  2511836413,
+  1685915746,
+  3888969200,
+  1414112111,
+  2273134842,
+  3281911079,
+  4080962846,
+  172450625,
+  2569994100,
+  980381355,
+  4109958455,
+  2819808352,
+  2716589560,
+  2568741196,
+  3681446669,
+  3329971472,
+  1835478071,
+  660984891,
+  3704678404,
+  4045999559,
+  3422617507,
+  3040415634,
+  1762651403,
+  1719377915,
+  3470491036,
+  2693910283,
+  3642056355,
+  3138596744,
+  1364962596,
+  2073328063,
+  1983633131,
+  926494387,
+  3423689081,
+  2150032023,
+  4096667949,
+  1749200295,
+  3328846651,
+  309677260,
+  2016342300,
+  1779581495,
+  3079819751,
+  111262694,
+  1274766160,
+  443224088,
+  298511866,
+  1025883608,
+  3806446537,
+  1145181785,
+  168956806,
+  3641502830,
+  3584813610,
+  1689216846,
+  3666258015,
+  3200248200,
+  1692713982,
+  2646376535,
+  4042768518,
+  1618508792,
+  1610833997,
+  3523052358,
+  4130873264,
+  2001055236,
+  3610705100,
+  2202168115,
+  4028541809,
+  2961195399,
+  1006657119,
+  2006996926,
+  3186142756,
+  1430667929,
+  3210227297,
+  1314452623,
+  4074634658,
+  4101304120,
+  2273951170,
+  1399257539,
+  3367210612,
+  3027628629,
+  1190975929,
+  2062231137,
+  2333990788,
+  2221543033,
+  2438960610,
+  1181637006,
+  548689776,
+  2362791313,
+  3372408396,
+  3104550113,
+  3145860560,
+  296247880,
+  1970579870,
+  3078560182,
+  3769228297,
+  1714227617,
+  3291629107,
+  3898220290,
+  166772364,
+  1251581989,
+  493813264,
+  448347421,
+  195405023,
+  2709975567,
+  677966185,
+  3703036547,
+  1463355134,
+  2715995803,
+  1338867538,
+  1343315457,
+  2802222074,
+  2684532164,
+  233230375,
+  2599980071,
+  2000651841,
+  3277868038,
+  1638401717,
+  4028070440,
+  3237316320,
+  6314154,
+  819756386,
+  300326615,
+  590932579,
+  1405279636,
+  3267499572,
+  3150704214,
+  2428286686,
+  3959192993,
+  3461946742,
+  1862657033,
+  1266418056,
+  963775037,
+  2089974820,
+  2263052895,
+  1917689273,
+  448879540,
+  3550394620,
+  3981727096,
+  150775221,
+  3627908307,
+  1303187396,
+  508620638,
+  2975983352,
+  2726630617,
+  1817252668,
+  1876281319,
+  1457606340,
+  908771278,
+  3720792119,
+  3617206836,
+  2455994898,
+  1729034894,
+  1080033504,
+  976866871,
+  3556439503,
+  2881648439,
+  1522871579,
+  1555064734,
+  1336096578,
+  3548522304,
+  2579274686,
+  3574697629,
+  3205460757,
+  3593280638,
+  3338716283,
+  3079412587,
+  564236357,
+  2993598910,
+  1781952180,
+  1464380207,
+  3163844217,
+  3332601554,
+  1699332808,
+  1393555694,
+  1183702653,
+  3581086237,
+  1288719814,
+  691649499,
+  2847557200,
+  2895455976,
+  3193889540,
+  2717570544,
+  1781354906,
+  1676643554,
+  2592534050,
+  3230253752,
+  1126444790,
+  2770207658,
+  2633158820,
+  2210423226,
+  2615765581,
+  2414155088,
+  3127139286,
+  673620729,
+  2805611233,
+  1269405062,
+  4015350505,
+  3341807571,
+  4149409754,
+  1057255273,
+  2012875353,
+  2162469141,
+  2276492801,
+  2601117357,
+  993977747,
+  3918593370,
+  2654263191,
+  753973209,
+  36408145,
+  2530585658,
+  25011837,
+  3520020182,
+  2088578344,
+  530523599,
+  2918365339,
+  1524020338,
+  1518925132,
+  3760827505,
+  3759777254,
+  1202760957,
+  3985898139,
+  3906192525,
+  674977740,
+  4174734889,
+  2031300136,
+  2019492241,
+  3983892565,
+  4153806404,
+  3822280332,
+  352677332,
+  2297720250,
+  60907813,
+  90501309,
+  3286998549,
+  1016092578,
+  2535922412,
+  2839152426,
+  457141659,
+  509813237,
+  4120667899,
+  652014361,
+  1966332200,
+  2975202805,
+  55981186,
+  2327461051,
+  676427537,
+  3255491064,
+  2882294119,
+  3433927263,
+  1307055953,
+  942726286,
+  933058658,
+  2468411793,
+  3933900994,
+  4215176142,
+  1361170020,
+  2001714738,
+  2830558078,
+  3274259782,
+  1222529897,
+  1679025792,
+  2729314320,
+  3714953764,
+  1770335741,
+  151462246,
+  3013232138,
+  1682292957,
+  1483529935,
+  471910574,
+  1539241949,
+  458788160,
+  3436315007,
+  1807016891,
+  3718408830,
+  978976581,
+  1043663428,
+  3165965781,
+  1927990952,
+  4200891579,
+  2372276910,
+  3208408903,
+  3533431907,
+  1412390302,
+  2931980059,
+  4132332400,
+  1947078029,
+  3881505623,
+  4168226417,
+  2941484381,
+  1077988104,
+  1320477388,
+  886195818,
+  18198404,
+  3786409e3,
+  2509781533,
+  112762804,
+  3463356488,
+  1866414978,
+  891333506,
+  18488651,
+  661792760,
+  1628790961,
+  3885187036,
+  3141171499,
+  876946877,
+  2693282273,
+  1372485963,
+  791857591,
+  2686433993,
+  3759982718,
+  3167212022,
+  3472953795,
+  2716379847,
+  445679433,
+  3561995674,
+  3504004811,
+  3574258232,
+  54117162,
+  3331405415,
+  2381918588,
+  3769707343,
+  4154350007,
+  1140177722,
+  4074052095,
+  668550556,
+  3214352940,
+  367459370,
+  261225585,
+  2610173221,
+  4209349473,
+  3468074219,
+  3265815641,
+  314222801,
+  3066103646,
+  3808782860,
+  282218597,
+  3406013506,
+  3773591054,
+  379116347,
+  1285071038,
+  846784868,
+  2669647154,
+  3771962079,
+  3550491691,
+  2305946142,
+  453669953,
+  1268987020,
+  3317592352,
+  3279303384,
+  3744833421,
+  2610507566,
+  3859509063,
+  266596637,
+  3847019092,
+  517658769,
+  3462560207,
+  3443424879,
+  370717030,
+  4247526661,
+  2224018117,
+  4143653529,
+  4112773975,
+  2788324899,
+  2477274417,
+  1456262402,
+  2901442914,
+  1517677493,
+  1846949527,
+  2295493580,
+  3734397586,
+  2176403920,
+  1280348187,
+  1908823572,
+  3871786941,
+  846861322,
+  1172426758,
+  3287448474,
+  3383383037,
+  1655181056,
+  3139813346,
+  901632758,
+  1897031941,
+  2986607138,
+  3066810236,
+  3447102507,
+  1393639104,
+  373351379,
+  950779232,
+  625454576,
+  3124240540,
+  4148612726,
+  2007998917,
+  544563296,
+  2244738638,
+  2330496472,
+  2058025392,
+  1291430526,
+  424198748,
+  50039436,
+  29584100,
+  3605783033,
+  2429876329,
+  2791104160,
+  1057563949,
+  3255363231,
+  3075367218,
+  3463963227,
+  1469046755,
+  985887462
+];
+var C_ORIG = [
+  1332899944,
+  1700884034,
+  1701343084,
+  1684370003,
+  1668446532,
+  1869963892
+];
+function _encipher(lr, off, P, S) {
+  var n, l = lr[off], r = lr[off + 1];
+  l ^= P[0];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[1];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[2];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[3];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[4];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[5];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[6];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[7];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[8];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[9];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[10];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[11];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[12];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[13];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[14];
+  n = S[l >>> 24];
+  n += S[256 | l >> 16 & 255];
+  n ^= S[512 | l >> 8 & 255];
+  n += S[768 | l & 255];
+  r ^= n ^ P[15];
+  n = S[r >>> 24];
+  n += S[256 | r >> 16 & 255];
+  n ^= S[512 | r >> 8 & 255];
+  n += S[768 | r & 255];
+  l ^= n ^ P[16];
+  lr[off] = r ^ P[BLOWFISH_NUM_ROUNDS + 1];
+  lr[off + 1] = l;
+  return lr;
+}
+function _streamtoword(data, offp) {
+  for (var i = 0, word = 0; i < 4; ++i)
+    word = word << 8 | data[offp] & 255, offp = (offp + 1) % data.length;
+  return { key: word, offp };
+}
+function _key(key, P, S) {
+  var offset = 0, lr = [0, 0], plen = P.length, slen = S.length, sw;
+  for (var i = 0; i < plen; i++)
+    sw = _streamtoword(key, offset), offset = sw.offp, P[i] = P[i] ^ sw.key;
+  for (i = 0; i < plen; i += 2)
+    lr = _encipher(lr, 0, P, S), P[i] = lr[0], P[i + 1] = lr[1];
+  for (i = 0; i < slen; i += 2)
+    lr = _encipher(lr, 0, P, S), S[i] = lr[0], S[i + 1] = lr[1];
+}
+function _ekskey(data, key, P, S) {
+  var offp = 0, lr = [0, 0], plen = P.length, slen = S.length, sw;
+  for (var i = 0; i < plen; i++)
+    sw = _streamtoword(key, offp), offp = sw.offp, P[i] = P[i] ^ sw.key;
+  offp = 0;
+  for (i = 0; i < plen; i += 2)
+    sw = _streamtoword(data, offp), offp = sw.offp, lr[0] ^= sw.key, sw = _streamtoword(data, offp), offp = sw.offp, lr[1] ^= sw.key, lr = _encipher(lr, 0, P, S), P[i] = lr[0], P[i + 1] = lr[1];
+  for (i = 0; i < slen; i += 2)
+    sw = _streamtoword(data, offp), offp = sw.offp, lr[0] ^= sw.key, sw = _streamtoword(data, offp), offp = sw.offp, lr[1] ^= sw.key, lr = _encipher(lr, 0, P, S), S[i] = lr[0], S[i + 1] = lr[1];
+}
+function _crypt(b2, salt, rounds, callback, progressCallback) {
+  var cdata = C_ORIG.slice(), clen = cdata.length, err;
+  if (rounds < 4 || rounds > 31) {
+    err = Error("Illegal number of rounds (4-31): " + rounds);
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  if (salt.length !== BCRYPT_SALT_LEN) {
+    err = Error(
+      "Illegal salt length: " + salt.length + " != " + BCRYPT_SALT_LEN
+    );
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  rounds = 1 << rounds >>> 0;
+  var P, S, i = 0, j;
+  if (typeof Int32Array === "function") {
+    P = new Int32Array(P_ORIG);
+    S = new Int32Array(S_ORIG);
+  } else {
+    P = P_ORIG.slice();
+    S = S_ORIG.slice();
+  }
+  _ekskey(salt, b2, P, S);
+  function next() {
+    if (progressCallback) progressCallback(i / rounds);
+    if (i < rounds) {
+      var start = Date.now();
+      for (; i < rounds; ) {
+        i = i + 1;
+        _key(b2, P, S);
+        _key(salt, P, S);
+        if (Date.now() - start > MAX_EXECUTION_TIME) break;
+      }
+    } else {
+      for (i = 0; i < 64; i++)
+        for (j = 0; j < clen >> 1; j++) _encipher(cdata, j << 1, P, S);
+      var ret = [];
+      for (i = 0; i < clen; i++)
+        ret.push((cdata[i] >> 24 & 255) >>> 0), ret.push((cdata[i] >> 16 & 255) >>> 0), ret.push((cdata[i] >> 8 & 255) >>> 0), ret.push((cdata[i] & 255) >>> 0);
+      if (callback) {
+        callback(null, ret);
+        return;
+      } else return ret;
+    }
+    if (callback) nextTick(next);
+  }
+  if (typeof callback !== "undefined") {
+    next();
+  } else {
+    var res;
+    while (true) if (typeof (res = next()) !== "undefined") return res || [];
+  }
+}
+function _hash(password, salt, callback, progressCallback) {
+  var err;
+  if (typeof password !== "string" || typeof salt !== "string") {
+    err = Error("Invalid string / salt: Not a string");
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  var minor, offset;
+  if (salt.charAt(0) !== "$" || salt.charAt(1) !== "2") {
+    err = Error("Invalid salt version: " + salt.substring(0, 2));
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  if (salt.charAt(2) === "$") minor = String.fromCharCode(0), offset = 3;
+  else {
+    minor = salt.charAt(2);
+    if (minor !== "a" && minor !== "b" && minor !== "y" || salt.charAt(3) !== "$") {
+      err = Error("Invalid salt revision: " + salt.substring(2, 4));
+      if (callback) {
+        nextTick(callback.bind(this, err));
+        return;
+      } else throw err;
+    }
+    offset = 4;
+  }
+  if (salt.charAt(offset + 2) > "$") {
+    err = Error("Missing salt rounds");
+    if (callback) {
+      nextTick(callback.bind(this, err));
+      return;
+    } else throw err;
+  }
+  var r1 = parseInt(salt.substring(offset, offset + 1), 10) * 10, r2 = parseInt(salt.substring(offset + 1, offset + 2), 10), rounds = r1 + r2, real_salt = salt.substring(offset + 3, offset + 25);
+  password += minor >= "a" ? "\0" : "";
+  var passwordb = utf8Array(password), saltb = base64_decode(real_salt, BCRYPT_SALT_LEN);
+  function finish(bytes) {
+    var res = [];
+    res.push("$2");
+    if (minor >= "a") res.push(minor);
+    res.push("$");
+    if (rounds < 10) res.push("0");
+    res.push(rounds.toString());
+    res.push("$");
+    res.push(base64_encode(saltb, saltb.length));
+    res.push(base64_encode(bytes, C_ORIG.length * 4 - 1));
+    return res.join("");
+  }
+  if (typeof callback == "undefined")
+    return finish(_crypt(passwordb, saltb, rounds));
+  else {
+    _crypt(
+      passwordb,
+      saltb,
+      rounds,
+      function(err2, bytes) {
+        if (err2) callback(err2, null);
+        else callback(null, finish(bytes));
+      },
+      progressCallback
+    );
+  }
+}
+function encodeBase64(bytes, length) {
+  return base64_encode(bytes, length);
+}
+function decodeBase64(string, length) {
+  return base64_decode(string, length);
+}
+var bcryptjs_default = {
+  setRandomFallback,
+  genSaltSync,
+  genSalt,
+  hashSync,
+  hash,
+  compareSync,
+  compare,
+  getRounds,
+  getSalt,
+  truncates,
+  encodeBase64,
+  decodeBase64
+};
+
+// services/auth/src/index.ts
+var import_fastify = __toESM(require_fastify(), 1);
 
 // node_modules/zod/v3/external.js
 var external_exports = {};
@@ -61013,12 +62279,12 @@ var domainEventSchema = external_exports.object({
 });
 
 // packages/config/src/crypto.ts
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes as randomBytes2 } from "node:crypto";
 function hashToken(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function generateToken(size2 = 32) {
-  return randomBytes(size2).toString("hex");
+  return randomBytes2(size2).toString("hex");
 }
 
 // node_modules/postgres/src/index.js
@@ -61501,7 +62767,7 @@ kebab.column.to = fromKebab;
 // node_modules/postgres/src/connection.js
 import net from "net";
 import tls from "tls";
-import crypto from "crypto";
+import crypto2 from "crypto";
 import Stream from "stream";
 import { performance } from "perf_hooks";
 
@@ -62178,14 +63444,14 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
     );
   }
   async function SASL() {
-    nonce = (await crypto.randomBytes(18)).toString("base64");
+    nonce = (await crypto2.randomBytes(18)).toString("base64");
     bytes_default().p().str("SCRAM-SHA-256" + bytes_default.N);
     const i = bytes_default.i;
     write(bytes_default.inc(4).str("n,,n=*,r=" + nonce).i32(bytes_default.i - i - 4, i).end());
   }
   async function SASLContinue(x) {
     const res = x.toString("utf8", 9).split(",").reduce((acc, x2) => (acc[x2[0]] = x2.slice(2), acc), {});
-    const saltedPassword = await crypto.pbkdf2Sync(
+    const saltedPassword = await crypto2.pbkdf2Sync(
       await Pass(),
       Buffer.from(res.s, "base64"),
       parseInt(res.i),
@@ -62427,13 +63693,13 @@ function parseError(x) {
   return error;
 }
 function md5(x) {
-  return crypto.createHash("md5").update(x).digest("hex");
+  return crypto2.createHash("md5").update(x).digest("hex");
 }
 function hmac(key, x) {
-  return crypto.createHmac("sha256", key).update(x).digest();
+  return crypto2.createHmac("sha256", key).update(x).digest();
 }
 function sha256(x) {
-  return crypto.createHash("sha256").update(x).digest();
+  return crypto2.createHash("sha256").update(x).digest();
 }
 function xor(a, b2) {
   const length = Math.max(a.length, b2.length);
@@ -63246,7 +64512,7 @@ function ensureInternal(request) {
 app.get("/health", async () => ({ ok: true, service: "auth" }));
 app.post("/signup", async (request, reply) => {
   const input = signUpInputSchema.parse(request.body);
-  const passwordHash = await import_argon2.default.hash(input.password);
+  const passwordHash = await bcryptjs_default.hash(input.password, 12);
   if (input.inviteToken) {
     const inviteRows = await sql`
       select id, user_id, email, role
@@ -63350,7 +64616,7 @@ app.post("/login", async (request, reply) => {
   if (!user || !user.password_hash) {
     return reply.code(401).send({ message: "Invalid email or password." });
   }
-  const validPassword = await import_argon2.default.verify(user.password_hash, input.password);
+  const validPassword = await bcryptjs_default.compare(input.password, user.password_hash);
   if (!validPassword) {
     return reply.code(401).send({ message: "Invalid email or password." });
   }
@@ -63442,7 +64708,7 @@ app.post("/reset-password", async (request, reply) => {
   if (!token?.user_id) {
     return reply.code(400).send({ message: "Password reset link is invalid or expired." });
   }
-  const passwordHash = await import_argon2.default.hash(input.password);
+  const passwordHash = await bcryptjs_default.hash(input.password, 12);
   await sql.begin(async (transaction) => {
     await transaction`
       update auth.users
