@@ -1,4 +1,6 @@
-import "dotenv/config";
+if (typeof process !== "undefined" && !process.env.VERCEL) {
+  try { await import("dotenv/config"); } catch (e) {}
+}
 import { z } from "zod";
 
 const envSchema = z.object({
