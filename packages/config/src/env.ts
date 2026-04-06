@@ -21,7 +21,7 @@ const envSchema = z.object({
   NOTIFICATION_SERVICE_URL: z.string().url().default("http://127.0.0.1:4004"),
   SESSION_COOKIE_NAME: z.string().default("elkatech_session"),
   CSRF_COOKIE_NAME: z.string().default("elkatech_csrf"),
-  SESSION_TTL_HOURS: z.coerce.number().int().positive().default(168),
+  SESSION_TTL_HOURS: z.coerce.number().int().positive().default(720),
   SMTP_HOST: z.string().default("127.0.0.1"),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
   SMTP_FROM: z.string().email().default("no-reply@elkatech.local"),

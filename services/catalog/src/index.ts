@@ -7,6 +7,16 @@ const app = Fastify({ logger: true });
 const sql = getDb();
 const env = getEnv();
 
+// Reject any request that doesn't carry the shared internal service token.
+// This ensures only the gateway (which adds x-internal-token) can call catalog.
+app.addHook("onRequest", async (request, reply) => {
+  if (request.url === "/health") return; // health checks are public
+  const token = request.headers["x-internal-token"];
+  if (!token || token !== env.INTERNAL_SERVICE_TOKEN) {
+    reply.code(401).send({ message: "Unauthorized" });
+  }
+});
+
 app.get("/health", async () => ({ ok: true, service: "catalog" }));
 
 app.get("/categories", async () => {

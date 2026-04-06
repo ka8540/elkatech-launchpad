@@ -62555,7 +62555,7 @@ var envSchema = external_exports.object({
   NOTIFICATION_SERVICE_URL: external_exports.string().url().default("http://127.0.0.1:4004"),
   SESSION_COOKIE_NAME: external_exports.string().default("elkatech_session"),
   CSRF_COOKIE_NAME: external_exports.string().default("elkatech_csrf"),
-  SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(168),
+  SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
   SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
@@ -62756,6 +62756,13 @@ var domainEventSchema = external_exports.object({
 var app = (0, import_fastify.default)({ logger: true });
 var sql = getDb();
 var env = getEnv();
+app.addHook("onRequest", async (request, reply) => {
+  if (request.url === "/health") return;
+  const token = request.headers["x-internal-token"];
+  if (!token || token !== env.INTERNAL_SERVICE_TOKEN) {
+    reply.code(401).send({ message: "Unauthorized" });
+  }
+});
 app.get("/health", async () => ({ ok: true, service: "catalog" }));
 app.get("/categories", async () => {
   const redis = getRedis();
