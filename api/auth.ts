@@ -1,2 +1,2 @@
-import handler from "../services/auth/src/index.ts";
+import handler from "@elkatech/auth";
 export default handler;

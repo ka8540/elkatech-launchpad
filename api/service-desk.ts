@@ -1,2 +1,2 @@
-import handler from "../services/service-desk/src/index.ts";
+import handler from "@elkatech/service-desk";
 export default handler;

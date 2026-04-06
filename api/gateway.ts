@@ -1,2 +1,2 @@
-import handler from "../services/gateway/src/index.ts";
+import handler from "@elkatech/gateway";
 export default handler;
