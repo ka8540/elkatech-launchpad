@@ -1,2 +1,2 @@
-import handler from "../services/notification/src/index.ts";
+import handler from "@elkatech/notification";
 export default handler;

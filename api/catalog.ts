@@ -1,2 +1,2 @@
-import handler from "../services/catalog/src/index.ts";
+import handler from "@elkatech/catalog";
 export default handler;
