@@ -1,5 +1,5 @@
 import { motion, type Variants } from "framer-motion";
-import { ArrowRight, MessageCircle, Phone, Shield, Building2, CheckCircle } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const containerVariants: Variants = {
@@ -18,120 +18,107 @@ const itemVariants: Variants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] },
   },
 };
 
+const trustHighlights = [
+  {
+    icon: Shield,
+    label: "Trusted sourcing",
+  },
+  {
+    icon: CheckCircle,
+    label: "Practical machine guidance",
+  },
+  {
+    icon: CheckCircle,
+    label: "Dependable after-sales support",
+  },
+];
+
 const HeroSection = () => {
   return (
-    <section id="home" className="relative min-h-screen flex items-center pt-20 overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute inset-0 bg-steel-gradient" />
-      <div className="absolute top-1/4 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 left-0 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
-      
-      {/* Subtle grid pattern */}
-      <div className="absolute inset-0 bg-grid-pattern" />
+    <section
+      id="home"
+      className="relative flex min-h-screen items-center overflow-hidden bg-[#050b16] pt-20"
+    >
+      <div className="hero-industrial-background absolute inset-0" aria-hidden="true">
+        <div className="hero-industrial-glow hero-industrial-glow-primary" />
+        <div className="hero-industrial-glow hero-industrial-glow-secondary" />
+        <div className="hero-industrial-beam" />
+        <div className="hero-industrial-grid" />
+        <div className="hero-industrial-noise" />
+      </div>
 
-      <div className="container mx-auto px-4 md:px-6 relative z-10">
+      <div className="container relative z-10 mx-auto px-4 md:px-6">
         <motion.div
-          className="max-w-4xl mx-auto text-center"
+          className="mx-auto max-w-5xl text-center"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          {/* Badge */}
           <motion.div variants={itemVariants} className="mb-6">
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium text-muted-foreground shadow-soft">
-              <Building2 className="w-4 h-4 text-accent" />
-              Industrial Machinery Distributor
+            <span className="inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/10 px-4 py-2 text-sm font-medium text-accent shadow-soft">
+              <Building2 className="h-4 w-4" />
+              Industrial Printing & Signage Machinery
             </span>
           </motion.div>
 
-          {/* Main Tagline - Trust-focused */}
           <motion.h1
             variants={itemVariants}
-            className="font-display text-4xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6"
+            className="font-display text-4xl font-bold leading-tight text-white md:text-6xl lg:text-7xl"
           >
-            Built on Trust.{" "}
-            <span className="text-gradient-accent">Grown with You.</span>
+            Powering Printing Businesses with{" "}
+            <span className="text-gradient-accent">Reliable Industrial Machinery</span>
           </motion.h1>
 
-          {/* Emotional Supporting Line */}
           <motion.p
             variants={itemVariants}
-            className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-4 leading-relaxed font-light"
+            className="mx-auto mt-6 max-w-3xl text-base leading-relaxed text-white/70 md:text-lg"
           >
-            Your success is our commitment.
+            Elkatech supplies commercial printing, signage, and fabrication businesses with trusted
+            machinery, honest guidance, and dependable after-sales support across India.
           </motion.p>
 
-          {/* Business Description */}
-          <motion.p
-            variants={itemVariants}
-            className="text-base md:text-lg text-muted-foreground/80 max-w-3xl mx-auto mb-10 leading-relaxed"
-          >
-            Importer and distributor of industrial printing, signage, CNC, laser, and digital cutting machinery for commercial and industrial use across India.
-          </motion.p>
-
-          {/* CTAs */}
           <motion.div
             variants={itemVariants}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
+            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            {/* Call Button */}
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="group min-w-[140px]"
-            >
-              <a href="tel:+917203033486">
-                <Phone className="mr-2 w-4 h-4" />
-                Call Now
+            <Button asChild variant="cta" size="lg" className="group min-w-[180px] rounded-full">
+              <a href="#work">
+                Explore Solutions
+                <ArrowRight className="transition-transform group-hover:translate-x-1" />
               </a>
             </Button>
 
-            {/* WhatsApp Button */}
             <Button
               asChild
               variant="outline"
               size="lg"
-              className="group min-w-[160px]"
+              className="min-w-[150px] rounded-full border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
             >
-              <a
-                href="https://wa.me/917203033486"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <MessageCircle className="mr-2 w-4 h-4" />
-                WhatsApp Us
-              </a>
+              <a href="#contact">Contact Us</a>
             </Button>
           </motion.div>
 
-
-          {/* Trust Highlights */}
           <motion.div
             variants={itemVariants}
-            className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto pt-8 border-t border-border/50"
+            className="mx-auto mt-12 grid max-w-4xl gap-4 border-t border-white/10 pt-8 sm:grid-cols-3"
           >
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-card/50 border border-border/50">
-              <Shield className="w-4 h-4 text-accent flex-shrink-0" />
-              <span>Professional B2B Solutions</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-card/50 border border-border/50">
-              <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
-              <span>Transparent Business Practices</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-card/50 border border-border/50">
-              <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
-              <span>Long-term Customer Support</span>
-            </div>
+            {trustHighlights.map(({ icon: Icon, label }) => (
+              <div
+                key={label}
+                className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-white/70 backdrop-blur-sm"
+              >
+                <Icon className="h-4 w-4 shrink-0 text-accent" />
+                <span>{label}</span>
+              </div>
+            ))}
           </motion.div>
         </motion.div>
       </div>
 
-      {/* Scroll Indicator */}
       <motion.div
         className="absolute bottom-8 left-1/2 -translate-x-1/2"
         initial={{ opacity: 0, y: -10 }}
@@ -139,11 +126,11 @@ const HeroSection = () => {
         transition={{ delay: 1.2, duration: 0.4 }}
       >
         <motion.div
-          className="w-6 h-10 rounded-full border-2 border-muted-foreground/30 flex items-start justify-center p-2"
+          className="flex h-10 w-6 items-start justify-center rounded-full border-2 border-white/20 p-2"
           animate={{ y: [0, 4, 0] }}
           transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
         >
-          <div className="w-1 h-2 bg-accent rounded-full" />
+          <div className="h-2 w-1 rounded-full bg-accent" />
         </motion.div>
       </motion.div>
     </section>

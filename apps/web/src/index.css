@@ -197,4 +197,103 @@
     0% { left: -100%; }
     50%, 100% { left: 100%; }
   }
+
+  .hero-industrial-background {
+    background:
+      radial-gradient(circle at 18% 20%, hsl(210 100% 55% / 0.18), transparent 30%),
+      radial-gradient(circle at 84% 18%, hsl(205 100% 58% / 0.14), transparent 28%),
+      linear-gradient(135deg, hsl(220 66% 8%) 0%, hsl(216 62% 6%) 45%, hsl(215 66% 4%) 100%);
+  }
+
+  .hero-industrial-glow {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(80px);
+    pointer-events: none;
+  }
+
+  .hero-industrial-glow-primary {
+    top: 8%;
+    left: -8%;
+    width: min(38rem, 55vw);
+    height: min(38rem, 55vw);
+    background: hsl(210 100% 56% / 0.2);
+    animation: hero-glow-drift 18s ease-in-out infinite;
+  }
+
+  .hero-industrial-glow-secondary {
+    right: -10%;
+    bottom: -18%;
+    width: min(34rem, 48vw);
+    height: min(34rem, 48vw);
+    background: hsl(198 100% 56% / 0.16);
+    animation: hero-glow-drift 22s ease-in-out infinite reverse;
+  }
+
+  .hero-industrial-beam {
+    position: absolute;
+    inset: -20% -10%;
+    background: linear-gradient(
+      115deg,
+      transparent 24%,
+      hsl(210 100% 80% / 0.03) 38%,
+      hsl(210 100% 80% / 0.12) 49%,
+      transparent 62%
+    );
+    transform: translateX(-18%);
+    animation: hero-beam-sweep 18s ease-in-out infinite;
+  }
+
+  .hero-industrial-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(hsl(210 100% 96% / 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(210 100% 96% / 0.04) 1px, transparent 1px);
+    background-size: 72px 72px;
+    opacity: 0.45;
+  }
+
+  .hero-industrial-noise {
+    position: absolute;
+    inset: 0;
+    opacity: 0.14;
+    background-image:
+      radial-gradient(hsl(210 100% 95% / 0.12) 1px, transparent 1px),
+      radial-gradient(hsl(210 100% 95% / 0.06) 1px, transparent 1px);
+    background-position: 0 0, 18px 18px;
+    background-size: 28px 28px;
+    mix-blend-mode: soft-light;
+  }
+
+  @keyframes hero-glow-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    50% {
+      transform: translate3d(5%, -4%, 0) scale(1.08);
+    }
+  }
+
+  @keyframes hero-beam-sweep {
+    0%,
+    100% {
+      transform: translateX(-18%);
+      opacity: 0.6;
+    }
+
+    50% {
+      transform: translateX(18%);
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-industrial-glow,
+    .hero-industrial-beam {
+      animation: none;
+    }
+  }
 }
