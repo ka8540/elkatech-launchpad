@@ -1,151 +1,226 @@
-import { motion, type Variants } from "framer-motion";
-import { ArrowRight, MessageCircle, Phone, Shield, Building2, CheckCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowRight, Menu, X } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
-const containerVariants: Variants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.1,
-    },
-  },
+const HERO_VIDEO_URL =
+  "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_105406_16f4600d-7a92-4292-b96e-b19156c7830a.mp4";
+
+const navItems = [
+  { label: "Home", href: "#home" },
+  { label: "About", href: "#about" },
+  { label: "Work & Solutions", href: "#work" },
+  { label: "Brands", href: "#brands" },
+  { label: "Why Us", href: "#why-us" },
+  { label: "Contact", href: "#contact" },
+];
+
+const ShinyText = ({ children }: { children: ReactNode }) => {
+  return (
+    <motion.span
+      className="block bg-clip-text text-transparent"
+      style={{
+        backgroundImage:
+          "linear-gradient(100deg, #64CEFB 0%, #64CEFB 32%, #ffffff 50%, #64CEFB 68%, #64CEFB 100%)",
+        backgroundSize: "220% 100%",
+        WebkitBackgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+      }}
+      animate={{ backgroundPosition: ["-220% center", "220% center"] }}
+      transition={{ duration: 3, ease: "linear", repeat: Infinity }}
+    >
+      {children}
+    </motion.span>
+  );
 };
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
-  },
+const ElkatechMark = () => {
+  return (
+    <a href="#home" className="flex items-center gap-2 text-white transition-opacity hover:opacity-90">
+      <svg
+        width="32"
+        height="32"
+        viewBox="0 0 100 100"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <rect
+          x="12"
+          y="12"
+          width="76"
+          height="76"
+          rx="12"
+          stroke="hsl(var(--accent))"
+          strokeWidth="2.5"
+          fill="none"
+        />
+        <path d="M30 30 L55 30" stroke="white" strokeWidth="4" strokeLinecap="round" />
+        <path d="M30 50 L50 50" stroke="hsl(var(--accent))" strokeWidth="4" strokeLinecap="round" />
+        <path d="M30 70 L55 70" stroke="white" strokeWidth="4" strokeLinecap="round" />
+        <path d="M30 30 L30 70" stroke="white" strokeWidth="4" strokeLinecap="round" />
+        <circle cx="68" cy="50" r="6" fill="hsl(var(--accent))" />
+      </svg>
+      <span className="font-display text-lg font-bold">Elkatech</span>
+    </a>
+  );
+};
+
+const DesktopNav = () => {
+  return (
+    <nav className="hidden items-center gap-8 rounded-full border border-white/15 bg-black/20 px-8 py-4 backdrop-blur-md lg:flex">
+      {navItems.map((item) => (
+        <a
+          key={item.label}
+          href={item.href}
+          className="text-sm text-white/75 transition-colors hover:text-white"
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  );
+};
+
+const MobileMenu = ({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) => {
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.2 }}
+          className="mt-4 rounded-3xl border border-white/15 bg-black/60 p-3 backdrop-blur-md lg:hidden"
+        >
+          <nav className="flex flex-col">
+            {navItems.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                onClick={onClose}
+                className="rounded-2xl px-4 py-3 text-sm text-white/75 transition-colors hover:text-white"
+              >
+                {item.label}
+              </a>
+            ))}
+            <a
+              href="/login"
+              onClick={onClose}
+              className="mt-2 rounded-2xl border border-white/15 px-4 py-3 text-sm text-white transition hover:bg-white/10"
+            >
+              Service Portal
+            </a>
+          </nav>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 };
 
 const HeroSection = () => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   return (
-    <section id="home" className="relative min-h-screen flex items-center pt-20 overflow-hidden">
-      {/* Background Elements */}
-      <div className="absolute inset-0 bg-steel-gradient" />
-      <div className="absolute top-1/4 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 left-0 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
-      
-      {/* Subtle grid pattern */}
-      <div className="absolute inset-0 bg-grid-pattern" />
+    <section id="home" className="relative min-h-screen overflow-hidden bg-black text-white">
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 z-0 h-full w-full object-cover"
+      >
+        <source src={HERO_VIDEO_URL} type="video/mp4" />
+      </video>
+      <div className="absolute inset-0 z-[1] bg-black/30" />
 
-      <div className="container mx-auto px-4 md:px-6 relative z-10">
-        <motion.div
-          className="max-w-4xl mx-auto text-center"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col px-6 sm:px-8 lg:px-10">
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          className="py-6"
         >
-          {/* Badge */}
-          <motion.div variants={itemVariants} className="mb-6">
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border text-sm font-medium text-muted-foreground shadow-soft">
-              <Building2 className="w-4 h-4 text-accent" />
-              Industrial Machinery Distributor
-            </span>
-          </motion.div>
+          <div className="flex items-center justify-between gap-4">
+            <ElkatechMark />
+            <DesktopNav />
 
-          {/* Main Tagline - Trust-focused */}
-          <motion.h1
-            variants={itemVariants}
-            className="font-display text-4xl md:text-6xl lg:text-7xl font-bold text-foreground leading-tight mb-6"
+            <a
+              href="/login"
+              className="hidden rounded-full border border-white/15 px-5 py-2.5 text-sm text-white transition hover:bg-white/10 lg:inline-flex"
+            >
+              Service Portal
+            </a>
+
+            <button
+              type="button"
+              aria-label="Toggle menu"
+              aria-expanded={isMenuOpen}
+              onClick={() => setIsMenuOpen((open) => !open)}
+              className="rounded-full border border-white/15 p-3 text-white transition hover:bg-white/10 lg:hidden"
+            >
+              {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
+
+          <MobileMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+        </motion.header>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          className="mt-10 grid grid-cols-1 gap-6 lg:mt-14 lg:grid-cols-2"
+        >
+          <p className="max-w-xl text-sm leading-relaxed text-white/75 md:text-base">
+            Elkatech helps printing, signage, and fabrication businesses source reliable industrial
+            machinery with honest guidance and long-term support.
+          </p>
+          <p className="max-w-xl text-sm leading-relaxed text-white/75 md:text-base lg:ml-auto lg:text-right">
+            Trusted machinery solutions for commercial printing businesses across India.
+          </p>
+        </motion.div>
+
+        <div className="flex flex-1 flex-col items-center justify-center pb-8 text-center">
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.16, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="mb-6 text-center text-xs uppercase tracking-[0.18em] text-white/75 md:text-sm"
           >
-            Built on Trust.{" "}
-            <span className="text-gradient-accent">Grown with You.</span>
+            Industrial Printing & Signage Machinery
+          </motion.p>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.24, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="text-center text-5xl font-medium !leading-[0.85] tracking-tighter sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl"
+          >
+            <span className="block text-white">Powering</span>
+            <ShinyText>
+              Industrial Printing
+              <br />
+              Machinery.
+            </ShinyText>
           </motion.h1>
 
-          {/* Emotional Supporting Line */}
-          <motion.p
-            variants={itemVariants}
-            className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-4 leading-relaxed font-light"
+          <motion.a
+            href="#work"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.32, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="group mx-auto mt-8 flex items-center gap-2 rounded-full border border-white/10 bg-black px-6 py-3 text-sm font-medium text-white shadow-lg transition hover:bg-gray-900 md:px-8 md:py-4 md:text-base"
           >
-            Your success is our commitment.
-          </motion.p>
-
-          {/* Business Description */}
-          <motion.p
-            variants={itemVariants}
-            className="text-base md:text-lg text-muted-foreground/80 max-w-3xl mx-auto mb-10 leading-relaxed"
-          >
-            Importer and distributor of industrial printing, signage, CNC, laser, and digital cutting machinery for commercial and industrial use across India.
-          </motion.p>
-
-          {/* CTAs */}
-          <motion.div
-            variants={itemVariants}
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12"
-          >
-            {/* Call Button */}
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="group min-w-[140px]"
-            >
-              <a href="tel:+917203033486">
-                <Phone className="mr-2 w-4 h-4" />
-                Call Now
-              </a>
-            </Button>
-
-            {/* WhatsApp Button */}
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="group min-w-[160px]"
-            >
-              <a
-                href="https://wa.me/917203033486"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <MessageCircle className="mr-2 w-4 h-4" />
-                WhatsApp Us
-              </a>
-            </Button>
-          </motion.div>
-
-
-          {/* Trust Highlights */}
-          <motion.div
-            variants={itemVariants}
-            className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto pt-8 border-t border-border/50"
-          >
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-card/50 border border-border/50">
-              <Shield className="w-4 h-4 text-accent flex-shrink-0" />
-              <span>Professional B2B Solutions</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-card/50 border border-border/50">
-              <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
-              <span>Transparent Business Practices</span>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-card/50 border border-border/50">
-              <CheckCircle className="w-4 h-4 text-accent flex-shrink-0" />
-              <span>Long-term Customer Support</span>
-            </div>
-          </motion.div>
-        </motion.div>
+            Explore Solutions
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </motion.a>
+        </div>
       </div>
-
-      {/* Scroll Indicator */}
-      <motion.div
-        className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.2, duration: 0.4 }}
-      >
-        <motion.div
-          className="w-6 h-10 rounded-full border-2 border-muted-foreground/30 flex items-start justify-center p-2"
-          animate={{ y: [0, 4, 0] }}
-          transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-        >
-          <div className="w-1 h-2 bg-accent rounded-full" />
-        </motion.div>
-      </motion.div>
     </section>
   );
 };
