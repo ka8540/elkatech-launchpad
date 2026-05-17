@@ -204,26 +204,4 @@
     50%, 100% { left: 100%; }
   }
 
-  .logo-marquee {
-    -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-    mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
-  }
-
-  .logo-marquee-track {
-    animation: logo-marquee 28s linear infinite;
-  }
-
-  .logo-marquee:hover .logo-marquee-track {
-    animation-play-state: paused;
-  }
-
-  @keyframes logo-marquee {
-    from {
-      transform: translateX(0);
-    }
-
-    to {
-      transform: translateX(-50%);
-    }
-  }
 }
