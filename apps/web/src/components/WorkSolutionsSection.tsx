@@ -1,4 +1,4 @@
-import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toPublicAsset } from "@/lib/assets";
@@ -71,29 +71,7 @@ const categories = [
   },
 ];
 
-const containerVariants: Variants = {
-  hidden: {},
-  visible: {
-    transition: {
-      staggerChildren: 0.08,
-      delayChildren: 0.04,
-    },
-  },
-};
-
-const createItemVariants = (shouldReduceMotion: boolean): Variants => ({
-  hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 28 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: shouldReduceMotion ? 0.25 : 0.6, ease: [0.22, 1, 0.36, 1] },
-  },
-});
-
 const WorkSolutionsSection = () => {
-  const shouldReduceMotion = useReducedMotion();
-  const itemVariants = createItemVariants(shouldReduceMotion);
-
   return (
     <section id="work" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-3xl" />
@@ -119,24 +97,17 @@ const WorkSolutionsSection = () => {
           </p>
         </motion.div>
 
-        <motion.div
-          className="grid md:grid-cols-2 gap-6"
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.1 }}
-        >
+        <div className="grid md:grid-cols-2 gap-6">
           {categories.map((category) => (
-            <motion.div
+            <div
               key={category.title}
-              variants={itemVariants}
-              className="group relative transform-gpu overflow-hidden rounded-2xl border border-blue-500/20 bg-slate-950/60 backdrop-blur-sm transition-all duration-500 motion-safe:hover:-translate-y-1 motion-reduce:hover:translate-y-0 hover:border-blue-400/40 hover:bg-slate-900/70 hover:shadow-[0_18px_50px_rgba(14,165,233,0.12)]"
+              className="group relative overflow-hidden rounded-2xl border border-blue-500/20 bg-slate-950/60 backdrop-blur-sm transition-colors transition-shadow duration-300 hover:border-blue-400/35 hover:bg-slate-900/70 hover:shadow-[0_16px_45px_rgba(14,165,233,0.10)]"
             >
               <div className="relative h-72 md:h-80 overflow-hidden">
                 <img
                   src={toPublicAsset(category.image)}
                   alt={category.title}
-                  className="h-full w-full transform-gpu object-cover transition duration-700 ease-out motion-safe:group-hover:scale-[1.015] motion-reduce:group-hover:scale-100 group-hover:brightness-105"
+                  className="h-full w-full object-cover transition duration-500 group-hover:brightness-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[hsl(215,60%,8%)] via-[hsl(215,60%,8%)]/40 to-transparent" />
               </div>
@@ -196,9 +167,9 @@ const WorkSolutionsSection = () => {
                   </a>
                 </Button>
               </div>
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );
