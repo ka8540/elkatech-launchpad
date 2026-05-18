@@ -155,6 +155,15 @@ export const sessionResponseSchema = z.object({
   user: authUserSchema,
 });
 
+export const oauthFindOrCreateInputSchema = z.object({
+  provider: z.literal("google"),
+  providerUserId: z.string().min(1),
+  providerEmail: z.string().email(),
+  emailVerified: z.boolean(),
+  displayName: z.string().min(1),
+  inviteToken: z.string().optional(),
+});
+
 export const catalogSeedData = [
   {
     id: "cat-solvent-printers",

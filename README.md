@@ -36,7 +36,7 @@ This repository contains:
 | Tooling | npm workspaces, TypeScript, Vitest, ESLint |
 | Deployment config | Vercel configuration files and prebuilt serverless handlers |
 
-Node version is not pinned in the repository with an `engines` field, `.nvmrc`, or `.node-version`. Use a current Node.js LTS release for local work; adding a pinned version is a sensible future improvement.
+Node version is pinned via `.node-version` (Node 22 LTS). Vercel uses this automatically. Locally, run `nvm use` or ensure Node 22+ is active.
 
 The repo contains both `package-lock.json` and `bun.lockb`. The documented workflow uses npm because the root workspace scripts and lockfile are npm-based.
 
@@ -173,6 +173,8 @@ The frontend calls `/api/*` through `apps/web/src/lib/api.ts`. Mutating requests
 | `POST` | `/api/auth/forgot-password` | Request reset email | `forgotPasswordInputSchema` | Public |
 | `POST` | `/api/auth/reset-password` | Complete reset | `resetPasswordInputSchema` | Public |
 | `POST` | `/api/auth/verify-email` | Verify email token | `verifyEmailInputSchema` | Public |
+| `GET` | `/api/auth/google/start` | Start Google OAuth flow | `?returnTo=&inviteToken=` | Public |
+| `GET` | `/api/auth/google/callback` | Google OAuth callback | Redirects after auth | Public |
 | `GET` | `/api/catalog/categories` | List catalog categories | Read-only | Public through gateway |
 | `GET` | `/api/catalog/products` | List products, optional `?category=` filter | Read-only | Public through gateway |
 | `GET` | `/api/catalog/products/:productId` | Read one product | Read-only | Public through gateway |
@@ -190,7 +192,7 @@ The frontend calls `/api/*` through `apps/web/src/lib/api.ts`. Mutating requests
 
 | Service | Internal responsibility |
 | --- | --- |
-| `auth` | Users, password auth, sessions, verify/reset/invite tokens |
+| `auth` | Users, password auth, Google OAuth identity linking, sessions, verify/reset/invite tokens |
 | `catalog` | Category/product reads, optional Redis cache |
 | `service-desk` | Request lifecycle, messages, history, assignment, workflow rules |
 | `notification` | Polls `auth.outbox` and `service_desk.outbox`, sends SMTP email, records deliveries |
@@ -238,6 +240,9 @@ All non-health internal endpoints expect `x-internal-token`.
 | `SMTP_FROM` | No | Sender address | `no-reply@elkatech.local` |
 | `BOOTSTRAP_ADMIN_EMAIL` | No | Initial admin email and notification fallback | `admin@elkatech.local` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | Initial admin password | `ChangeMe123!` |
+| `GOOGLE_OAUTH_CLIENT_ID` | No | Google OAuth client ID | empty |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | No | Google OAuth client secret | empty |
+| `GOOGLE_OAUTH_REDIRECT_URI` | No | Google OAuth callback URL | `http://127.0.0.1:4000/api/auth/google/callback` |
 | `VERCEL` | Platform-provided | Enables Vercel runtime behavior | `1` on Vercel |
 | `VERCEL_URL` | Platform-provided | Preview/runtime URL input | provided by Vercel |
 | `VERCEL_PROJECT_PRODUCTION_URL` | Platform-provided | Preferred production URL input | provided by Vercel |
@@ -497,6 +502,7 @@ flowchart TD
 erDiagram
     AUTH_USERS ||--o{ AUTH_SESSIONS : owns
     AUTH_USERS ||--o{ AUTH_TOKENS : receives
+    AUTH_USERS ||--o{ OAUTH_IDENTITIES : links
     AUTH_USERS ||--o{ SERVICE_REQUESTS : creates
     CATALOG_CATEGORIES ||--o{ CATALOG_PRODUCTS : contains
     SERVICE_REQUESTS ||--o{ REQUEST_MESSAGES : has
@@ -589,6 +595,41 @@ Recommended prefixes:
 - `enhance/` for iterative improvements
 - `feature/` for new user-facing functionality
 - `docs/` for documentation-only work
+
+## Google OAuth Setup
+
+Google OAuth lets users sign in or sign up with their Google account. It is optional — the portal works without it.
+
+### Google Cloud Console
+
+1. Create or select a Google Cloud project.
+2. Go to **APIs & Services → OAuth consent screen** and configure it.
+3. Go to **APIs & Services → Credentials** and create an **OAuth 2.0 Client ID**.
+4. Application type: **Web application**.
+5. Authorized redirect URIs:
+   - Local: `http://127.0.0.1:4000/api/auth/google/callback`
+   - Production: `https://<your-domain>/api/auth/google/callback`
+6. Copy the **Client ID** and **Client Secret**.
+
+### Environment Variables
+
+Add to your `.env` (or Vercel dashboard for production):
+
+```
+GOOGLE_OAUTH_CLIENT_ID=<your-client-id>
+GOOGLE_OAUTH_CLIENT_SECRET=<your-client-secret>
+GOOGLE_OAUTH_REDIRECT_URI=http://127.0.0.1:4000/api/auth/google/callback
+```
+
+For production on Vercel, set `GOOGLE_OAUTH_REDIRECT_URI` to your production callback URL.
+
+### Database Migration
+
+Run `npm run db:migrate` to create the `auth.oauth_identities` table.
+
+### Scopes
+
+The integration requests only `openid email profile` — minimal OpenID Connect scopes.
 
 ## Future Improvements
 

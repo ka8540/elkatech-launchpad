@@ -1,22 +1,38 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import AuthPageShell from "@/components/AuthPageShell";
+import GoogleIcon from "@/components/GoogleIcon";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  google_oauth_failed: "Google sign-in failed. Please try again or continue with email.",
+  google_oauth_cancelled: "Google sign-in was cancelled.",
+  google_email_unverified: "Your Google email is not verified. Please verify it with Google first.",
+};
 
 const SignupPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get("inviteToken") ?? undefined;
   const inviteRole = searchParams.get("role");
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [form, setForm] = useState({
     displayName: "",
     email: searchParams.get("email") ?? "",
     password: "",
   });
+
+  const oauthError = searchParams.get("error");
+
+  useEffect(() => {
+    if (oauthError && OAUTH_ERROR_MESSAGES[oauthError]) {
+      toast.error(OAUTH_ERROR_MESSAGES[oauthError]);
+    }
+  }, [oauthError]);
 
   const title = useMemo(() => {
     if (inviteToken) {
@@ -43,11 +59,43 @@ const SignupPage = () => {
     },
   });
 
+  const handleGoogleSignup = () => {
+    setGoogleLoading(true);
+    const params = new URLSearchParams();
+    if (inviteToken) params.set("inviteToken", inviteToken);
+    const qs = params.toString();
+    window.location.href = `/api/auth/google/start${qs ? `?${qs}` : ""}`;
+  };
+
   return (
     <AuthPageShell
       title={title}
       subtitle="Your Elkatech account lets you create service requests and collaborate with the service team in one secure place."
     >
+      {/* Google OAuth */}
+      <div className="space-y-4">
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="relative w-full gap-3 rounded-xl border-border/60 bg-background text-foreground shadow-sm transition-all hover:border-accent/40 hover:bg-accent/5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-accent/50"
+          onClick={handleGoogleSignup}
+          disabled={googleLoading}
+          aria-label="Continue with Google"
+        >
+          <GoogleIcon />
+          {googleLoading ? "Redirecting…" : "Continue with Google"}
+        </Button>
+
+        {/* Divider */}
+        <div className="relative flex items-center gap-4 py-2">
+          <div className="h-px flex-1 bg-border/60" />
+          <span className="text-xs font-medium text-muted-foreground">or continue with email</span>
+          <div className="h-px flex-1 bg-border/60" />
+        </div>
+      </div>
+
+      {/* Email/password form */}
       <form
         className="space-y-4"
         onSubmit={(event) => {

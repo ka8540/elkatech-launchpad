@@ -7,6 +7,7 @@ import {
   forgotPasswordInputSchema,
   inviteUserInputSchema,
   loginInputSchema,
+  oauthFindOrCreateInputSchema,
   resetPasswordInputSchema,
   roleSchema,
   sessionResponseSchema,
@@ -521,6 +522,166 @@ app.post("/internal/invite", async (request, reply) => {
     userId,
     inviteUrl,
   };
+});
+
+app.post("/internal/oauth/find-or-create", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const input = oauthFindOrCreateInputSchema.parse(request.body);
+
+  if (!input.emailVerified) {
+    return reply.code(400).send({ message: "Google email is not verified. Please verify your Google email first." });
+  }
+
+  const email = input.providerEmail.toLowerCase();
+
+  // 1. Check for existing OAuth identity
+  const existingIdentities = await sql<{ user_id: string }[]>`
+    select user_id
+    from auth.oauth_identities
+    where provider = ${input.provider}
+      and provider_user_id = ${input.providerUserId}
+    limit 1
+  `;
+
+  let userId: string;
+
+  if (existingIdentities.length > 0) {
+    // OAuth identity already linked — login that user
+    userId = existingIdentities[0].user_id;
+  } else {
+    // 2. Check for existing user with same email
+    const existingUsers = await sql<UserRow[]>`
+      select *
+      from auth.users
+      where lower(email) = ${email}
+      limit 1
+    `;
+
+    if (existingUsers.length > 0) {
+      // Link OAuth identity to existing user
+      userId = existingUsers[0].id;
+      await sql`
+        insert into auth.oauth_identities (id, user_id, provider, provider_user_id, provider_email)
+        values (${randomUUID()}, ${userId}, ${input.provider}, ${input.providerUserId}, ${email})
+        on conflict (provider, provider_user_id) do nothing
+      `;
+
+      // Mark email as verified if not already (Google confirmed it)
+      if (!existingUsers[0].email_verified) {
+        await sql`
+          update auth.users
+          set email_verified = true, updated_at = now()
+          where id = ${userId}
+        `;
+      }
+    } else {
+      // 3. Handle invite token if provided
+      let role: string = "customer";
+
+      if (input.inviteToken) {
+        const inviteRows = await sql<{
+          id: string;
+          user_id: string | null;
+          email: string;
+          role: "engineer" | "admin" | "customer" | null;
+        }[]>`
+          select id, user_id, email, role
+          from auth.tokens
+          where token_hash = ${hashToken(input.inviteToken)}
+            and purpose = 'invite_signup'
+            and consumed_at is null
+            and expires_at > now()
+          limit 1
+        `;
+
+        const invite = inviteRows[0];
+        if (invite && invite.role && invite.email.toLowerCase() === email) {
+          role = invite.role;
+          userId = invite.user_id ?? randomUUID();
+
+          await sql`
+            update auth.tokens
+            set consumed_at = now()
+            where id = ${invite.id}
+          `;
+        } else {
+          // Invite invalid or email mismatch — create as regular customer
+          userId = randomUUID();
+        }
+      } else {
+        userId = randomUUID();
+      }
+
+      // Create new user
+      await sql`
+        insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+        values (
+          ${userId},
+          ${email},
+          ${input.displayName},
+          ${role},
+          ${null},
+          ${true},
+          ${'active'}
+        )
+        on conflict (id)
+        do update set
+          email = excluded.email,
+          display_name = excluded.display_name,
+          role = excluded.role,
+          email_verified = excluded.email_verified,
+          status = excluded.status,
+          updated_at = now()
+      `;
+
+      // Link OAuth identity
+      await sql`
+        insert into auth.oauth_identities (id, user_id, provider, provider_user_id, provider_email)
+        values (${randomUUID()}, ${userId}, ${input.provider}, ${input.providerUserId}, ${email})
+        on conflict (provider, provider_user_id) do nothing
+      `;
+    }
+  }
+
+  // Fetch the user for session response
+  const userRows = await sql<UserRow[]>`
+    select * from auth.users where id = ${userId} limit 1
+  `;
+
+  const user = userRows[0];
+  if (!user) {
+    return reply.code(500).send({ message: "Failed to resolve user after OAuth." });
+  }
+
+  // Create session (same as /login)
+  const sessionToken = generateToken();
+  const csrfToken = generateToken(16);
+
+  await sql`
+    insert into auth.sessions (
+      id, token_hash, csrf_token, user_id, user_agent, ip_address, expires_at
+    )
+    values (
+      ${randomUUID()},
+      ${hashToken(sessionToken)},
+      ${csrfToken},
+      ${user.id},
+      ${request.headers["user-agent"] ?? null},
+      ${request.ip},
+      now() + ${sql`${env.SESSION_TTL_HOURS} * interval '1 hour'`}
+    )
+  `;
+
+  return reply.send(
+    sessionResponseSchema.parse({
+      sessionToken,
+      csrfToken,
+      user: mapUser(user),
+    }),
+  );
 });
 
 const port = Number(new URL(env.AUTH_SERVICE_URL).port || "4001");

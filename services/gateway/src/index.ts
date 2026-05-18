@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
@@ -219,6 +220,169 @@ app.post("/api/auth/verify-email", async (request) => {
     headers: internalHeaders(),
     body: JSON.stringify(input),
   });
+});
+
+// ─── Google OAuth ───────────────────────────────────────────────────────────
+
+const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
+const OAUTH_STATE_COOKIE = "elkatech_oauth_state";
+
+app.get("/api/auth/google/start", async (request, reply) => {
+  if (!env.GOOGLE_OAUTH_CLIENT_ID || !env.GOOGLE_OAUTH_CLIENT_SECRET || !env.GOOGLE_OAUTH_REDIRECT_URI) {
+    return reply.code(501).send({ message: "Google OAuth is not configured." });
+  }
+
+  const query = z.object({
+    returnTo: z.string().optional(),
+    inviteToken: z.string().optional(),
+  }).parse(request.query);
+
+  const state = randomBytes(32).toString("hex");
+  const secure = env.NODE_ENV === "production";
+
+  // Store state + context in a short-lived httpOnly cookie
+  const statePayload = JSON.stringify({
+    state,
+    returnTo: query.returnTo || "",
+    inviteToken: query.inviteToken || "",
+  });
+
+  reply.setCookie(OAUTH_STATE_COOKIE, statePayload, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/",
+    maxAge: 600, // 10 minutes
+  });
+
+  const params = new URLSearchParams({
+    client_id: env.GOOGLE_OAUTH_CLIENT_ID,
+    redirect_uri: env.GOOGLE_OAUTH_REDIRECT_URI,
+    response_type: "code",
+    scope: "openid email profile",
+    state,
+    prompt: "select_account",
+  });
+
+  return reply.redirect(`${GOOGLE_AUTH_URL}?${params.toString()}`);
+});
+
+app.get("/api/auth/google/callback", async (request, reply) => {
+  const appBase = env.APP_BASE_URL;
+
+  if (!env.GOOGLE_OAUTH_CLIENT_ID || !env.GOOGLE_OAUTH_CLIENT_SECRET || !env.GOOGLE_OAUTH_REDIRECT_URI) {
+    return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+  }
+
+  const query = z.object({
+    code: z.string().optional(),
+    state: z.string().optional(),
+    error: z.string().optional(),
+  }).parse(request.query);
+
+  // User cancelled or Google returned an error
+  if (query.error || !query.code) {
+    reply.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+    return reply.redirect(`${appBase}/login?error=google_oauth_cancelled`);
+  }
+
+  // Validate state
+  let returnTo = "";
+  let inviteToken = "";
+  try {
+    const rawCookie = request.cookies[OAUTH_STATE_COOKIE];
+    if (!rawCookie) throw new Error("Missing state cookie");
+    const stored = JSON.parse(rawCookie) as { state: string; returnTo: string; inviteToken: string };
+    if (stored.state !== query.state) throw new Error("State mismatch");
+    returnTo = stored.returnTo;
+    inviteToken = stored.inviteToken;
+  } catch {
+    reply.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+    return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+  }
+
+  reply.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+
+  try {
+    // Exchange code for tokens
+    const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code: query.code,
+        client_id: env.GOOGLE_OAUTH_CLIENT_ID,
+        client_secret: env.GOOGLE_OAUTH_CLIENT_SECRET,
+        redirect_uri: env.GOOGLE_OAUTH_REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+    }
+
+    const tokens = (await tokenResponse.json()) as { id_token?: string };
+    if (!tokens.id_token) {
+      return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+    }
+
+    // Verify ID token via Google tokeninfo
+    const tokenInfoResponse = await fetch(`${GOOGLE_TOKENINFO_URL}?id_token=${tokens.id_token}`);
+    if (!tokenInfoResponse.ok) {
+      return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+    }
+
+    const idToken = (await tokenInfoResponse.json()) as {
+      sub?: string;
+      email?: string;
+      email_verified?: string;
+      name?: string;
+      aud?: string;
+    };
+
+    // Validate audience
+    if (idToken.aud !== env.GOOGLE_OAUTH_CLIENT_ID) {
+      return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+    }
+
+    if (!idToken.sub || !idToken.email) {
+      return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+    }
+
+    const emailVerified = idToken.email_verified === "true";
+    if (!emailVerified) {
+      return reply.redirect(`${appBase}/login?error=google_email_unverified`);
+    }
+
+    // Delegate user lookup/create to auth service
+    const oauthResult = await fetchJson<{
+      sessionToken: string;
+      csrfToken: string;
+      user: SessionUser;
+    }>(`${env.AUTH_SERVICE_URL}/internal/oauth/find-or-create`, {
+      method: "POST",
+      headers: internalHeaders(),
+      body: JSON.stringify({
+        provider: "google",
+        providerUserId: idToken.sub,
+        providerEmail: idToken.email,
+        emailVerified,
+        displayName: idToken.name || idToken.email.split("@")[0],
+        inviteToken: inviteToken || undefined,
+      }),
+    });
+
+    // Set session cookies (same as email/password login)
+    setSessionCookies(reply, oauthResult);
+
+    // Redirect to portal
+    const defaultPath = oauthResult.user.role === "customer" ? "/app/requests" : "/app/queue";
+    return reply.redirect(returnTo || defaultPath);
+  } catch {
+    return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
+  }
 });
 
 app.get("/api/catalog/categories", async () => {

@@ -27,6 +27,9 @@ const envSchema = z.object({
   SMTP_FROM: z.string().email().default("no-reply@elkatech.local"),
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).default("ChangeMe123!"),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
