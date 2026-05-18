@@ -138,13 +138,15 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
 
       <div className="pt-16 md:pt-20 lg:pt-24">
         <section className="relative">
+          <div className="absolute inset-x-0 top-0 h-px section-divider" />
           <div className="absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.10),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.06),transparent)] dark:bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.06),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.04),transparent)]" />
+          <div className="pointer-events-none absolute inset-0 -z-10 ambient-surface-left" />
           <div className="mx-auto max-w-6xl px-4 pb-10 pt-10 md:pt-14">
-            <StableReveal>
+            <StableReveal variant="section">
               <h1 className="text-3xl font-bold tracking-tight md:text-5xl">{title}</h1>
             </StableReveal>
 
-            <StableReveal delay={0.04}>
+            <StableReveal variant="section" delay={0.08}>
               <p className="mt-4 max-w-3xl text-base text-muted-foreground md:text-lg">{intro}</p>
             </StableReveal>
 
@@ -170,10 +172,12 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
             {products.map((product, index) => (
               <StableReveal
                 key={product.id}
-                delay={index * 0.04}
-                className="rounded-3xl border bg-card"
+                variant="card"
+                delay={Math.min(index * 0.06, 0.24)}
+                className="group relative isolate overflow-hidden rounded-3xl border bg-card transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-blue-400/40 hover:shadow-[0_20px_70px_rgba(14,165,233,0.12)]"
               >
-                <div className="p-5 md:p-7">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="relative z-10 p-5 md:p-7">
                   <div className="flex flex-col gap-2">
                     <h2 className="text-xl font-semibold md:text-2xl">{product.name}</h2>
                     <div className="flex flex-wrap items-center gap-2">

@@ -46,32 +46,45 @@ const ContactSection = () => {
   return (
     <section id="contact" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
       {/* Background elements */}
+      <div className="absolute inset-x-0 top-0 h-px section-divider" />
+      <div className="pointer-events-none absolute inset-0 ambient-surface-left" />
       <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-accent/5 rounded-full blur-3xl" />
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/3 rounded-full blur-3xl" />
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
           {/* Left Column - Info */}
-          <StableReveal>
-            <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
-              Contact Us
-            </span>
-            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6">
-              Let's Start a <span className="text-accent">Conversation</span>
-            </h2>
-            <p className="text-white/70 text-lg mb-8 leading-relaxed">
-              Ready to explore the right machinery for your business? Our team is here to understand
-              your needs and provide honest, practical guidance.
-            </p>
+          <div>
+            <StableReveal variant="section">
+              <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
+                Contact Us
+              </span>
+            </StableReveal>
+            <StableReveal variant="section" delay={0.08}>
+              <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6">
+                Let's Start a <span className="text-accent">Conversation</span>
+              </h2>
+            </StableReveal>
+            <StableReveal variant="section" delay={0.16}>
+              <p className="text-white/70 text-lg mb-8 leading-relaxed">
+                Ready to explore the right machinery for your business? Our team is here to understand
+                your needs and provide honest, practical guidance.
+              </p>
+            </StableReveal>
 
             {/* Contact Info */}
             <div className="space-y-4 mb-8">
               {/* Email */}
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
+              <StableReveal
+                variant="card"
+                delay={0.18}
+                className="group relative isolate flex items-center gap-4 overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-blue-400/40 hover:bg-white/[0.07] hover:shadow-[0_20px_70px_rgba(14,165,233,0.12)]"
+              >
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="relative z-10 w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center transition-shadow duration-300 group-hover:shadow-glow">
                   <Mail className="w-5 h-5 text-accent" />
                 </div>
-                <div>
+                <div className="relative z-10">
                   <p className="text-sm text-white/60">Email</p>
                   <a
                     href="mailto:elkatech2021@gmail.com"
@@ -80,14 +93,19 @@ const ContactSection = () => {
                     elkatech2021@gmail.com
                   </a>
                 </div>
-              </div>
+              </StableReveal>
 
               {/* Phone */}
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
+              <StableReveal
+                variant="card"
+                delay={0.22}
+                className="group relative isolate flex items-center gap-4 overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-blue-400/40 hover:bg-white/[0.07] hover:shadow-[0_20px_70px_rgba(14,165,233,0.12)]"
+              >
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="relative z-10 w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center transition-shadow duration-300 group-hover:shadow-glow">
                   <Phone className="w-5 h-5 text-accent" />
                 </div>
-                <div>
+                <div className="relative z-10">
                   <p className="text-sm text-white/60">Phone</p>
                   <a
                     href={`tel:${PHONE_NUMBER}`}
@@ -96,43 +114,55 @@ const ContactSection = () => {
                     {PHONE_NUMBER}
                   </a>
                 </div>
-              </div>
+              </StableReveal>
 
               {/* Location */}
-              <div className="flex items-center gap-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                <div className="w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center">
+              <StableReveal
+                variant="card"
+                delay={0.24}
+                className="group relative isolate flex items-center gap-4 overflow-hidden rounded-xl border border-white/10 bg-white/5 p-4 transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-blue-400/40 hover:bg-white/[0.07] hover:shadow-[0_20px_70px_rgba(14,165,233,0.12)]"
+              >
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="relative z-10 w-11 h-11 rounded-lg bg-accent/20 flex items-center justify-center transition-shadow duration-300 group-hover:shadow-glow">
                   <MapPin className="w-5 h-5 text-accent" />
                 </div>
-                <div>
+                <div className="relative z-10">
                   <p className="text-sm text-white/60">Location</p>
                   <p className="text-white font-medium">Ahmedabad, Gujarat, India</p>
                 </div>
-              </div>
+              </StableReveal>
             </div>
 
             {/* WhatsApp Button */}
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="border-accent/50 text-accent hover:bg-accent/10 hover:border-accent"
-            >
-              <a
-                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappPrefill}`}
-                target="_blank"
-                rel="noopener noreferrer"
+            <StableReveal variant="fade" delay={0.24}>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="border-accent/50 text-accent hover:bg-accent/10 hover:border-accent"
               >
-                <MessageCircle className="mr-2 w-5 h-5" />
-                Chat on WhatsApp
-              </a>
-            </Button>
-          </StableReveal>
+                <a
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${whatsappPrefill}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MessageCircle className="mr-2 w-5 h-5" />
+                  Chat on WhatsApp
+                </a>
+              </Button>
+            </StableReveal>
+          </div>
 
           {/* Right Column - Form */}
-          <StableReveal delay={0.04}>
+          <StableReveal
+            variant="card"
+            delay={0.12}
+            className="relative isolate overflow-hidden rounded-2xl"
+          >
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-80" />
             <form
               onSubmit={handleSubmit}
-              className="bg-card rounded-2xl p-8 border border-border shadow-elevated"
+              className="relative z-10 bg-card rounded-2xl p-8 border border-border shadow-elevated"
             >
               <h3 className="font-display text-xl font-semibold text-foreground mb-6">
                 Send an Inquiry
@@ -233,6 +263,7 @@ const ContactSection = () => {
 
         {/* Google Maps Embed */}
         <StableReveal
+          variant="card"
           className="mt-16 rounded-2xl overflow-hidden border border-white/10"
         >
           <iframe

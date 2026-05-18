@@ -38,38 +38,49 @@ const WhyElkatech = () => {
   return (
     <section id="why-us" className="py-24 md:py-32 bg-background relative overflow-hidden">
       {/* Background elements */}
+      <div className="absolute inset-x-0 top-0 h-px section-divider" />
+      <div className="pointer-events-none absolute inset-0 ambient-surface-right" />
       <div className="absolute top-0 left-0 w-96 h-96 bg-accent/3 rounded-full blur-3xl" />
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         {/* Section Header */}
-        <StableReveal className="text-center max-w-2xl mx-auto mb-16">
-          <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
-            Why Choose Us
-          </span>
-          <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-            Reliability You Can{" "}
-            <span className="text-gradient-accent">Count On</span>
-          </h2>
-          <p className="text-muted-foreground text-lg">
-            We believe in building trust through actions, not just words. Here's what sets us apart.
-          </p>
-        </StableReveal>
+        <div className="text-center max-w-2xl mx-auto mb-16">
+          <StableReveal variant="section">
+            <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
+              Why Choose Us
+            </span>
+          </StableReveal>
+          <StableReveal variant="section" delay={0.08}>
+            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
+              Reliability You Can{" "}
+              <span className="text-gradient-accent">Count On</span>
+            </h2>
+          </StableReveal>
+          <StableReveal variant="section" delay={0.16}>
+            <p className="text-muted-foreground text-lg">
+              We believe in building trust through actions, not just words. Here's what sets us apart.
+            </p>
+          </StableReveal>
+        </div>
 
         {/* Reasons Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {reasons.map((reason, index) => (
             <StableReveal
               key={reason.title}
-              delay={index * 0.04}
-              className="group flex items-start gap-4 p-6 rounded-xl bg-card border border-border hover:border-accent/30 hover:shadow-soft transition-all duration-300"
+              variant="card"
+              delay={Math.min(index * 0.06, 0.24)}
+              className="group relative isolate flex items-start gap-4 overflow-hidden rounded-xl border border-border bg-card p-6 transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-blue-400/40 hover:shadow-[0_20px_70px_rgba(14,165,233,0.12)]"
             >
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
               {/* Icon */}
-              <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-navy-gradient flex items-center justify-center group-hover:shadow-glow transition-shadow duration-300">
+              <div className="relative z-10 flex-shrink-0 w-11 h-11 rounded-lg bg-navy-gradient flex items-center justify-center group-hover:shadow-glow transition-shadow duration-300">
                 <reason.icon className="w-5 h-5 text-accent" />
               </div>
 
               {/* Content */}
-              <div>
+              <div className="relative z-10">
                 <h3 className="font-display text-base font-semibold text-foreground mb-1.5">
                   {reason.title}
                 </h3>

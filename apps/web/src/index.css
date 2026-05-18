@@ -182,6 +182,37 @@
     box-shadow: 0 0 40px -10px hsl(210 100% 50% / 0.4);
   }
 
+  .section-divider {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(210 100% 60% / 0.22),
+      transparent
+    );
+  }
+
+  .ambient-surface-left,
+  .ambient-surface-right {
+    background-size: 140% 140%;
+    animation: ambient-shift 16s ease-in-out infinite;
+  }
+
+  .ambient-surface-left {
+    background-image: radial-gradient(
+      circle at 18% 24%,
+      hsl(210 100% 58% / 0.09),
+      transparent 36%
+    );
+  }
+
+  .ambient-surface-right {
+    background-image: radial-gradient(
+      circle at 82% 20%,
+      hsl(198 100% 62% / 0.09),
+      transparent 34%
+    );
+  }
+
   .animate-glow-sweep {
     position: relative;
     overflow: hidden;
@@ -201,5 +232,25 @@
   @keyframes glow-sweep {
     0% { left: -100%; }
     50%, 100% { left: 100%; }
+  }
+
+  @keyframes ambient-shift {
+    0%,
+    100% {
+      background-position: 0% 50%;
+      opacity: 0.72;
+    }
+
+    50% {
+      background-position: 100% 50%;
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ambient-surface-left,
+    .ambient-surface-right {
+      animation: none;
+    }
   }
 }
