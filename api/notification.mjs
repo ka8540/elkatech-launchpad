@@ -3316,7 +3316,7 @@ var require_validation = __commonJS({
     }
     function getEssenceMediaType(header) {
       if (!header) return "";
-      return header.split(/[ ;]/, 1)[0].trim().toLowerCase();
+      return header.trimStart().split(/[ ;]/, 1)[0].trim().toLowerCase();
     }
     module.exports = {
       symbols: { bodySchema, querystringSchema, responseSchema, paramsSchema, headersSchema },
@@ -10755,20 +10755,14 @@ var require_request = __commonJS({
       }
       if (typeof tp === "number") {
         return function(a, i) {
-          return a != null && i < tp;
+          return i < tp;
         };
       }
       if (typeof tp === "string") {
         const values2 = tp.split(",").map((it) => it.trim());
-        const trust2 = proxyAddr.compile(values2);
-        return function(a, i) {
-          return a != null && trust2(a, i);
-        };
+        return proxyAddr.compile(values2);
       }
-      const trust = proxyAddr.compile(tp);
-      return function(a, i) {
-        return a != null && trust(a, i);
-      };
+      return proxyAddr.compile(tp);
     }
     function buildRequest(R, trustProxy) {
       if (trustProxy) {
@@ -10820,7 +10814,8 @@ var require_request = __commonJS({
         },
         host: {
           get() {
-            if (this.headers["x-forwarded-host"] && proxyFn(this.raw.socket?.remoteAddress, 0)) {
+            const socketAddr = this.raw.socket?.remoteAddress;
+            if (this.headers["x-forwarded-host"] && socketAddr !== null && proxyFn(socketAddr, 0)) {
               return getLastEntryInMultiHeaderValue(this.headers["x-forwarded-host"]);
             }
             return this.headers.host ?? this.headers[":authority"] ?? "";
@@ -10828,7 +10823,8 @@ var require_request = __commonJS({
         },
         protocol: {
           get() {
-            if (this.headers["x-forwarded-proto"] && proxyFn(this.raw.socket?.remoteAddress, 0)) {
+            const socketAddr = this.raw.socket?.remoteAddress;
+            if (this.headers["x-forwarded-proto"] && socketAddr !== null && proxyFn(socketAddr, 0)) {
               return getLastEntryInMultiHeaderValue(this.headers["x-forwarded-proto"]);
             }
             if (this.socket) {
@@ -10937,16 +10933,13 @@ var require_request = __commonJS({
       },
       port: {
         get() {
-          const portFromHost = parseInt(this.host.split(":").slice(-1)[0]);
-          if (!isNaN(portFromHost)) {
-            return portFromHost;
-          }
+          const portReg = /(?<port>:\d+)$/;
           const host = this.headers.host ?? this.headers[":authority"] ?? "";
-          const portFromHeader = parseInt(host.split(":").slice(-1)[0]);
-          if (!isNaN(portFromHeader)) {
-            return portFromHeader;
+          const matches = portReg.exec(host);
+          if (matches === null || matches[1] === void 0) {
+            return null;
           }
-          return null;
+          return parseInt(matches.groups.port.slice(1), 10);
         }
       },
       protocol: {
@@ -15343,6 +15336,9 @@ var require_utils = __commonJS({
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
+    var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
+    var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
+    var isPathCharacter = RegExp.prototype.test.bind(/^[\da-z\-._~!$&'()*+,;=:@/]$/iu);
     function stringArrayToHexStripped(input) {
       let acc = "";
       let code = 0;
@@ -15535,27 +15531,77 @@ var require_utils = __commonJS({
       }
       return output.join("");
     }
-    function normalizeComponentEncoding(component, esc) {
-      const func = esc !== true ? escape : unescape;
-      if (component.scheme !== void 0) {
-        component.scheme = func(component.scheme);
+    var HOST_DELIMS = { "@": "%40", "/": "%2F", "?": "%3F", "#": "%23", ":": "%3A" };
+    var HOST_DELIM_RE = /[@/?#:]/g;
+    var HOST_DELIM_NO_COLON_RE = /[@/?#]/g;
+    function reescapeHostDelimiters(host, isIP) {
+      const re = isIP ? HOST_DELIM_NO_COLON_RE : HOST_DELIM_RE;
+      re.lastIndex = 0;
+      return host.replace(re, (ch) => HOST_DELIMS[ch]);
+    }
+    function normalizePercentEncoding(input, decodeUnreserved = false) {
+      if (input.indexOf("%") === -1) {
+        return input;
       }
-      if (component.userinfo !== void 0) {
-        component.userinfo = func(component.userinfo);
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (decodeUnreserved && isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        output += input[i];
       }
-      if (component.host !== void 0) {
-        component.host = func(component.host);
+      return output;
+    }
+    function normalizePathEncoding(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (decoded !== "." && isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        if (isPathCharacter(input[i])) {
+          output += input[i];
+        } else {
+          output += escape(input[i]);
+        }
       }
-      if (component.path !== void 0) {
-        component.path = func(component.path);
+      return output;
+    }
+    function escapePreservingEscapes(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        output += escape(input[i]);
       }
-      if (component.query !== void 0) {
-        component.query = func(component.query);
-      }
-      if (component.fragment !== void 0) {
-        component.fragment = func(component.fragment);
-      }
-      return component;
+      return output;
     }
     function recomposeAuthority(component) {
       const uriTokens = [];
@@ -15570,7 +15616,7 @@ var require_utils = __commonJS({
           if (ipV6res.isIPV6 === true) {
             host = `[${ipV6res.escapedHost}]`;
           } else {
-            host = component.host;
+            host = reescapeHostDelimiters(host, false);
           }
         }
         uriTokens.push(host);
@@ -15584,7 +15630,10 @@ var require_utils = __commonJS({
     module.exports = {
       nonSimpleDomain,
       recomposeAuthority,
-      normalizeComponentEncoding,
+      reescapeHostDelimiters,
+      normalizePercentEncoding,
+      normalizePathEncoding,
+      escapePreservingEscapes,
       removeDotSegments,
       isIPv4,
       isUUID,
@@ -15808,12 +15857,12 @@ var require_schemes = __commonJS({
 var require_fast_uri = __commonJS({
   "node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizeComponentEncoding, isIPv4, nonSimpleDomain } = require_utils();
+    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
     function normalize(uri, options) {
       if (typeof uri === "string") {
         uri = /** @type {T} */
-        serialize(parse2(uri, options), options);
+        normalizeString(uri, options);
       } else if (typeof uri === "object") {
         uri = /** @type {T} */
         parse2(serialize(uri, options), options);
@@ -15880,19 +15929,9 @@ var require_fast_uri = __commonJS({
       return target;
     }
     function equal(uriA, uriB, options) {
-      if (typeof uriA === "string") {
-        uriA = unescape(uriA);
-        uriA = serialize(normalizeComponentEncoding(parse2(uriA, options), true), { ...options, skipEscape: true });
-      } else if (typeof uriA === "object") {
-        uriA = serialize(normalizeComponentEncoding(uriA, true), { ...options, skipEscape: true });
-      }
-      if (typeof uriB === "string") {
-        uriB = unescape(uriB);
-        uriB = serialize(normalizeComponentEncoding(parse2(uriB, options), true), { ...options, skipEscape: true });
-      } else if (typeof uriB === "object") {
-        uriB = serialize(normalizeComponentEncoding(uriB, true), { ...options, skipEscape: true });
-      }
-      return uriA.toLowerCase() === uriB.toLowerCase();
+      const normalizedA = normalizeComparableURI(uriA, options);
+      const normalizedB = normalizeComparableURI(uriB, options);
+      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA.toLowerCase() === normalizedB.toLowerCase();
     }
     function serialize(cmpts, opts) {
       const component = {
@@ -15917,12 +15956,12 @@ var require_fast_uri = __commonJS({
       if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
       if (component.path !== void 0) {
         if (!options.skipEscape) {
-          component.path = escape(component.path);
+          component.path = escapePreservingEscapes(component.path);
           if (component.scheme !== void 0) {
             component.path = component.path.split("%3A").join(":");
           }
         } else {
-          component.path = unescape(component.path);
+          component.path = normalizePercentEncoding(component.path);
         }
       }
       if (options.reference !== "suffix" && component.scheme) {
@@ -15957,7 +15996,16 @@ var require_fast_uri = __commonJS({
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
-    function parse2(uri, opts) {
+    function getParseError(parsed, matches) {
+      if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
+        return 'URI path must start with "/" when authority is present.';
+      }
+      if (typeof parsed.port === "number" && (parsed.port < 0 || parsed.port > 65535)) {
+        return "URI port is malformed.";
+      }
+      return void 0;
+    }
+    function parseWithStatus(uri, opts) {
       const options = Object.assign({}, opts);
       const parsed = {
         scheme: void 0,
@@ -15968,6 +16016,7 @@ var require_fast_uri = __commonJS({
         query: void 0,
         fragment: void 0
       };
+      let malformedAuthorityOrPort = false;
       let isIP = false;
       if (options.reference === "suffix") {
         if (options.scheme) {
@@ -15987,6 +16036,11 @@ var require_fast_uri = __commonJS({
         parsed.fragment = matches[8];
         if (isNaN(parsed.port)) {
           parsed.port = matches[5];
+        }
+        const parseError2 = getParseError(parsed, matches);
+        if (parseError2 !== void 0) {
+          parsed.error = parsed.error || parseError2;
+          malformedAuthorityOrPort = true;
         }
         if (parsed.host) {
           const ipv4result = isIPv4(parsed.host);
@@ -16026,14 +16080,18 @@ var require_fast_uri = __commonJS({
               parsed.scheme = unescape(parsed.scheme);
             }
             if (parsed.host !== void 0) {
-              parsed.host = unescape(parsed.host);
+              parsed.host = reescapeHostDelimiters(unescape(parsed.host), isIP);
             }
           }
           if (parsed.path) {
-            parsed.path = escape(unescape(parsed.path));
+            parsed.path = normalizePathEncoding(parsed.path);
           }
           if (parsed.fragment) {
-            parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
+            try {
+              parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
+            } catch {
+              parsed.error = parsed.error || "URI malformed";
+            }
           }
         }
         if (schemeHandler && schemeHandler.parse) {
@@ -16042,7 +16100,29 @@ var require_fast_uri = __commonJS({
       } else {
         parsed.error = parsed.error || "URI can not be parsed.";
       }
-      return parsed;
+      return { parsed, malformedAuthorityOrPort };
+    }
+    function parse2(uri, opts) {
+      return parseWithStatus(uri, opts).parsed;
+    }
+    function normalizeString(uri, opts) {
+      return normalizeStringWithStatus(uri, opts).normalized;
+    }
+    function normalizeStringWithStatus(uri, opts) {
+      const { parsed, malformedAuthorityOrPort } = parseWithStatus(uri, opts);
+      return {
+        normalized: malformedAuthorityOrPort ? uri : serialize(parsed, opts),
+        malformedAuthorityOrPort
+      };
+    }
+    function normalizeComparableURI(uri, opts) {
+      if (typeof uri === "string") {
+        const { normalized, malformedAuthorityOrPort } = normalizeStringWithStatus(uri, opts);
+        return malformedAuthorityOrPort ? void 0 : normalized;
+      }
+      if (typeof uri === "object") {
+        return serialize(uri, opts);
+      }
     }
     var fastUri = {
       SCHEMES,
@@ -44809,7 +44889,7 @@ var require_light_my_request = __commonJS({
 var require_fastify = __commonJS({
   "node_modules/fastify/fastify.js"(exports, module) {
     "use strict";
-    var VERSION = "5.8.4";
+    var VERSION = "5.8.5";
     var Avvio = require_boot();
     var http = __require("node:http");
     var diagnostics = __require("node:diagnostics_channel");
@@ -45626,8 +45706,8 @@ var require_cookies = __commonJS({
        * @param {String} url Current URL
        */
       set(cookieStr, url) {
-        let urlparts = urllib.parse(url || "");
-        let cookie = this.parse(cookieStr);
+        const urlparts = urllib.parse(url || "");
+        const cookie = this.parse(cookieStr);
         let domain;
         if (cookie.domain) {
           domain = cookie.domain.replace(/^\./, "");
@@ -45665,13 +45745,11 @@ var require_cookies = __commonJS({
        * @returns {Array} An array of cookie objects
        */
       list(url) {
-        let result = [];
-        let i;
-        let cookie;
-        for (i = this.cookies.length - 1; i >= 0; i--) {
-          cookie = this.cookies[i];
+        const result = [];
+        for (let i = this.cookies.length - 1; i >= 0; i--) {
+          const cookie = this.cookies[i];
           if (this.isExpired(cookie)) {
-            this.cookies.splice(i, i);
+            this.cookies.splice(i, 1);
             continue;
           }
           if (this.match(cookie, url)) {
@@ -45687,10 +45765,10 @@ var require_cookies = __commonJS({
        * @returns {Object} Cookie object
        */
       parse(cookieStr) {
-        let cookie = {};
+        const cookie = {};
         (cookieStr || "").toString().split(";").forEach((cookiePart) => {
-          let valueParts = cookiePart.split("=");
-          let key = valueParts.shift().trim().toLowerCase();
+          const valueParts = cookiePart.split("=");
+          const key = valueParts.shift().trim().toLowerCase();
           let value = valueParts.join("=").trim();
           let domain;
           if (!key) {
@@ -45739,11 +45817,11 @@ var require_cookies = __commonJS({
        * @returns {Boolean} true if cookie is valid for specifiec URL
        */
       match(cookie, url) {
-        let urlparts = urllib.parse(url || "");
+        const urlparts = urllib.parse(url || "");
         if (urlparts.hostname !== cookie.domain && (cookie.domain.charAt(0) !== "." || ("." + urlparts.hostname).substr(-cookie.domain.length) !== cookie.domain)) {
           return false;
         }
-        let path = this.getPath(urlparts.pathname);
+        const path = this.getPath(urlparts.pathname);
         if (path.substr(0, cookie.path.length) !== cookie.path) {
           return false;
         }
@@ -45758,12 +45836,10 @@ var require_cookies = __commonJS({
        * @param {Object} cookie Cookie value to be stored
        */
       add(cookie) {
-        let i;
-        let len;
         if (!cookie || !cookie.name) {
           return false;
         }
-        for (i = 0, len = this.cookies.length; i < len; i++) {
+        for (let i = 0, len = this.cookies.length; i < len; i++) {
           if (this.compare(this.cookies[i], cookie)) {
             if (this.isExpired(cookie)) {
               this.cookies.splice(i, 1);
@@ -45786,7 +45862,7 @@ var require_cookies = __commonJS({
        * @returns {Boolean} True, if the cookies are the same
        */
       compare(a, b2) {
-        return a.name === b2.name && a.path === b2.path && a.domain === b2.domain && a.secure === b2.secure && a.httponly === a.httponly;
+        return a.name === b2.name && a.path === b2.path && a.domain === b2.domain && a.secure === b2.secure && a.httponly === b2.httponly;
       }
       /**
        * Checks if a cookie is expired
@@ -45825,14 +45901,18 @@ var require_package2 = __commonJS({
   "node_modules/nodemailer/package.json"(exports, module) {
     module.exports = {
       name: "nodemailer",
-      version: "6.10.1",
+      version: "8.0.7",
       description: "Easy as cake e-mail sending from your Node.js applications",
       main: "lib/nodemailer.js",
       scripts: {
         test: "node --test --test-concurrency=1 test/**/*.test.js test/**/*-test.js",
         "test:coverage": "c8 node --test --test-concurrency=1 test/**/*.test.js test/**/*-test.js",
+        format: 'prettier --write "**/*.{js,json,md}"',
+        "format:check": 'prettier --check "**/*.{js,json,md}"',
         lint: "eslint .",
-        update: "rm -rf node_modules/ package-lock.json && ncu -u && npm install"
+        "lint:fix": "eslint . --fix",
+        update: "rm -rf node_modules/ package-lock.json && ncu -u && npm install",
+        "test:syntax": 'docker run --rm -v "$PWD:/app:ro" -w /app node:6-alpine node test/syntax-compat.js'
       },
       repository: {
         type: "git",
@@ -45848,24 +45928,65 @@ var require_package2 = __commonJS({
       },
       homepage: "https://nodemailer.com/",
       devDependencies: {
-        "@aws-sdk/client-ses": "3.731.1",
+        "@aws-sdk/client-sesv2": "3.1037.0",
         bunyan: "1.8.15",
-        c8: "10.1.3",
-        eslint: "8.57.0",
-        "eslint-config-nodemailer": "1.2.0",
-        "eslint-config-prettier": "9.1.0",
+        c8: "11.0.0",
+        eslint: "10.2.1",
+        "eslint-config-prettier": "10.1.8",
+        globals: "17.5.0",
         libbase64: "1.3.0",
-        libmime: "5.3.6",
+        libmime: "5.3.8",
         libqp: "2.1.1",
-        "nodemailer-ntlm-auth": "1.0.4",
+        prettier: "3.8.3",
         proxy: "1.0.2",
         "proxy-test-server": "1.0.0",
-        "smtp-server": "3.13.6"
+        "smtp-server": "3.18.4"
       },
       engines: {
         node: ">=6.0.0"
       }
     };
+  }
+});
+
+// node_modules/nodemailer/lib/errors.js
+var require_errors7 = __commonJS({
+  "node_modules/nodemailer/lib/errors.js"(exports, module) {
+    "use strict";
+    var ERROR_CODES = {
+      // Connection errors
+      ECONNECTION: "Connection closed unexpectedly",
+      ETIMEDOUT: "Connection or operation timed out",
+      ESOCKET: "Socket-level error",
+      EDNS: "DNS resolution failed",
+      // TLS/Security errors
+      ETLS: "TLS handshake or STARTTLS failed",
+      EREQUIRETLS: "REQUIRETLS not supported by server (RFC 8689)",
+      // Protocol errors
+      EPROTOCOL: "Invalid SMTP server response",
+      EENVELOPE: "Invalid mail envelope (sender or recipients)",
+      EMESSAGE: "Message delivery error",
+      ESTREAM: "Stream processing error",
+      // Authentication errors
+      EAUTH: "Authentication failed",
+      ENOAUTH: "Authentication credentials not provided",
+      EOAUTH2: "OAuth2 token generation or refresh error",
+      // Resource errors
+      EMAXLIMIT: "Pool resource limit reached (max messages per connection)",
+      // Transport-specific errors
+      ESENDMAIL: "Sendmail command error",
+      ESES: "AWS SES transport error",
+      // Configuration and access errors
+      ECONFIG: "Invalid configuration",
+      EPROXY: "Proxy connection error",
+      EFILEACCESS: "File access rejected (disableFileAccess is set)",
+      EURLACCESS: "URL access rejected (disableUrlAccess is set)",
+      EFETCH: "HTTP fetch error"
+    };
+    module.exports = { ERROR_CODES };
+    for (const code of Object.keys(ERROR_CODES)) {
+      module.exports[code] = code;
+    }
   }
 });
 
@@ -45877,10 +45998,11 @@ var require_fetch = __commonJS({
     var https = __require("https");
     var urllib = __require("url");
     var zlib = __require("zlib");
-    var PassThrough = __require("stream").PassThrough;
+    var { PassThrough } = __require("stream");
     var Cookies = require_cookies();
     var packageData = require_package2();
     var net2 = __require("net");
+    var errors = require_errors7();
     var MAX_REDIRECTS = 5;
     module.exports = function(url, options) {
       return nmfetch(url, options);
@@ -45898,14 +46020,14 @@ var require_fetch = __commonJS({
         });
         options.cookie = false;
       }
-      let fetchRes = options.fetchRes;
-      let parsed = urllib.parse(url);
+      const fetchRes = options.fetchRes;
+      const parsed = urllib.parse(url);
       let method = (options.method || "").toString().trim().toUpperCase() || "GET";
       let finished = false;
       let cookies;
       let body;
-      let handler2 = parsed.protocol === "https:" ? https : http;
-      let headers = {
+      const handler2 = parsed.protocol === "https:" ? https : http;
+      const headers = {
         "accept-encoding": "gzip,deflate",
         "user-agent": "nodemailer/" + packageData.version
       };
@@ -45933,7 +46055,7 @@ var require_fetch = __commonJS({
               return;
             }
             finished = true;
-            err.type = "FETCH";
+            err.code = errors.EFETCH;
             err.sourceUrl = url;
             fetchRes.emit("error", err);
           });
@@ -45944,7 +46066,7 @@ var require_fetch = __commonJS({
             try {
               body = Buffer.from(
                 Object.keys(options.body).map((key) => {
-                  let value = options.body[key].toString().trim();
+                  const value = options.body[key].toString().trim();
                   return encodeURIComponent(key) + "=" + encodeURIComponent(value);
                 }).join("&")
               );
@@ -45953,7 +46075,7 @@ var require_fetch = __commonJS({
                 return;
               }
               finished = true;
-              E.type = "FETCH";
+              E.code = errors.EFETCH;
               E.sourceUrl = url;
               fetchRes.emit("error", E);
               return;
@@ -45967,7 +46089,7 @@ var require_fetch = __commonJS({
         method = (options.method || "").toString().trim().toUpperCase() || "POST";
       }
       let req;
-      let reqOptions = {
+      const reqOptions = {
         method,
         host: parsed.hostname,
         path: parsed.path,
@@ -45977,9 +46099,7 @@ var require_fetch = __commonJS({
         agent: false
       };
       if (options.tls) {
-        Object.keys(options.tls).forEach((key) => {
-          reqOptions[key] = options.tls[key];
-        });
+        Object.assign(reqOptions, options.tls);
       }
       if (parsed.protocol === "https:" && parsed.hostname && parsed.hostname !== reqOptions.host && !net2.isIP(parsed.hostname) && !reqOptions.servername) {
         reqOptions.servername = parsed.hostname;
@@ -45989,7 +46109,7 @@ var require_fetch = __commonJS({
       } catch (E) {
         finished = true;
         setImmediate(() => {
-          E.type = "FETCH";
+          E.code = errors.EFETCH;
           E.sourceUrl = url;
           fetchRes.emit("error", E);
         });
@@ -46002,8 +46122,8 @@ var require_fetch = __commonJS({
           }
           finished = true;
           req.abort();
-          let err = new Error("Request Timeout");
-          err.type = "FETCH";
+          const err = new Error("Request Timeout");
+          err.code = errors.EFETCH;
           err.sourceUrl = url;
           fetchRes.emit("error", err);
         });
@@ -46013,7 +46133,7 @@ var require_fetch = __commonJS({
           return;
         }
         finished = true;
-        err.type = "FETCH";
+        err.code = errors.EFETCH;
         err.sourceUrl = url;
         fetchRes.emit("error", err);
       });
@@ -46037,8 +46157,8 @@ var require_fetch = __commonJS({
           options.redirects++;
           if (options.redirects > options.maxRedirects) {
             finished = true;
-            let err = new Error("Maximum redirect count exceeded");
-            err.type = "FETCH";
+            const err = new Error("Maximum redirect count exceeded");
+            err.code = errors.EFETCH;
             err.sourceUrl = url;
             fetchRes.emit("error", err);
             req.abort();
@@ -46052,8 +46172,8 @@ var require_fetch = __commonJS({
         fetchRes.headers = res.headers;
         if (res.statusCode >= 300 && !options.allowErrorResponse) {
           finished = true;
-          let err = new Error("Invalid status code " + res.statusCode);
-          err.type = "FETCH";
+          const err = new Error("Invalid status code " + res.statusCode);
+          err.code = errors.EFETCH;
           err.sourceUrl = url;
           fetchRes.emit("error", err);
           req.abort();
@@ -46064,7 +46184,7 @@ var require_fetch = __commonJS({
             return;
           }
           finished = true;
-          err.type = "FETCH";
+          err.code = errors.EFETCH;
           err.sourceUrl = url;
           fetchRes.emit("error", err);
           req.abort();
@@ -46076,7 +46196,7 @@ var require_fetch = __commonJS({
               return;
             }
             finished = true;
-            err.type = "FETCH";
+            err.code = errors.EFETCH;
             err.sourceUrl = url;
             fetchRes.emit("error", err);
             req.abort();
@@ -46090,12 +46210,11 @@ var require_fetch = __commonJS({
           try {
             if (typeof body.pipe === "function") {
               return body.pipe(req);
-            } else {
-              req.write(body);
             }
+            req.write(body);
           } catch (err) {
             finished = true;
-            err.type = "FETCH";
+            err.code = errors.EFETCH;
             err.sourceUrl = url;
             fetchRes.emit("error", err);
             return;
@@ -46120,31 +46239,33 @@ var require_shared = __commonJS({
     var net2 = __require("net");
     var os2 = __require("os");
     var DNS_TTL = 5 * 60 * 1e3;
+    var CACHE_CLEANUP_INTERVAL = 30 * 1e3;
+    var MAX_CACHE_SIZE = 1e3;
+    var lastCacheCleanup = 0;
+    module.exports._lastCacheCleanup = () => lastCacheCleanup;
+    module.exports._resetCacheCleanup = () => {
+      lastCacheCleanup = 0;
+    };
     var networkInterfaces;
     try {
       networkInterfaces = os2.networkInterfaces();
-    } catch (err) {
+    } catch (_err) {
     }
     module.exports.networkInterfaces = networkInterfaces;
     var isFamilySupported = (family, allowInternal) => {
-      let networkInterfaces2 = module.exports.networkInterfaces;
-      if (!networkInterfaces2) {
+      const ifaces = module.exports.networkInterfaces;
+      if (!ifaces) {
         return true;
       }
-      const familySupported = (
-        // crux that replaces Object.values(networkInterfaces) as Object.values is not supported in nodejs v6
-        Object.keys(networkInterfaces2).map((key) => networkInterfaces2[key]).reduce((acc, val) => acc.concat(val), []).filter((i) => !i.internal || allowInternal).filter((i) => i.family === "IPv" + family || i.family === family).length > 0
-      );
-      return familySupported;
+      return Object.keys(ifaces).map((key) => ifaces[key]).reduce((acc, val) => acc.concat(val), []).filter((i) => !i.internal || allowInternal).some((i) => i.family === "IPv" + family || i.family === family);
     };
-    var resolver = (family, hostname, options, callback) => {
+    var resolve = (family, hostname, options, callback) => {
       options = options || {};
-      const familySupported = isFamilySupported(family, options.allowInternalNetworkInterfaces);
-      if (!familySupported) {
+      if (!isFamilySupported(family, options.allowInternalNetworkInterfaces)) {
         return callback(null, []);
       }
-      const resolver2 = dns.Resolver ? new dns.Resolver(options) : dns;
-      resolver2["resolve" + family](hostname, (err, addresses) => {
+      const dnsResolver = dns.Resolver ? new dns.Resolver(options) : dns;
+      dnsResolver["resolve" + family](hostname, (err, addresses) => {
         if (err) {
           switch (err.code) {
             case dns.NODATA:
@@ -46166,10 +46287,14 @@ var require_shared = __commonJS({
       if (!value) {
         return Object.assign({}, extra || {});
       }
+      const addresses = value.addresses || [];
+      const host = addresses.length > 0 ? addresses[Math.floor(Math.random() * addresses.length)] : null;
       return Object.assign(
         {
           servername: value.servername,
-          host: !value.addresses || !value.addresses.length ? null : value.addresses.length === 1 ? value.addresses[0] : value.addresses[Math.floor(Math.random() * value.addresses.length)]
+          host,
+          // Include all addresses for connection fallback support
+          _addresses: addresses
         },
         extra || {}
       );
@@ -46180,7 +46305,7 @@ var require_shared = __commonJS({
         options.host = options.servername;
       }
       if (!options.host || net2.isIP(options.host)) {
-        let value = {
+        const value = {
           addresses: [options.host],
           servername: options.servername || false
         };
@@ -46194,7 +46319,21 @@ var require_shared = __commonJS({
       let cached;
       if (dnsCache.has(options.host)) {
         cached = dnsCache.get(options.host);
-        if (!cached.expires || cached.expires >= Date.now()) {
+        const now = Date.now();
+        if (now - lastCacheCleanup > CACHE_CLEANUP_INTERVAL) {
+          lastCacheCleanup = now;
+          for (const [host, entry] of dnsCache.entries()) {
+            if (entry.expires && entry.expires < now) {
+              dnsCache.delete(host);
+            }
+          }
+          if (dnsCache.size > MAX_CACHE_SIZE) {
+            const toDelete = Math.floor(MAX_CACHE_SIZE * 0.1);
+            const keys = Array.from(dnsCache.keys()).slice(0, toDelete);
+            keys.forEach((key) => dnsCache.delete(key));
+          }
+        }
+        if (!cached.expires || cached.expires >= now) {
           return callback(
             null,
             formatDNSValue(cached.value, {
@@ -46203,51 +46342,26 @@ var require_shared = __commonJS({
           );
         }
       }
-      resolver(4, options.host, options, (err, addresses) => {
+      let ipv4Addresses = [];
+      let ipv6Addresses = [];
+      let ipv4Error = null;
+      let ipv6Error = null;
+      resolve(4, options.host, options, (err, addresses) => {
         if (err) {
-          if (cached) {
-            return callback(
-              null,
-              formatDNSValue(cached.value, {
-                cached: true,
-                error: err
-              })
-            );
-          }
-          return callback(err);
+          ipv4Error = err;
+        } else {
+          ipv4Addresses = addresses || [];
         }
-        if (addresses && addresses.length) {
-          let value = {
-            addresses,
-            servername: options.servername || options.host
-          };
-          dnsCache.set(options.host, {
-            value,
-            expires: Date.now() + (options.dnsTtl || DNS_TTL)
-          });
-          return callback(
-            null,
-            formatDNSValue(value, {
-              cached: false
-            })
-          );
-        }
-        resolver(6, options.host, options, (err2, addresses2) => {
+        resolve(6, options.host, options, (err2, addresses2) => {
           if (err2) {
-            if (cached) {
-              return callback(
-                null,
-                formatDNSValue(cached.value, {
-                  cached: true,
-                  error: err2
-                })
-              );
-            }
-            return callback(err2);
+            ipv6Error = err2;
+          } else {
+            ipv6Addresses = addresses2 || [];
           }
-          if (addresses2 && addresses2.length) {
-            let value = {
-              addresses: addresses2,
+          const allAddresses = ipv4Addresses.concat(ipv6Addresses);
+          if (allAddresses.length) {
+            const value = {
+              addresses: allAddresses,
               servername: options.servername || options.host
             };
             dnsCache.set(options.host, {
@@ -46261,10 +46375,29 @@ var require_shared = __commonJS({
               })
             );
           }
+          if (ipv4Error && ipv6Error) {
+            if (cached) {
+              dnsCache.set(options.host, {
+                value: cached.value,
+                expires: Date.now() + (options.dnsTtl || DNS_TTL)
+              });
+              return callback(
+                null,
+                formatDNSValue(cached.value, {
+                  cached: true,
+                  error: ipv4Error
+                })
+              );
+            }
+          }
           try {
             dns.lookup(options.host, { all: true }, (err3, addresses3) => {
               if (err3) {
                 if (cached) {
+                  dnsCache.set(options.host, {
+                    value: cached.value,
+                    expires: Date.now() + (options.dnsTtl || DNS_TTL)
+                  });
                   return callback(
                     null,
                     formatDNSValue(cached.value, {
@@ -46275,11 +46408,11 @@ var require_shared = __commonJS({
                 }
                 return callback(err3);
               }
-              let address = addresses3 ? addresses3.filter((addr) => isFamilySupported(addr.family)).map((addr) => addr.address).shift() : false;
-              if (addresses3 && addresses3.length && !address) {
+              const supportedAddresses = addresses3 ? addresses3.filter((addr) => isFamilySupported(addr.family)).map((addr) => addr.address) : [];
+              if (addresses3 && addresses3.length && !supportedAddresses.length) {
                 console.warn(`Failed to resolve IPv${addresses3[0].family} addresses with current network`);
               }
-              if (!address && cached) {
+              if (!supportedAddresses.length && cached) {
                 return callback(
                   null,
                   formatDNSValue(cached.value, {
@@ -46287,8 +46420,8 @@ var require_shared = __commonJS({
                   })
                 );
               }
-              let value = {
-                addresses: address ? [address] : [options.host],
+              const value = {
+                addresses: supportedAddresses.length ? supportedAddresses : [options.host],
                 servername: options.servername || options.host
               };
               dnsCache.set(options.host, {
@@ -46302,110 +46435,99 @@ var require_shared = __commonJS({
                 })
               );
             });
-          } catch (err3) {
+          } catch (lookupErr) {
             if (cached) {
+              dnsCache.set(options.host, {
+                value: cached.value,
+                expires: Date.now() + (options.dnsTtl || DNS_TTL)
+              });
               return callback(
                 null,
                 formatDNSValue(cached.value, {
                   cached: true,
-                  error: err3
+                  error: lookupErr
                 })
               );
             }
-            return callback(err3);
+            return callback(ipv4Error || ipv6Error || lookupErr);
           }
         });
       });
     };
     module.exports.parseConnectionUrl = (str) => {
       str = str || "";
-      let options = {};
-      [urllib.parse(str, true)].forEach((url) => {
-        let auth;
-        switch (url.protocol) {
-          case "smtp:":
-            options.secure = false;
+      const options = {};
+      const url = urllib.parse(str, true);
+      switch (url.protocol) {
+        case "smtp:":
+          options.secure = false;
+          break;
+        case "smtps:":
+          options.secure = true;
+          break;
+        case "direct:":
+          options.direct = true;
+          break;
+      }
+      if (!isNaN(url.port) && Number(url.port)) {
+        options.port = Number(url.port);
+      }
+      if (url.hostname) {
+        options.host = url.hostname;
+      }
+      if (url.auth) {
+        const auth = url.auth.split(":");
+        options.auth = {
+          user: auth.shift(),
+          pass: auth.join(":")
+        };
+      }
+      Object.keys(url.query || {}).forEach((key) => {
+        let obj = options;
+        let lKey = key;
+        let value = url.query[key];
+        if (!isNaN(value)) {
+          value = Number(value);
+        }
+        switch (value) {
+          case "true":
+            value = true;
             break;
-          case "smtps:":
-            options.secure = true;
-            break;
-          case "direct:":
-            options.direct = true;
+          case "false":
+            value = false;
             break;
         }
-        if (!isNaN(url.port) && Number(url.port)) {
-          options.port = Number(url.port);
+        if (key.indexOf("tls.") === 0) {
+          lKey = key.substr(4);
+          if (!options.tls) {
+            options.tls = {};
+          }
+          obj = options.tls;
+        } else if (key.indexOf(".") >= 0) {
+          return;
         }
-        if (url.hostname) {
-          options.host = url.hostname;
+        if (!(lKey in obj)) {
+          obj[lKey] = value;
         }
-        if (url.auth) {
-          auth = url.auth.split(":");
-          if (!options.auth) {
-            options.auth = {};
-          }
-          options.auth.user = auth.shift();
-          options.auth.pass = auth.join(":");
-        }
-        Object.keys(url.query || {}).forEach((key) => {
-          let obj = options;
-          let lKey = key;
-          let value = url.query[key];
-          if (!isNaN(value)) {
-            value = Number(value);
-          }
-          switch (value) {
-            case "true":
-              value = true;
-              break;
-            case "false":
-              value = false;
-              break;
-          }
-          if (key.indexOf("tls.") === 0) {
-            lKey = key.substr(4);
-            if (!options.tls) {
-              options.tls = {};
-            }
-            obj = options.tls;
-          } else if (key.indexOf(".") >= 0) {
-            return;
-          }
-          if (!(lKey in obj)) {
-            obj[lKey] = value;
-          }
-        });
       });
       return options;
     };
     module.exports._logFunc = (logger, level, defaults, data, message, ...args) => {
-      let entry = {};
-      Object.keys(defaults || {}).forEach((key) => {
-        if (key !== "level") {
-          entry[key] = defaults[key];
-        }
-      });
-      Object.keys(data || {}).forEach((key) => {
-        if (key !== "level") {
-          entry[key] = data[key];
-        }
-      });
+      const entry = Object.assign({}, defaults || {}, data || {});
+      delete entry.level;
       logger[level](entry, message, ...args);
     };
     module.exports.getLogger = (options, defaults) => {
       options = options || {};
-      let response = {};
-      let levels = ["trace", "debug", "info", "warn", "error", "fatal"];
+      const response = {};
+      const levels = ["trace", "debug", "info", "warn", "error", "fatal"];
       if (!options.logger) {
         levels.forEach((level) => {
           response[level] = () => false;
         });
         return response;
       }
-      let logger = options.logger;
-      if (options.logger === true) {
-        logger = createDefaultLogger(levels);
-      }
+      const logger = options.logger === true ? createDefaultLogger(levels) : options.logger;
       levels.forEach((level) => {
         response[level] = (data, message, ...args) => {
           module.exports._logFunc(logger, level, defaults, data, message, ...args);
@@ -46413,67 +46535,80 @@ var require_shared = __commonJS({
       });
       return response;
     };
-    module.exports.callbackPromise = (resolve, reject) => function() {
-      let args = Array.from(arguments);
-      let err = args.shift();
+    module.exports.callbackPromise = (resolve2, reject) => function() {
+      const args = Array.from(arguments);
+      const err = args.shift();
       if (err) {
         reject(err);
       } else {
-        resolve(...args);
+        resolve2(...args);
       }
     };
     module.exports.parseDataURI = (uri) => {
-      let input = uri;
-      let commaPos = input.indexOf(",");
-      if (!commaPos) {
-        return uri;
+      if (typeof uri !== "string") {
+        return null;
       }
-      let data = input.substring(commaPos + 1);
-      let metaStr = input.substring("data:".length, commaPos);
+      if (!uri.startsWith("data:")) {
+        return null;
+      }
+      const commaPos = uri.indexOf(",");
+      if (commaPos === -1) {
+        return null;
+      }
+      const data = uri.substring(commaPos + 1);
+      const metaStr = uri.substring("data:".length, commaPos);
       let encoding;
-      let metaEntries = metaStr.split(";");
-      let lastMetaEntry = metaEntries.length > 1 ? metaEntries[metaEntries.length - 1] : false;
-      if (lastMetaEntry && lastMetaEntry.indexOf("=") < 0) {
-        encoding = lastMetaEntry.toLowerCase();
-        metaEntries.pop();
-      }
-      let contentType = metaEntries.shift() || "application/octet-stream";
-      let params = {};
-      for (let entry of metaEntries) {
-        let sep = entry.indexOf("=");
-        if (sep >= 0) {
-          let key = entry.substring(0, sep);
-          let value = entry.substring(sep + 1);
-          params[key] = value;
+      const metaEntries = metaStr.split(";");
+      if (metaEntries.length > 0) {
+        const lastEntry = metaEntries[metaEntries.length - 1].toLowerCase().trim();
+        if (["base64", "utf8", "utf-8"].includes(lastEntry) && lastEntry.indexOf("=") === -1) {
+          encoding = lastEntry;
+          metaEntries.pop();
         }
       }
-      switch (encoding) {
-        case "base64":
-          data = Buffer.from(data, "base64");
-          break;
-        case "utf8":
-          data = Buffer.from(data);
-          break;
-        default:
-          try {
-            data = Buffer.from(decodeURIComponent(data));
-          } catch (err) {
-            data = Buffer.from(data);
+      const contentType = metaEntries.length > 0 ? metaEntries.shift() : "application/octet-stream";
+      const params = {};
+      for (let i = 0; i < metaEntries.length; i++) {
+        const entry = metaEntries[i];
+        const sepPos = entry.indexOf("=");
+        if (sepPos > 0) {
+          const key = entry.substring(0, sepPos).trim();
+          const value = entry.substring(sepPos + 1).trim();
+          if (key) {
+            params[key] = value;
           }
-          data = Buffer.from(data);
+        }
       }
-      return { data, encoding, contentType, params };
+      let bufferData;
+      try {
+        if (encoding === "base64") {
+          bufferData = Buffer.from(data, "base64");
+        } else {
+          try {
+            bufferData = Buffer.from(decodeURIComponent(data));
+          } catch (_decodeError) {
+            bufferData = Buffer.from(data);
+          }
+        }
+      } catch (_bufferError) {
+        bufferData = Buffer.alloc(0);
+      }
+      return {
+        data: bufferData,
+        encoding: encoding || null,
+        contentType: contentType || "application/octet-stream",
+        params
+      };
     };
     module.exports.resolveContent = (data, key, callback) => {
       let promise;
       if (!callback) {
-        promise = new Promise((resolve, reject) => {
-          callback = module.exports.callbackPromise(resolve, reject);
+        promise = new Promise((resolve2, reject) => {
+          callback = module.exports.callbackPromise(resolve2, reject);
         });
       }
       let content = data && data[key] && data[key].content || data[key];
-      let contentStream;
-      let encoding = (typeof data[key] === "object" && data[key].encoding || "utf8").toString().toLowerCase().replace(/[-_\s]/g, "");
+      const encoding = (typeof data[key] === "object" && data[key].encoding || "utf8").toString().toLowerCase().replace(/[-_\s]/g, "");
       if (!content) {
         return callback(null, content);
       }
@@ -46491,10 +46626,9 @@ var require_shared = __commonJS({
             callback(null, value);
           });
         } else if (/^https?:\/\//i.test(content.path || content.href)) {
-          contentStream = nmfetch(content.path || content.href);
-          return resolveStream(contentStream, callback);
+          return resolveStream(nmfetch(content.path || content.href), callback);
         } else if (/^data:/i.test(content.path || content.href)) {
-          let parsedDataUri = module.exports.parseDataURI(content.path || content.href);
+          const parsedDataUri = module.exports.parseDataURI(content.path || content.href);
           if (!parsedDataUri || !parsedDataUri.data) {
             return callback(null, Buffer.from(0));
           }
@@ -46510,17 +46644,12 @@ var require_shared = __commonJS({
       return promise;
     };
     module.exports.assign = function() {
-      let args = Array.from(arguments);
-      let target = args.shift() || {};
+      const args = Array.from(arguments);
+      const target = args.shift() || {};
       args.forEach((source) => {
         Object.keys(source || {}).forEach((key) => {
           if (["tls", "auth"].includes(key) && source[key] && typeof source[key] === "object") {
-            if (!target[key]) {
-              target[key] = {};
-            }
-            Object.keys(source[key]).forEach((subKey) => {
-              target[key][subKey] = source[key][subKey];
-            });
+            target[key] = Object.assign(target[key] || {}, source[key]);
           } else {
             target[key] = source[key];
           }
@@ -46532,10 +46661,10 @@ var require_shared = __commonJS({
       if (!/[^\x21-\x2A\x2C-\x3C\x3E-\x7E]/.test(str)) {
         return str;
       }
-      let buf = Buffer.from(str);
+      const buf = Buffer.from(str);
       let result = "";
       for (let i = 0, len = buf.length; i < len; i++) {
-        let c = buf[i];
+        const c = buf[i];
         if (c < 33 || c > 126 || c === 43 || c === 61) {
           result += "+" + (c < 16 ? "0" : "") + c.toString(16).toUpperCase();
         } else {
@@ -46546,7 +46675,7 @@ var require_shared = __commonJS({
     };
     function resolveStream(stream, callback) {
       let responded = false;
-      let chunks = [];
+      const chunks = [];
       let chunklen = 0;
       stream.on("error", (err) => {
         if (responded) {
@@ -46577,13 +46706,8 @@ var require_shared = __commonJS({
       });
     }
     function createDefaultLogger(levels) {
-      let levelMaxLen = 0;
-      let levelNames = /* @__PURE__ */ new Map();
-      levels.forEach((level) => {
-        if (level.length > levelMaxLen) {
-          levelMaxLen = level.length;
-        }
-      });
+      const levelMaxLen = levels.reduce((max, level) => Math.max(max, level.length), 0);
+      const levelNames = /* @__PURE__ */ new Map();
       levels.forEach((level) => {
         let levelName = level.toUpperCase();
         if (levelName.length < levelMaxLen) {
@@ -46591,7 +46715,7 @@ var require_shared = __commonJS({
         }
         levelNames.set(level, levelName);
       });
-      let print = (level, entry, message, ...args) => {
+      const print = (level, entry, message, ...args) => {
         let prefix = "";
         if (entry) {
           if (entry.tnx === "server") {
@@ -46611,7 +46735,7 @@ var require_shared = __commonJS({
           console.log("[%s] %s %s", (/* @__PURE__ */ new Date()).toISOString().substr(0, 19).replace(/T/, " "), levelNames.get(level), prefix + line);
         });
       };
-      let logger = {};
+      const logger = {};
       levels.forEach((level) => {
         logger[level] = print.bind(null, level);
       });
@@ -47722,7 +47846,10 @@ var require_mime_types = __commonJS({
       ["bdm", "application/vnd.syncml.dm+wbxml"],
       ["bed", "application/vnd.realvnc.bed"],
       ["bh2", "application/vnd.fujitsu.oasysprs"],
-      ["bin", ["application/octet-stream", "application/mac-binary", "application/macbinary", "application/x-macbinary", "application/x-binary"]],
+      [
+        "bin",
+        ["application/octet-stream", "application/mac-binary", "application/macbinary", "application/x-macbinary", "application/x-binary"]
+      ],
       ["bm", "image/bmp"],
       ["bmi", "application/vnd.bmi"],
       ["bmp", ["image/bmp", "image/x-windows-bmp"]],
@@ -47767,7 +47894,10 @@ var require_mime_types = __commonJS({
       ["cii", "application/vnd.anser-web-certificate-issue-initiation"],
       ["cil", "application/vnd.ms-artgalry"],
       ["cla", "application/vnd.claymore"],
-      ["class", ["application/octet-stream", "application/java", "application/java-byte-code", "application/java-vm", "application/x-java-class"]],
+      [
+        "class",
+        ["application/octet-stream", "application/java", "application/java-byte-code", "application/java-vm", "application/x-java-class"]
+      ],
       ["clkk", "application/vnd.crick.clicker.keyboard"],
       ["clkp", "application/vnd.crick.clicker.palette"],
       ["clkt", "application/vnd.crick.clicker.template"],
@@ -48372,7 +48502,10 @@ var require_mime_types = __commonJS({
       ["sbml", "application/sbml+xml"],
       ["sc", "application/vnd.ibm.secure-container"],
       ["scd", "application/x-msschedule"],
-      ["scm", ["application/vnd.lotus-screencam", "video/x-scm", "text/x-script.guile", "application/x-lotusscreencam", "text/x-script.scheme"]],
+      [
+        "scm",
+        ["application/vnd.lotus-screencam", "video/x-scm", "text/x-script.guile", "application/x-lotusscreencam", "text/x-script.scheme"]
+      ],
       ["scq", "application/scvp-cv-request"],
       ["scs", "application/scvp-cv-response"],
       ["sct", "text/scriptlet"],
@@ -48682,12 +48815,9 @@ var require_mime_types = __commonJS({
         if (!filename) {
           return defaultMimeType;
         }
-        let parsed = path.parse(filename);
-        let extension = (parsed.ext.substr(1) || parsed.name || "").split("?").shift().trim().toLowerCase();
-        let value = defaultMimeType;
-        if (extensions.has(extension)) {
-          value = extensions.get(extension);
-        }
+        const parsed = path.parse(filename);
+        const extension = (parsed.ext.substr(1) || parsed.name || "").split("?").shift().trim().toLowerCase();
+        const value = extensions.has(extension) ? extensions.get(extension) : defaultMimeType;
         if (Array.isArray(value)) {
           return value[0];
         }
@@ -48697,11 +48827,11 @@ var require_mime_types = __commonJS({
         if (!mimeType) {
           return defaultExtension;
         }
-        let parts = (mimeType || "").toLowerCase().trim().split("/");
-        let rootType = parts.shift().trim();
-        let subType = parts.join("/").trim();
+        const parts = (mimeType || "").toLowerCase().trim().split("/");
+        const rootType = parts.shift().trim();
+        const subType = parts.join("/").trim();
         if (mimeTypes.has(rootType + "/" + subType)) {
-          let value = mimeTypes.get(rootType + "/" + subType);
+          const value = mimeTypes.get(rootType + "/" + subType);
           if (Array.isArray(value)) {
             return value[0];
           }
@@ -48964,7 +49094,7 @@ var require_punycode = __commonJS({
 var require_base64 = __commonJS({
   "node_modules/nodemailer/lib/base64/index.js"(exports, module) {
     "use strict";
-    var Transform = __require("stream").Transform;
+    var { Transform } = __require("stream");
     function encode(buffer2) {
       if (typeof buffer2 === "string") {
         buffer2 = Buffer.from(buffer2, "utf-8");
@@ -48977,11 +49107,12 @@ var require_base64 = __commonJS({
       if (str.length <= lineLength) {
         return str;
       }
-      let result = [];
+      const result = [];
       let pos = 0;
-      let chunkLength = lineLength * 1024;
+      const chunkLength = lineLength * 1024;
+      const wrapRegex = new RegExp(".{" + lineLength + "}", "g");
       while (pos < str.length) {
-        let wrappedLines = str.substr(pos, chunkLength).replace(new RegExp(".{" + lineLength + "}", "g"), "$&\r\n").trim();
+        const wrappedLines = str.substr(pos, chunkLength).replace(wrapRegex, "$&\r\n").trim();
         result.push(wrappedLines);
         pos += chunkLength;
       }
@@ -49020,15 +49151,15 @@ var require_base64 = __commonJS({
         let b64 = this._curLine + encode(chunk);
         if (this.options.lineLength) {
           b64 = wrap(b64, this.options.lineLength);
-          let lastLF = b64.lastIndexOf("\n");
+          const lastLF = b64.lastIndexOf("\n");
           if (lastLF < 0) {
             this._curLine = b64;
             b64 = "";
           } else if (lastLF === b64.length - 1) {
             this._curLine = "";
           } else {
-            this._curLine = b64.substr(lastLF + 1);
-            b64 = b64.substr(0, lastLF + 1);
+            this._curLine = b64.substring(lastLF + 1);
+            b64 = b64.substring(0, lastLF + 1);
           }
         }
         if (b64) {
@@ -49044,7 +49175,7 @@ var require_base64 = __commonJS({
         if (this._curLine) {
           this._curLine = wrap(this._curLine, this.options.lineLength);
           this.outputBytes += this._curLine.length;
-          this.push(this._curLine, "ascii");
+          this.push(Buffer.from(this._curLine, "ascii"));
           this._curLine = "";
         }
         done();
@@ -49062,29 +49193,28 @@ var require_base64 = __commonJS({
 var require_qp = __commonJS({
   "node_modules/nodemailer/lib/qp/index.js"(exports, module) {
     "use strict";
-    var Transform = __require("stream").Transform;
+    var { Transform } = __require("stream");
+    var QP_RANGES = [
+      [9],
+      // <TAB>
+      [10],
+      // <LF>
+      [13],
+      // <CR>
+      [32, 60],
+      // <SP>!"#$%&'()*+,-./0123456789:;
+      [62, 126]
+      // >?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}
+    ];
     function encode(buffer2) {
       if (typeof buffer2 === "string") {
         buffer2 = Buffer.from(buffer2, "utf-8");
       }
-      let ranges = [
-        // https://tools.ietf.org/html/rfc2045#section-6.7
-        [9],
-        // <TAB>
-        [10],
-        // <LF>
-        [13],
-        // <CR>
-        [32, 60],
-        // <SP>!"#$%&'()*+,-./0123456789:;
-        [62, 126]
-        // >?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}
-      ];
       let result = "";
       let ord;
       for (let i = 0, len = buffer2.length; i < len; i++) {
         ord = buffer2[i];
-        if (checkRanges(ord, ranges) && !((ord === 32 || ord === 9) && (i === len - 1 || buffer2[i + 1] === 10 || buffer2[i + 1] === 13))) {
+        if (checkRanges(ord, QP_RANGES) && !((ord === 32 || ord === 9) && (i === len - 1 || buffer2[i + 1] === 10 || buffer2[i + 1] === 13))) {
           result += String.fromCharCode(ord);
           continue;
         }
@@ -49099,9 +49229,9 @@ var require_qp = __commonJS({
         return str;
       }
       let pos = 0;
-      let len = str.length;
+      const len = str.length;
       let match, code, line;
-      let lineMargin = Math.floor(lineLength / 3);
+      const lineMargin = Math.floor(lineLength / 3);
       let result = "";
       while (pos < len) {
         line = str.substr(pos, lineLength);
@@ -49115,12 +49245,14 @@ var require_qp = __commonJS({
           result += line;
           pos += line.length;
           continue;
-        } else if (match = line.substr(-lineMargin).match(/\n.*?$/)) {
+        }
+        if (match = line.substr(-lineMargin).match(/\n.*?$/)) {
           line = line.substr(0, line.length - (match[0].length - 1));
           result += line;
           pos += line.length;
           continue;
-        } else if (line.length > lineLength - lineMargin && (match = line.substr(-lineMargin).match(/[ \t.,!?][^ \t.,!?]*$/))) {
+        }
+        if (line.length > lineLength - lineMargin && (match = line.substr(-lineMargin).match(/[ \t.,!?][^ \t.,!?]*$/))) {
           line = line.substr(0, line.length - (match[0].length - 1));
         } else if (line.match(/[=][\da-f]{0,2}$/i)) {
           if (match = line.match(/[=][\da-f]{0,1}$/i)) {
@@ -49154,13 +49286,14 @@ var require_qp = __commonJS({
     }
     function checkRanges(nr, ranges) {
       for (let i = ranges.length - 1; i >= 0; i--) {
-        if (!ranges[i].length) {
+        const range = ranges[i];
+        if (!range.length) {
           continue;
         }
-        if (ranges[i].length === 1 && nr === ranges[i][0]) {
+        if (range.length === 1 && nr === range[0]) {
           return true;
         }
-        if (ranges[i].length === 2 && nr >= ranges[i][0] && nr <= ranges[i][1]) {
+        if (range.length === 2 && nr >= range[0] && nr <= range[1]) {
           return true;
         }
       }
@@ -49236,11 +49369,7 @@ var require_mime_funcs = __commonJS({
        */
       isPlainText(value, isParam) {
         const re = isParam ? /[\x00-\x08\x0b\x0c\x0e-\x1f"\u0080-\uFFFF]/ : /[\x00-\x08\x0b\x0c\x0e-\x1f\u0080-\uFFFF]/;
-        if (typeof value !== "string" || re.test(value)) {
-          return false;
-        } else {
-          return true;
-        }
+        return typeof value === "string" && !re.test(value);
       },
       /**
        * Checks if a multi line string containes lines longer than the selected value.
@@ -49271,18 +49400,17 @@ var require_mime_funcs = __commonJS({
         mimeWordEncoding = (mimeWordEncoding || "Q").toString().toUpperCase().trim().charAt(0);
         maxLength = maxLength || 0;
         let encodedStr;
-        let toCharset = "UTF-8";
+        const toCharset = "UTF-8";
         if (maxLength && maxLength > 7 + toCharset.length) {
           maxLength -= 7 + toCharset.length;
         }
         if (mimeWordEncoding === "Q") {
           encodedStr = qp.encode(data).replace(/[^a-z0-9!*+\-/=]/gi, (chr) => {
-            let ord = chr.charCodeAt(0).toString(16).toUpperCase();
+            const ord = chr.charCodeAt(0).toString(16).toUpperCase();
             if (chr === " ") {
               return "_";
-            } else {
-              return "=" + (ord.length === 1 ? "0" + ord : ord);
             }
+            return "=" + (ord.length === 1 ? "0" + ord : ord);
           });
         } else if (mimeWordEncoding === "B") {
           encodedStr = typeof data === "string" ? data : base64.encode(data);
@@ -49292,7 +49420,7 @@ var require_mime_funcs = __commonJS({
           if (mimeWordEncoding === "Q") {
             encodedStr = this.splitMimeEncodedString(encodedStr, maxLength).join("?= =?" + toCharset + "?" + mimeWordEncoding + "?");
           } else {
-            let parts = [];
+            const parts = [];
             let lpart = "";
             for (let i = 0, len = encodedStr.length; i < len; i++) {
               let chr = encodedStr.charAt(i);
@@ -49331,24 +49459,22 @@ var require_mime_funcs = __commonJS({
        */
       encodeWords(value, mimeWordEncoding, maxLength, encodeAll) {
         maxLength = maxLength || 0;
-        let encodedValue;
-        let firstMatch = value.match(/(?:^|\s)([^\s]*["\u0080-\uFFFF])/);
+        const firstMatch = value.match(/(?:^|\s)([^\s]*["\u0080-\uFFFF])/);
         if (!firstMatch) {
           return value;
         }
         if (encodeAll) {
           return this.encodeWord(value, mimeWordEncoding, maxLength);
         }
-        let lastMatch = value.match(/(["\u0080-\uFFFF][^\s]*)[^"\u0080-\uFFFF]*$/);
+        const lastMatch = value.match(/(["\u0080-\uFFFF][^\s]*)[^"\u0080-\uFFFF]*$/);
         if (!lastMatch) {
           return value;
         }
-        let startIndex = firstMatch.index + (firstMatch[0].match(/[^\s]/) || {
+        const startIndex = firstMatch.index + (firstMatch[0].match(/[^\s]/) || {
           index: 0
         }).index;
-        let endIndex = lastMatch.index + (lastMatch[1] || "").length;
-        encodedValue = (startIndex ? value.substr(0, startIndex) : "") + this.encodeWord(value.substring(startIndex, endIndex), mimeWordEncoding || "Q", maxLength) + (endIndex < value.length ? value.substr(endIndex) : "");
-        return encodedValue;
+        const endIndex = lastMatch.index + (lastMatch[1] || "").length;
+        return (startIndex ? value.substr(0, startIndex) : "") + this.encodeWord(value.substring(startIndex, endIndex), mimeWordEncoding || "Q", maxLength) + (endIndex < value.length ? value.substr(endIndex) : "");
       },
       /**
        * Joins parsed header value together as 'value; param1=value1; param2=value2'
@@ -49358,9 +49484,9 @@ var require_mime_funcs = __commonJS({
        * @return {String} joined header value
        */
       buildHeaderValue(structured) {
-        let paramsArray = [];
+        const paramsArray = [];
         Object.keys(structured.params || {}).forEach((param) => {
-          let value = structured.params[param];
+          const value = structured.params[param];
           if (!this.isPlainText(value, true) || value.length >= 75) {
             this.buildHeaderParam(param, value, 50).forEach((encodedParam) => {
               if (!/[\s"\\;:/=(),<>@[\]?]|^[-']|'$/.test(encodedParam.value) || encodedParam.key.substr(-1) === "*") {
@@ -49393,9 +49519,8 @@ var require_mime_funcs = __commonJS({
        * @return {Array} A list of encoded keys and headers
        */
       buildHeaderParam(key, data, maxLength) {
-        let list = [];
+        const list = [];
         let encodedStr = typeof data === "string" ? data : (data || "").toString();
-        let encodedStrArr;
         let chr, ord;
         let line;
         let startPos = 0;
@@ -49423,7 +49548,7 @@ var require_mime_funcs = __commonJS({
           }
         } else {
           if (/[\uD800-\uDBFF]/.test(encodedStr)) {
-            encodedStrArr = [];
+            const encodedStrArr = [];
             for (i = 0, len = encodedStr.length; i < len; i++) {
               chr = encodedStr.charAt(i);
               ord = chr.charCodeAt(0);
@@ -49509,7 +49634,7 @@ var require_mime_funcs = __commonJS({
        * @return {Object} Header value as a parsed structure
        */
       parseHeaderValue(str) {
-        let response = {
+        const response = {
           value: false,
           params: {}
         };
@@ -49588,12 +49713,11 @@ var require_mime_funcs = __commonJS({
             value2 = response.params[key2].values.map((val) => val || "").join("");
             if (response.params[key2].charset) {
               response.params[key2] = "=?" + response.params[key2].charset + "?Q?" + value2.replace(/[=?_\s]/g, (s) => {
-                let c = s.charCodeAt(0).toString(16);
+                const c = s.charCodeAt(0).toString(16);
                 if (s === " ") {
                   return "_";
-                } else {
-                  return "%" + (c.length < 2 ? "0" : "") + c;
                 }
+                return "%" + (c.length < 2 ? "0" : "") + c;
               }).replace(/%/g, "=") + "?=";
             } else {
               response.params[key2] = value2;
@@ -49630,7 +49754,10 @@ var require_mime_funcs = __commonJS({
       foldLines(str, lineLength, afterSpace) {
         str = (str || "").toString();
         lineLength = lineLength || 76;
-        let pos = 0, len = str.length, result = "", line, match;
+        let pos = 0;
+        const len = str.length;
+        let result = "";
+        let line, match;
         while (pos < len) {
           line = str.substr(pos, lineLength);
           if (line.length < lineLength) {
@@ -49663,7 +49790,8 @@ var require_mime_funcs = __commonJS({
        * @return {Array} Split string
        */
       splitMimeEncodedString: (str, maxlen) => {
-        let curLine, match, chr, done, lines = [];
+        const lines = [];
+        let curLine, match, chr, done;
         maxlen = Math.max(maxlen || 0, 12);
         while (str.length) {
           curLine = str.substr(0, maxlen);
@@ -49707,7 +49835,7 @@ var require_mime_funcs = __commonJS({
         str = (str || "").toString();
         try {
           str = encodeURIComponent(str);
-        } catch (E) {
+        } catch (_E) {
           return str.replace(/[^\x00-\x1F *'()<>@,;:\\"[\]?=\u007F-\uFFFF]+/g, "");
         }
         return str.replace(/[\x00-\x1F *'()<>@,;:\\"[\]?=\u007F-\uFFFF]/g, (chr) => this.encodeURICharComponent(chr));
@@ -49720,36 +49848,43 @@ var require_mime_funcs = __commonJS({
 var require_addressparser = __commonJS({
   "node_modules/nodemailer/lib/addressparser/index.js"(exports, module) {
     "use strict";
-    function _handleAddress(tokens) {
+    function _handleAddress(tokens, depth) {
       let isGroup = false;
       let state = "text";
-      let address;
-      let addresses = [];
-      let data = {
+      const addresses = [];
+      const data = {
         address: [],
         comment: [],
         group: [],
-        text: []
+        text: [],
+        textWasQuoted: []
       };
-      let i;
-      let len;
-      for (i = 0, len = tokens.length; i < len; i++) {
-        let token = tokens[i];
-        let prevToken = i ? tokens[i - 1] : null;
+      let insideQuotes = false;
+      for (let i = 0, len = tokens.length; i < len; i++) {
+        const token = tokens[i];
+        const prevToken = i ? tokens[i - 1] : null;
         if (token.type === "operator") {
           switch (token.value) {
             case "<":
               state = "address";
+              insideQuotes = false;
               break;
             case "(":
               state = "comment";
+              insideQuotes = false;
               break;
             case ":":
               state = "group";
               isGroup = true;
+              insideQuotes = false;
+              break;
+            case '"':
+              insideQuotes = !insideQuotes;
+              state = "text";
               break;
             default:
               state = "text";
+              insideQuotes = false;
               break;
           }
         } else if (token.value) {
@@ -49758,8 +49893,14 @@ var require_addressparser = __commonJS({
           }
           if (prevToken && prevToken.noBreak && data[state].length) {
             data[state][data[state].length - 1] += token.value;
+            if (state === "text" && insideQuotes) {
+              data.textWasQuoted[data.textWasQuoted.length - 1] = true;
+            }
           } else {
             data[state].push(token.value);
+            if (state === "text") {
+              data.textWasQuoted.push(insideQuotes);
+            }
           }
         }
       }
@@ -49769,31 +49910,45 @@ var require_addressparser = __commonJS({
       }
       if (isGroup) {
         data.text = data.text.join(" ");
+        let groupMembers = [];
+        if (data.group.length) {
+          const parsedGroup = addressparser(data.group.join(","), { _depth: depth + 1 });
+          parsedGroup.forEach((member) => {
+            if (member.group) {
+              groupMembers = groupMembers.concat(member.group);
+            } else {
+              groupMembers.push(member);
+            }
+          });
+        }
         addresses.push({
-          name: data.text || address && address.name,
-          group: data.group.length ? addressparser(data.group.join(",")) : []
+          name: data.text || "",
+          group: groupMembers
         });
       } else {
         if (!data.address.length && data.text.length) {
-          for (i = data.text.length - 1; i >= 0; i--) {
-            if (data.text[i].match(/^[^@\s]+@[^@\s]+$/)) {
+          for (let i = data.text.length - 1; i >= 0; i--) {
+            if (!data.textWasQuoted[i] && /^[^@\s]+@[^@\s]+$/.test(data.text[i])) {
               data.address = data.text.splice(i, 1);
+              data.textWasQuoted.splice(i, 1);
               break;
             }
           }
-          let _regexHandler = function(address2) {
-            if (!data.address.length) {
-              data.address = [address2.trim()];
-              return " ";
-            } else {
-              return address2;
-            }
-          };
           if (!data.address.length) {
-            for (i = data.text.length - 1; i >= 0; i--) {
-              data.text[i] = data.text[i].replace(/\s*\b[^@\s]+@[^\s]+\b\s*/, _regexHandler).trim();
-              if (data.address.length) {
-                break;
+            let extracted = false;
+            for (let i = data.text.length - 1; i >= 0; i--) {
+              if (!data.textWasQuoted[i]) {
+                data.text[i] = data.text[i].replace(/\s*\b[^@\s]+@[^\s]+\b\s*/, (match) => {
+                  if (!extracted) {
+                    data.address = [match.trim()];
+                    extracted = true;
+                    return " ";
+                  }
+                  return match;
+                }).trim();
+                if (extracted) {
+                  break;
+                }
               }
             }
           }
@@ -49807,22 +49962,18 @@ var require_addressparser = __commonJS({
         }
         data.text = data.text.join(" ");
         data.address = data.address.join(" ");
-        if (!data.address && isGroup) {
-          return [];
-        } else {
-          address = {
-            address: data.address || data.text || "",
-            name: data.text || data.address || ""
-          };
-          if (address.address === address.name) {
-            if ((address.address || "").match(/@/)) {
-              address.name = "";
-            } else {
-              address.address = "";
-            }
+        const address = {
+          address: data.address || data.text || "",
+          name: data.text || data.address || ""
+        };
+        if (address.address === address.name) {
+          if (/@/.test(address.address || "")) {
+            address.name = "";
+          } else {
+            address.address = "";
           }
-          addresses.push(address);
         }
+        addresses.push(address);
       }
       return addresses;
     }
@@ -49855,10 +50006,10 @@ var require_addressparser = __commonJS({
        * @return {Array} An array of operator|text tokens
        */
       tokenize() {
-        let list = [];
+        const list = [];
         for (let i = 0, len = this.str.length; i < len; i++) {
-          let chr = this.str.charAt(i);
-          let nextChr = i < len - 1 ? this.str.charAt(i + 1) : null;
+          const chr = this.str.charAt(i);
+          const nextChr = i < len - 1 ? this.str.charAt(i + 1) : null;
           this.checkChar(chr, nextChr);
         }
         this.list.forEach((node) => {
@@ -49919,11 +50070,16 @@ var require_addressparser = __commonJS({
         this.escaped = false;
       }
     };
+    var MAX_NESTED_GROUP_DEPTH = 50;
     function addressparser(str, options) {
       options = options || {};
-      let tokenizer = new Tokenizer(str);
-      let tokens = tokenizer.tokenize();
-      let addresses = [];
+      const depth = options._depth || 0;
+      if (depth > MAX_NESTED_GROUP_DEPTH) {
+        return [];
+      }
+      const tokenizer = new Tokenizer(str);
+      const tokens = tokenizer.tokenize();
+      const addresses = [];
       let address = [];
       let parsedAddresses = [];
       tokens.forEach((token) => {
@@ -49939,25 +50095,32 @@ var require_addressparser = __commonJS({
       if (address.length) {
         addresses.push(address);
       }
-      addresses.forEach((address2) => {
-        address2 = _handleAddress(address2);
-        if (address2.length) {
-          parsedAddresses = parsedAddresses.concat(address2);
+      addresses.forEach((addr) => {
+        const handled = _handleAddress(addr, depth);
+        if (handled.length) {
+          parsedAddresses = parsedAddresses.concat(handled);
         }
       });
+      for (let i = parsedAddresses.length - 2; i >= 0; i--) {
+        const current = parsedAddresses[i];
+        const next = parsedAddresses[i + 1];
+        if (current.address === "" && current.name && !current.group && next.address && next.name) {
+          next.name = current.name + ", " + next.name;
+          parsedAddresses.splice(i, 1);
+        }
+      }
       if (options.flatten) {
-        let addresses2 = [];
-        let walkAddressList = (list) => {
-          list.forEach((address2) => {
-            if (address2.group) {
-              return walkAddressList(address2.group);
-            } else {
-              addresses2.push(address2);
+        const flatAddresses = [];
+        const walkAddressList = (list) => {
+          list.forEach((entry) => {
+            if (entry.group) {
+              return walkAddressList(entry.group);
             }
+            flatAddresses.push(entry);
           });
         };
         walkAddressList(parsedAddresses);
-        return addresses2;
+        return flatAddresses;
       }
       return parsedAddresses;
     }
@@ -49969,7 +50132,7 @@ var require_addressparser = __commonJS({
 var require_last_newline = __commonJS({
   "node_modules/nodemailer/lib/mime-node/last-newline.js"(exports, module) {
     "use strict";
-    var Transform = __require("stream").Transform;
+    var { Transform } = __require("stream");
     var LastNewline = class extends Transform {
       constructor() {
         super();
@@ -50002,12 +50165,10 @@ var require_last_newline = __commonJS({
 var require_le_windows = __commonJS({
   "node_modules/nodemailer/lib/mime-node/le-windows.js"(exports, module) {
     "use strict";
-    var stream = __require("stream");
-    var Transform = stream.Transform;
+    var { Transform } = __require("stream");
     var LeWindows = class extends Transform {
       constructor(options) {
         super(options);
-        this.options = options || {};
         this.lastByte = false;
       }
       /**
@@ -50046,12 +50207,10 @@ var require_le_windows = __commonJS({
 var require_le_unix = __commonJS({
   "node_modules/nodemailer/lib/mime-node/le-unix.js"(exports, module) {
     "use strict";
-    var stream = __require("stream");
-    var Transform = stream.Transform;
-    var LeWindows = class extends Transform {
+    var { Transform } = __require("stream");
+    var LeUnix = class extends Transform {
       constructor(options) {
         super(options);
-        this.options = options || {};
       }
       /**
        * Escapes dots
@@ -50075,7 +50234,7 @@ var require_le_unix = __commonJS({
         done();
       }
     };
-    module.exports = LeWindows;
+    module.exports = LeUnix;
   }
 });
 
@@ -50086,16 +50245,18 @@ var require_mime_node = __commonJS({
     var crypto2 = __require("crypto");
     var fs2 = __require("fs");
     var punycode = require_punycode();
-    var PassThrough = __require("stream").PassThrough;
+    var { PassThrough } = __require("stream");
     var shared = require_shared();
     var mimeFuncs = require_mime_funcs();
     var qp = require_qp();
     var base64 = require_base64();
     var addressparser = require_addressparser();
     var nmfetch = require_fetch();
+    var errors = require_errors7();
     var LastNewline = require_last_newline();
     var LeWindows = require_le_windows();
     var LeUnix = require_le_unix();
+    var FORMATTED_HEADERS = ["From", "Sender", "To", "Cc", "Bcc", "Reply-To", "Date", "References"];
     var MimeNode = class _MimeNode {
       constructor(contentType, options) {
         this.nodeCounter = 0;
@@ -50105,7 +50266,7 @@ var require_mime_node = __commonJS({
         this.disableFileAccess = !!options.disableFileAccess;
         this.disableUrlAccess = !!options.disableUrlAccess;
         this.normalizeHeaderKey = options.normalizeHeaderKey;
-        this.date = /* @__PURE__ */ new Date();
+        this.date = options.parentNode ? null : /* @__PURE__ */ new Date();
         this.rootNode = options.rootNode || this;
         this.keepBcc = !!options.keepBcc;
         if (options.filename) {
@@ -50144,7 +50305,7 @@ var require_mime_node = __commonJS({
           options = contentType;
           contentType = void 0;
         }
-        let node = new _MimeNode(contentType, options);
+        const node = new _MimeNode(contentType, options);
         this.appendChild(node);
         return node;
       }
@@ -50214,7 +50375,7 @@ var require_mime_node = __commonJS({
        * @return {Object} current node
        */
       setHeader(key, value) {
-        let added = false, headerValue;
+        let added = false;
         if (!value && key && typeof key === "object") {
           if (key.key && "value" in key) {
             this.setHeader(key.key, key.value);
@@ -50230,7 +50391,7 @@ var require_mime_node = __commonJS({
           return this;
         }
         key = this._normalizeHeaderKey(key);
-        headerValue = {
+        const headerValue = {
           key,
           value
         };
@@ -50332,8 +50493,8 @@ var require_mime_node = __commonJS({
             callback = shared.callbackPromise(resolve, reject);
           });
         }
-        let stream = this.createReadStream();
-        let buf = [];
+        const stream = this.createReadStream();
+        const buf = [];
         let buflen = 0;
         let returned = false;
         stream.on("readable", () => {
@@ -50365,7 +50526,7 @@ var require_mime_node = __commonJS({
       }
       getTransferEncoding() {
         let transferEncoding = false;
-        let contentType = (this.getHeader("Content-Type") || "").toString().toLowerCase().trim();
+        const contentType = (this.getHeader("Content-Type") || "").toString().toLowerCase().trim();
         if (this.content) {
           transferEncoding = (this.getHeader("Content-Transfer-Encoding") || "").toString().toLowerCase().trim();
           if (!transferEncoding || !["base64", "quoted-printable"].includes(transferEncoding)) {
@@ -50390,8 +50551,8 @@ var require_mime_node = __commonJS({
        * @returns {String} Headers
        */
       buildHeaders() {
-        let transferEncoding = this.getTransferEncoding();
-        let headers = [];
+        const transferEncoding = this.getTransferEncoding();
+        const headers = [];
         if (transferEncoding) {
           this.setHeader("Content-Transfer-Encoding", transferEncoding);
         }
@@ -50407,7 +50568,7 @@ var require_mime_node = __commonJS({
             this.setHeader("MIME-Version", "1.0");
           }
           for (let i = this._headers.length - 2; i >= 0; i--) {
-            let header = this._headers[i];
+            const header = this._headers[i];
             if (header.key === "Content-Type") {
               this._headers.splice(i, 1);
               this._headers.push(header);
@@ -50419,8 +50580,8 @@ var require_mime_node = __commonJS({
           let value = header.value;
           let structured;
           let param;
-          let options = {};
-          let formattedHeaders = ["From", "Sender", "To", "Cc", "Bcc", "Reply-To", "Date", "References"];
+          const options = {};
+          const formattedHeaders = FORMATTED_HEADERS;
           if (value && typeof value === "object" && !formattedHeaders.includes(key)) {
             Object.keys(value).forEach((key2) => {
               if (key2 !== "value") {
@@ -50474,7 +50635,7 @@ var require_mime_node = __commonJS({
             return;
           }
           if (typeof this.normalizeHeaderKey === "function") {
-            let normalized = this.normalizeHeaderKey(key, value);
+            const normalized = this.normalizeHeaderKey(key, value);
             if (normalized && typeof normalized === "string" && normalized.length) {
               key = normalized;
             }
@@ -50491,7 +50652,7 @@ var require_mime_node = __commonJS({
        */
       createReadStream(options) {
         options = options || {};
-        let stream = new PassThrough(options);
+        const stream = new PassThrough(options);
         let outputStream = stream;
         let transform;
         this.stream(stream, options, (err) => {
@@ -50547,25 +50708,25 @@ var require_mime_node = __commonJS({
         this._processFuncs.push(processFunc);
       }
       stream(outputStream, options, done) {
-        let transferEncoding = this.getTransferEncoding();
+        const transferEncoding = this.getTransferEncoding();
         let contentStream;
         let localStream;
         let returned = false;
-        let callback = (err) => {
+        const callback = (err) => {
           if (returned) {
             return;
           }
           returned = true;
           done(err);
         };
-        let finalize = () => {
+        const finalize = () => {
           let childId = 0;
-          let processChildNode = () => {
+          const processChildNode = () => {
             if (childId >= this.childNodes.length) {
               outputStream.write("\r\n--" + this.boundary + "--\r\n");
               return callback();
             }
-            let child = this.childNodes[childId++];
+            const child = this.childNodes[childId++];
             outputStream.write((childId > 1 ? "\r\n" : "") + "--" + this.boundary + "\r\n");
             child.stream(outputStream, options, (err) => {
               if (err) {
@@ -50580,7 +50741,7 @@ var require_mime_node = __commonJS({
             return callback();
           }
         };
-        let sendContent = () => {
+        const sendContent = () => {
           if (this.content) {
             if (Object.prototype.toString.call(this.content) === "[object Error]") {
               return callback(this.content);
@@ -50590,7 +50751,7 @@ var require_mime_node = __commonJS({
               this._contentErrorHandler = (err) => callback(err);
               this.content.once("error", this._contentErrorHandler);
             }
-            let createStream = () => {
+            const createStream = () => {
               if (["quoted-printable", "base64"].includes(transferEncoding)) {
                 contentStream = new (transferEncoding === "base64" ? base64 : qp).Encoder(options);
                 contentStream.pipe(outputStream, {
@@ -50610,10 +50771,10 @@ var require_mime_node = __commonJS({
               localStream.once("error", (err) => callback(err));
             };
             if (this.content._resolve) {
-              let chunks = [];
+              const chunks = [];
               let chunklen = 0;
               let returned2 = false;
-              let sourceStream = this._getStream(this.content);
+              const sourceStream = this._getStream(this.content);
               sourceStream.on("error", (err) => {
                 if (returned2) {
                   return;
@@ -50641,9 +50802,8 @@ var require_mime_node = __commonJS({
               setImmediate(createStream);
             }
             return;
-          } else {
-            return setImmediate(finalize);
           }
+          return setImmediate(finalize);
         };
         if (this._raw) {
           setImmediate(() => {
@@ -50653,7 +50813,7 @@ var require_mime_node = __commonJS({
             if (typeof this._raw.pipe === "function") {
               this._raw.removeListener("error", this._contentErrorHandler);
             }
-            let raw = this._getStream(this._raw);
+            const raw = this._getStream(this._raw);
             raw.pipe(outputStream, {
               end: false
             });
@@ -50690,7 +50850,7 @@ var require_mime_node = __commonJS({
           }
         });
         this._envelope.to = this._envelope.to.map((to) => to.address).filter((address) => address);
-        let standardFields = ["to", "cc", "bcc", "from"];
+        const standardFields = ["to", "cc", "bcc", "from"];
         Object.keys(envelope).forEach((key) => {
           if (!standardFields.includes(key)) {
             this._envelope[key] = envelope[key];
@@ -50704,9 +50864,9 @@ var require_mime_node = __commonJS({
        * @return {Object} Address object
        */
       getAddresses() {
-        let addresses = {};
+        const addresses = {};
         this._headers.forEach((header) => {
-          let key = header.key.toLowerCase();
+          const key = header.key.toLowerCase();
           if (["from", "sender", "reply-to", "to", "cc", "bcc"].includes(key)) {
             if (!Array.isArray(addresses[key])) {
               addresses[key] = [];
@@ -50725,12 +50885,12 @@ var require_mime_node = __commonJS({
         if (this._envelope) {
           return this._envelope;
         }
-        let envelope = {
+        const envelope = {
           from: false,
           to: []
         };
         this._headers.forEach((header) => {
-          let list = [];
+          const list = [];
           if (header.key === "From" || !envelope.from && ["Reply-To", "Sender"].includes(header.key)) {
             this._convertAddresses(this._parseAddresses(header.value), list);
             if (list.length && list[0]) {
@@ -50786,38 +50946,48 @@ var require_mime_node = __commonJS({
           setImmediate(() => {
             try {
               contentStream.end(content._resolvedValue);
-            } catch (err) {
-              contentStream.emit("error", err);
-            }
-          });
-          return contentStream;
-        } else if (typeof content.pipe === "function") {
-          return content;
-        } else if (content && typeof content.path === "string" && !content.href) {
-          if (this.disableFileAccess) {
-            contentStream = new PassThrough();
-            setImmediate(() => contentStream.emit("error", new Error("File access rejected for " + content.path)));
-            return contentStream;
-          }
-          return fs2.createReadStream(content.path);
-        } else if (content && typeof content.href === "string") {
-          if (this.disableUrlAccess) {
-            contentStream = new PassThrough();
-            setImmediate(() => contentStream.emit("error", new Error("Url access rejected for " + content.href)));
-            return contentStream;
-          }
-          return nmfetch(content.href, { headers: content.httpHeaders });
-        } else {
-          contentStream = new PassThrough();
-          setImmediate(() => {
-            try {
-              contentStream.end(content || "");
-            } catch (err) {
-              contentStream.emit("error", err);
+            } catch (_err) {
+              contentStream.emit("error", _err);
             }
           });
           return contentStream;
         }
+        if (typeof content.pipe === "function") {
+          return content;
+        }
+        if (content && typeof content.path === "string" && !content.href) {
+          if (this.disableFileAccess) {
+            contentStream = new PassThrough();
+            setImmediate(() => {
+              const err = new Error("File access rejected for " + content.path);
+              err.code = errors.EFILEACCESS;
+              contentStream.emit("error", err);
+            });
+            return contentStream;
+          }
+          return fs2.createReadStream(content.path);
+        }
+        if (content && typeof content.href === "string") {
+          if (this.disableUrlAccess) {
+            contentStream = new PassThrough();
+            setImmediate(() => {
+              const err = new Error("Url access rejected for " + content.href);
+              err.code = errors.EURLACCESS;
+              contentStream.emit("error", err);
+            });
+            return contentStream;
+          }
+          return nmfetch(content.href, { headers: content.httpHeaders });
+        }
+        contentStream = new PassThrough();
+        setImmediate(() => {
+          try {
+            contentStream.end(content || "");
+          } catch (_err) {
+            contentStream.emit("error", _err);
+          }
+        });
+        return contentStream;
       }
       /**
        * Parses addresses. Takes in a single address or an array or an
@@ -50941,23 +51111,21 @@ var require_mime_node = __commonJS({
        * @return {String} address string
        */
       _convertAddresses(addresses, uniqueList) {
-        let values2 = [];
+        const values2 = [];
         uniqueList = uniqueList || [];
         [].concat(addresses || []).forEach((address) => {
           if (address.address) {
             address.address = this._normalizeAddress(address.address);
             if (!address.name) {
               values2.push(address.address.indexOf(" ") >= 0 ? `<${address.address}>` : `${address.address}`);
-            } else if (address.name) {
+            } else {
               values2.push(`${this._encodeAddressName(address.name)} <${address.address}>`);
             }
-            if (address.address) {
-              if (!uniqueList.filter((a) => a.address === address.address).length) {
-                uniqueList.push(address);
-              }
+            if (!uniqueList.some((a) => a.address === address.address)) {
+              uniqueList.push(address);
             }
           } else if (address.group) {
-            let groupListAddresses = (address.group.length ? this._convertAddresses(address.group, uniqueList) : "").trim();
+            const groupListAddresses = (address.group.length ? this._convertAddresses(address.group, uniqueList) : "").trim();
             values2.push(`${this._encodeAddressName(address.name)}:${groupListAddresses};`);
           }
         });
@@ -50971,16 +51139,20 @@ var require_mime_node = __commonJS({
        */
       _normalizeAddress(address) {
         address = (address || "").toString().replace(/[\x00-\x1F<>]+/g, " ").trim();
-        let lastAt = address.lastIndexOf("@");
+        const lastAt = address.lastIndexOf("@");
         if (lastAt < 0) {
           return address;
         }
         let user = address.substr(0, lastAt);
-        let domain = address.substr(lastAt + 1);
-        let encodedDomain;
+        const domain = address.substr(lastAt + 1);
+        let encodedDomain = domain;
         try {
-          encodedDomain = punycode.toASCII(domain.toLowerCase());
-        } catch (err) {
+          if (/[\x80-\uFFFF]/.test(user)) {
+            encodedDomain = punycode.toUnicode(domain.toLowerCase());
+          } else {
+            encodedDomain = punycode.toASCII(domain.toLowerCase());
+          }
+        } catch (_err) {
         }
         if (user.indexOf(" ") >= 0) {
           if (user.charAt(0) !== '"') {
@@ -51025,15 +51197,20 @@ var require_mime_node = __commonJS({
        */
       _getTextEncoding(value) {
         value = (value || "").toString();
-        let encoding = this.textEncoding;
-        let latinLen;
-        let nonLatinLen;
-        if (!encoding) {
-          nonLatinLen = (value.match(/[\x00-\x08\x0B\x0C\x0E-\x1F\u0080-\uFFFF]/g) || []).length;
-          latinLen = (value.match(/[a-z]/gi) || []).length;
-          encoding = nonLatinLen < latinLen ? "Q" : "B";
+        if (this.textEncoding) {
+          return this.textEncoding;
         }
-        return encoding;
+        let nonLatinLen = 0;
+        let latinLen = 0;
+        for (let i = 0, len = value.length; i < len; i++) {
+          const code = value.charCodeAt(i);
+          if (code >= 0 && code <= 8 || code === 11 || code === 12 || code >= 14 && code <= 31 || code >= 128) {
+            nonLatinLen++;
+          } else if (code >= 65 && code <= 90 || code >= 97 && code <= 122) {
+            latinLen++;
+          }
+        }
+        return nonLatinLen < latinLen ? "Q" : "B";
       }
       /**
        * Generates a message id
@@ -51059,7 +51236,7 @@ var require_mail_composer = __commonJS({
     "use strict";
     var MimeNode = require_mime_node();
     var mimeFuncs = require_mime_funcs();
-    var parseDataURI = require_shared().parseDataURI;
+    var { parseDataURI } = require_shared();
     var MailComposer = class {
       constructor(mail) {
         this.mail = mail || {};
@@ -51096,7 +51273,7 @@ var require_mail_composer = __commonJS({
           this.message.addHeader(this.mail.headers);
         }
         ["from", "sender", "to", "cc", "bcc", "reply-to", "in-reply-to", "references", "subject", "message-id", "date"].forEach((header) => {
-          let key = header.replace(/-(\w)/g, (o, c) => c.toUpperCase());
+          const key = header.replace(/-(\w)/g, (o, c) => c.toUpperCase());
           if (this.mail[key]) {
             this.message.setHeader(header, this.mail[key]);
           }
@@ -51115,19 +51292,26 @@ var require_mail_composer = __commonJS({
        */
       getAttachments(findRelated) {
         let icalEvent, eventObject;
-        let attachments = [].concat(this.mail.attachments || []).map((attachment, i) => {
-          let data;
-          let isMessageNode = /^message\//i.test(attachment.contentType);
+        const attachments = [].concat(this.mail.attachments || []).map((attachment, i) => {
           if (/^data:/i.test(attachment.path || attachment.href)) {
             attachment = this._processDataUrl(attachment);
           }
-          let contentType = attachment.contentType || mimeFuncs.detectMimeType(attachment.filename || attachment.path || attachment.href || "bin");
-          let isImage = /^image\//i.test(contentType);
-          let contentDisposition = attachment.contentDisposition || (isMessageNode || isImage && attachment.cid ? "inline" : "attachment");
-          data = {
+          const contentType = attachment.contentType || mimeFuncs.detectMimeType(attachment.filename || attachment.path || attachment.href || "bin");
+          const isImage = /^image\//i.test(contentType);
+          const isMessageNode = /^message\//i.test(contentType);
+          const contentDisposition = attachment.contentDisposition || (isMessageNode || isImage && attachment.cid ? "inline" : "attachment");
+          let contentTransferEncoding;
+          if ("contentTransferEncoding" in attachment) {
+            contentTransferEncoding = attachment.contentTransferEncoding;
+          } else if (isMessageNode) {
+            contentTransferEncoding = "8bit";
+          } else {
+            contentTransferEncoding = "base64";
+          }
+          const data = {
             contentType,
             contentDisposition,
-            contentTransferEncoding: "contentTransferEncoding" in attachment ? attachment.contentTransferEncoding : "base64"
+            contentTransferEncoding
           };
           if (attachment.filename) {
             data.filename = attachment.filename;
@@ -51174,10 +51358,7 @@ var require_mail_composer = __commonJS({
               content: this.mail.icalEvent
             };
           }
-          eventObject = {};
-          Object.keys(icalEvent).forEach((key) => {
-            eventObject[key] = icalEvent[key];
-          });
+          eventObject = Object.assign({}, icalEvent);
           eventObject.contentType = "application/ics";
           if (!eventObject.headers) {
             eventObject.headers = {};
@@ -51191,12 +51372,11 @@ var require_mail_composer = __commonJS({
             attached: attachments.concat(eventObject || []),
             related: []
           };
-        } else {
-          return {
-            attached: attachments.filter((attachment) => !attachment.cid).concat(eventObject || []),
-            related: attachments.filter((attachment) => !!attachment.cid)
-          };
         }
+        return {
+          attached: attachments.filter((attachment) => !attachment.cid).concat(eventObject || []),
+          related: attachments.filter((attachment) => !!attachment.cid)
+        };
       }
       /**
        * List alternatives. Resulting objects can be used as input for MimeNode nodes
@@ -51204,7 +51384,8 @@ var require_mail_composer = __commonJS({
        * @returns {Array} An array of alternative elements. Includes the `text` and `html` values as well
        */
       getAlternatives() {
-        let alternatives = [], text, html, watchHtml, amp, icalEvent, eventObject;
+        const alternatives = [];
+        let text, html, watchHtml, amp, icalEvent, eventObject;
         if (this.mail.text) {
           if (typeof this.mail.text === "object" && (this.mail.text.content || this.mail.text.path || this.mail.text.href || this.mail.text.raw)) {
             text = this.mail.text;
@@ -51243,10 +51424,7 @@ var require_mail_composer = __commonJS({
               content: this.mail.icalEvent
             };
           }
-          eventObject = {};
-          Object.keys(icalEvent).forEach((key) => {
-            eventObject[key] = icalEvent[key];
-          });
+          eventObject = Object.assign({}, icalEvent);
           if (eventObject.content && typeof eventObject.content === "object") {
             eventObject.content._resolve = true;
           }
@@ -51267,11 +51445,10 @@ var require_mail_composer = __commonJS({
           html.contentType = "text/html; charset=utf-8";
         }
         [].concat(text || []).concat(watchHtml || []).concat(amp || []).concat(html || []).concat(eventObject || []).concat(this.mail.alternatives || []).forEach((alternative) => {
-          let data;
           if (/^data:/i.test(alternative.path || alternative.href)) {
             alternative = this._processDataUrl(alternative);
           }
-          data = {
+          const data = {
             contentType: alternative.contentType || mimeFuncs.detectMimeType(alternative.filename || alternative.path || alternative.href || "txt"),
             contentTransferEncoding: alternative.contentTransferEncoding
           };
@@ -51313,25 +51490,20 @@ var require_mail_composer = __commonJS({
        * @returns {Object} MimeNode node element
        */
       _createMixed(parentNode) {
-        let node;
-        if (!parentNode) {
-          node = new MimeNode("multipart/mixed", {
-            baseBoundary: this.mail.baseBoundary,
-            textEncoding: this.mail.textEncoding,
-            boundaryPrefix: this.mail.boundaryPrefix,
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        } else {
-          node = parentNode.createChild("multipart/mixed", {
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        }
+        const node = parentNode ? parentNode.createChild("multipart/mixed", {
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        }) : new MimeNode("multipart/mixed", {
+          baseBoundary: this.mail.baseBoundary,
+          textEncoding: this.mail.textEncoding,
+          boundaryPrefix: this.mail.boundaryPrefix,
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        });
         if (this._useAlternative) {
           this._createAlternative(node);
         } else if (this._useRelated) {
@@ -51352,25 +51524,20 @@ var require_mail_composer = __commonJS({
        * @returns {Object} MimeNode node element
        */
       _createAlternative(parentNode) {
-        let node;
-        if (!parentNode) {
-          node = new MimeNode("multipart/alternative", {
-            baseBoundary: this.mail.baseBoundary,
-            textEncoding: this.mail.textEncoding,
-            boundaryPrefix: this.mail.boundaryPrefix,
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        } else {
-          node = parentNode.createChild("multipart/alternative", {
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        }
+        const node = parentNode ? parentNode.createChild("multipart/alternative", {
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        }) : new MimeNode("multipart/alternative", {
+          baseBoundary: this.mail.baseBoundary,
+          textEncoding: this.mail.textEncoding,
+          boundaryPrefix: this.mail.boundaryPrefix,
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        });
         this._alternatives.forEach((alternative) => {
           if (this._useRelated && this._htmlNode === alternative) {
             this._createRelated(node);
@@ -51387,25 +51554,20 @@ var require_mail_composer = __commonJS({
        * @returns {Object} MimeNode node element
        */
       _createRelated(parentNode) {
-        let node;
-        if (!parentNode) {
-          node = new MimeNode('multipart/related; type="text/html"', {
-            baseBoundary: this.mail.baseBoundary,
-            textEncoding: this.mail.textEncoding,
-            boundaryPrefix: this.mail.boundaryPrefix,
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        } else {
-          node = parentNode.createChild('multipart/related; type="text/html"', {
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        }
+        const node = parentNode ? parentNode.createChild('multipart/related; type="text/html"', {
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        }) : new MimeNode('multipart/related; type="text/html"', {
+          baseBoundary: this.mail.baseBoundary,
+          textEncoding: this.mail.textEncoding,
+          boundaryPrefix: this.mail.boundaryPrefix,
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        });
         this._createContentNode(node, this._htmlNode);
         this._attachments.related.forEach((alternative) => this._createContentNode(node, alternative));
         return node;
@@ -51420,29 +51582,24 @@ var require_mail_composer = __commonJS({
       _createContentNode(parentNode, element) {
         element = element || {};
         element.content = element.content || "";
-        let node;
-        let encoding = (element.encoding || "utf8").toString().toLowerCase().replace(/[-_\s]/g, "");
-        if (!parentNode) {
-          node = new MimeNode(element.contentType, {
-            filename: element.filename,
-            baseBoundary: this.mail.baseBoundary,
-            textEncoding: this.mail.textEncoding,
-            boundaryPrefix: this.mail.boundaryPrefix,
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        } else {
-          node = parentNode.createChild(element.contentType, {
-            filename: element.filename,
-            textEncoding: this.mail.textEncoding,
-            disableUrlAccess: this.mail.disableUrlAccess,
-            disableFileAccess: this.mail.disableFileAccess,
-            normalizeHeaderKey: this.mail.normalizeHeaderKey,
-            newline: this.mail.newline
-          });
-        }
+        const encoding = (element.encoding || "utf8").toString().toLowerCase().replace(/[-_\s]/g, "");
+        const node = parentNode ? parentNode.createChild(element.contentType, {
+          filename: element.filename,
+          textEncoding: this.mail.textEncoding,
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        }) : new MimeNode(element.contentType, {
+          filename: element.filename,
+          baseBoundary: this.mail.baseBoundary,
+          textEncoding: this.mail.textEncoding,
+          boundaryPrefix: this.mail.boundaryPrefix,
+          disableUrlAccess: this.mail.disableUrlAccess,
+          disableFileAccess: this.mail.disableFileAccess,
+          normalizeHeaderKey: this.mail.normalizeHeaderKey,
+          newline: this.mail.newline
+        });
         if (element.headers) {
           node.addHeader(element.headers);
         }
@@ -51477,9 +51634,35 @@ var require_mail_composer = __commonJS({
        * @return {Object} Parsed element
        */
       _processDataUrl(element) {
+        const dataUrl = element.path || element.href;
+        if (!dataUrl || typeof dataUrl !== "string") {
+          return element;
+        }
+        if (!dataUrl.startsWith("data:")) {
+          return element;
+        }
+        if (dataUrl.length > 52428800) {
+          let detectedType = "application/octet-stream";
+          const commaPos = dataUrl.indexOf(",");
+          if (commaPos > 0 && commaPos < 200) {
+            const header = dataUrl.substring(5, commaPos);
+            const parts = header.split(";");
+            if (parts[0] && parts[0].includes("/")) {
+              detectedType = parts[0].trim();
+            }
+          }
+          return Object.assign({}, element, {
+            path: false,
+            href: false,
+            content: Buffer.alloc(0),
+            contentType: element.contentType || detectedType
+          });
+        }
         let parsedDataUri;
-        if ((element.path || element.href).match(/^data:/)) {
-          parsedDataUri = parseDataURI(element.path || element.href);
+        try {
+          parsedDataUri = parseDataURI(dataUrl);
+        } catch (_err) {
+          return element;
         }
         if (!parsedDataUri) {
           return element;
@@ -51503,7 +51686,7 @@ var require_mail_composer = __commonJS({
 var require_message_parser = __commonJS({
   "node_modules/nodemailer/lib/dkim/message-parser.js"(exports, module) {
     "use strict";
-    var Transform = __require("stream").Transform;
+    var { Transform } = __require("stream");
     var MessageParser = class extends Transform {
       constructor(options) {
         super(options);
@@ -51520,8 +51703,8 @@ var require_message_parser = __commonJS({
        * @param {Buffer} data Next data chunk from the stream
        */
       updateLastBytes(data) {
-        let lblen = this.lastBytes.length;
-        let nblen = Math.min(data.length, lblen);
+        const lblen = this.lastBytes.length;
+        const nblen = Math.min(data.length, lblen);
         for (let i = 0, len = lblen - nblen; i < len; i++) {
           this.lastBytes[i] = this.lastBytes[i + nblen];
         }
@@ -51540,9 +51723,8 @@ var require_message_parser = __commonJS({
         if (this.headersParsed) {
           return true;
         }
-        let lblen = this.lastBytes.length;
+        const lblen = this.lastBytes.length;
         let headerPos = 0;
-        this.curLinePos = 0;
         for (let i = 0, len = this.lastBytes.length + data.length; i < len; i++) {
           let chr;
           if (i < lblen) {
@@ -51551,8 +51733,8 @@ var require_message_parser = __commonJS({
             chr = data[i - lblen];
           }
           if (chr === 10 && i) {
-            let pr1 = i - 1 < lblen ? this.lastBytes[i - 1] : data[i - 1 - lblen];
-            let pr2 = i > 1 ? i - 2 < lblen ? this.lastBytes[i - 2] : data[i - 2 - lblen] : false;
+            const pr1 = i - 1 < lblen ? this.lastBytes[i - 1] : data[i - 1 - lblen];
+            const pr2 = i > 1 ? i - 2 < lblen ? this.lastBytes[i - 2] : data[i - 2 - lblen] : false;
             if (pr1 === 10) {
               this.headersParsed = true;
               headerPos = i - lblen + 1;
@@ -51572,15 +51754,14 @@ var require_message_parser = __commonJS({
           this.headerChunks = null;
           this.emit("headers", this.parseHeaders());
           if (data.length - 1 > headerPos) {
-            let chunk = data.slice(headerPos);
+            const chunk = data.slice(headerPos);
             this.bodySize += chunk.length;
             setImmediate(() => this.push(chunk));
           }
           return false;
-        } else {
-          this.headerBytes += data.length;
-          this.headerChunks.push(data);
         }
+        this.headerBytes += data.length;
+        this.headerChunks.push(data);
         this.updateLastBytes(data);
         return false;
       }
@@ -51605,7 +51786,7 @@ var require_message_parser = __commonJS({
       }
       _flush(callback) {
         if (this.headerChunks) {
-          let chunk = Buffer.concat(this.headerChunks, this.headerBytes);
+          const chunk = Buffer.concat(this.headerChunks, this.headerBytes);
           this.bodySize += chunk.length;
           this.push(chunk);
           this.headerChunks = null;
@@ -51613,7 +51794,7 @@ var require_message_parser = __commonJS({
         callback();
       }
       parseHeaders() {
-        let lines = (this.rawHeaders || "").toString().split(/\r?\n/);
+        const lines = (this.rawHeaders || "").toString().split(/\r?\n/);
         for (let i = lines.length - 1; i > 0; i--) {
           if (/^\s/.test(lines[i])) {
             lines[i - 1] += "\n" + lines[i];
@@ -51634,7 +51815,7 @@ var require_message_parser = __commonJS({
 var require_relaxed_body = __commonJS({
   "node_modules/nodemailer/lib/dkim/relaxed-body.js"(exports, module) {
     "use strict";
-    var Transform = __require("stream").Transform;
+    var { Transform } = __require("stream");
     var crypto2 = __require("crypto");
     var RelaxedBody = class extends Transform {
       constructor(options) {
@@ -51653,7 +51834,7 @@ var require_relaxed_body = __commonJS({
         let nextRemainder = "";
         let state = "file";
         for (let i = chunk.length - 1; i >= 0; i--) {
-          let c = chunk[i];
+          const c = chunk[i];
           if (state === "file" && (c === 10 || c === 13)) {
           } else if (state === "file" && (c === 9 || c === 32)) {
             state = "line";
@@ -51748,24 +51929,24 @@ var require_sign = __commonJS({
     var crypto2 = __require("crypto");
     module.exports = (headers, hashAlgo, bodyHash, options) => {
       options = options || {};
-      let defaultFieldNames = "From:Sender:Reply-To:Subject:Date:Message-ID:To:Cc:MIME-Version:Content-Type:Content-Transfer-Encoding:Content-ID:Content-Description:Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc:Resent-Message-ID:In-Reply-To:References:List-Id:List-Help:List-Unsubscribe:List-Subscribe:List-Post:List-Owner:List-Archive";
-      let fieldNames = options.headerFieldNames || defaultFieldNames;
-      let canonicalizedHeaderData = relaxedHeaders(headers, fieldNames, options.skipFields);
-      let dkimHeader = generateDKIMHeader(options.domainName, options.keySelector, canonicalizedHeaderData.fieldNames, hashAlgo, bodyHash);
-      let signer, signature;
+      const defaultFieldNames = "From:Sender:Reply-To:Subject:Date:Message-ID:To:Cc:MIME-Version:Content-Type:Content-Transfer-Encoding:Content-ID:Content-Description:Resent-Date:Resent-From:Resent-Sender:Resent-To:Resent-Cc:Resent-Message-ID:In-Reply-To:References:List-Id:List-Help:List-Unsubscribe:List-Subscribe:List-Post:List-Owner:List-Archive";
+      const fieldNames = options.headerFieldNames || defaultFieldNames;
+      const canonicalizedHeaderData = relaxedHeaders(headers, fieldNames, options.skipFields);
+      const dkimHeader = generateDKIMHeader(options.domainName, options.keySelector, canonicalizedHeaderData.fieldNames, hashAlgo, bodyHash);
       canonicalizedHeaderData.headers += "dkim-signature:" + relaxedHeaderLine(dkimHeader);
-      signer = crypto2.createSign(("rsa-" + hashAlgo).toUpperCase());
+      const signer = crypto2.createSign(("rsa-" + hashAlgo).toUpperCase());
       signer.update(canonicalizedHeaderData.headers);
+      let signature;
       try {
         signature = signer.sign(options.privateKey, "base64");
-      } catch (E) {
+      } catch (_E) {
         return false;
       }
       return dkimHeader + signature.replace(/(^.{73}|.{75}(?!\r?\n|\r))/g, "$&\r\n ").trim();
     };
     module.exports.relaxedHeaders = relaxedHeaders;
     function generateDKIMHeader(domainName, keySelector, fieldNames, hashAlgo, bodyHash) {
-      let dkim = [
+      const dkim = [
         "v=1",
         "a=rsa-" + hashAlgo,
         "c=relaxed/relaxed",
@@ -51778,9 +51959,9 @@ var require_sign = __commonJS({
       return mimeFuncs.foldLines("DKIM-Signature: " + dkim, 76) + ";\r\n b=";
     }
     function relaxedHeaders(headers, fieldNames, skipFields) {
-      let includedFields = /* @__PURE__ */ new Set();
-      let skip = /* @__PURE__ */ new Set();
-      let headerFields = /* @__PURE__ */ new Map();
+      const includedFields = /* @__PURE__ */ new Set();
+      const skip = /* @__PURE__ */ new Set();
+      const headerFields = /* @__PURE__ */ new Map();
       (skipFields || "").toLowerCase().split(":").forEach((field) => {
         skip.add(field.trim());
       });
@@ -51788,13 +51969,13 @@ var require_sign = __commonJS({
         includedFields.add(field.trim());
       });
       for (let i = headers.length - 1; i >= 0; i--) {
-        let line = headers[i];
+        const line = headers[i];
         if (includedFields.has(line.key) && !headerFields.has(line.key)) {
           headerFields.set(line.key, relaxedHeaderLine(line.line));
         }
       }
-      let headersList = [];
-      let fields = [];
+      const headersList = [];
+      const fields = [];
       includedFields.forEach((field) => {
         if (headerFields.has(field)) {
           fields.push(field);
@@ -51819,12 +52000,12 @@ var require_dkim = __commonJS({
     var MessageParser = require_message_parser();
     var RelaxedBody = require_relaxed_body();
     var sign = require_sign();
-    var PassThrough = __require("stream").PassThrough;
+    var { PassThrough } = __require("stream");
     var fs2 = __require("fs");
     var path = __require("path");
     var crypto2 = __require("crypto");
     var DKIM_ALGO = "sha256";
-    var MAX_MESSAGE_SIZE = 128 * 1024;
+    var MAX_MESSAGE_SIZE = 2 * 1024 * 1024;
     var DKIMSigner = class {
       constructor(options, keys, input, output) {
         this.options = options || {};
@@ -51878,7 +52059,7 @@ var require_dkim = __commonJS({
           }
           return this.createReadCache();
         }
-        let chunk = this.chunks[this.readPos++];
+        const chunk = this.chunks[this.readPos++];
         if (this.output.write(chunk) === false) {
           return this.output.once("drain", () => {
             this.sendNextChunk();
@@ -51888,13 +52069,13 @@ var require_dkim = __commonJS({
       }
       sendSignedOutput() {
         let keyPos = 0;
-        let signNextKey = () => {
+        const signNextKey = () => {
           if (keyPos >= this.keys.length) {
             this.output.write(this.parser.rawHeaders);
             return setImmediate(() => this.sendNextChunk());
           }
-          let key = this.keys[keyPos++];
-          let dkimField = sign(this.headers, this.hashAlgo, this.bodyHash, {
+          const key = this.keys[keyPos++];
+          const dkimField = sign(this.headers, this.hashAlgo, this.bodyHash, {
             domainName: key.domainName,
             keySelector: key.keySelector,
             privateKey: key.privateKey,
@@ -51977,7 +52158,7 @@ var require_dkim = __commonJS({
         );
       }
       sign(input, extraOptions) {
-        let output = new PassThrough();
+        const output = new PassThrough();
         let inputStream = input;
         let writeValue = false;
         if (Buffer.isBuffer(input)) {
@@ -51989,17 +52170,9 @@ var require_dkim = __commonJS({
         }
         let options = this.options;
         if (extraOptions && Object.keys(extraOptions).length) {
-          options = {};
-          Object.keys(this.options || {}).forEach((key) => {
-            options[key] = this.options[key];
-          });
-          Object.keys(extraOptions || {}).forEach((key) => {
-            if (!(key in options)) {
-              options[key] = extraOptions[key];
-            }
-          });
+          options = Object.assign({}, extraOptions, this.options);
         }
-        let signer = new DKIMSigner(options, this.keys, inputStream, output);
+        const signer = new DKIMSigner(options, this.keys, inputStream, output);
         setImmediate(() => {
           signer.signStream();
           if (writeValue) {
@@ -52022,35 +52195,35 @@ var require_http_proxy_client = __commonJS({
     var net2 = __require("net");
     var tls2 = __require("tls");
     var urllib = __require("url");
+    var errors = require_errors7();
     function httpProxyClient(proxyUrl, destinationPort, destinationHost, callback) {
-      let proxy = urllib.parse(proxyUrl);
-      let options;
-      let connect;
-      let socket;
-      options = {
+      const proxy = urllib.parse(proxyUrl);
+      const options = {
         host: proxy.hostname,
         port: Number(proxy.port) ? Number(proxy.port) : proxy.protocol === "https:" ? 443 : 80
       };
+      let connect;
       if (proxy.protocol === "https:") {
         options.rejectUnauthorized = false;
         connect = tls2.connect.bind(tls2);
       } else {
         connect = net2.connect.bind(net2);
       }
+      let socket;
       let finished = false;
-      let tempSocketErr = (err) => {
+      const tempSocketErr = (err) => {
         if (finished) {
           return;
         }
         finished = true;
         try {
           socket.destroy();
-        } catch (E) {
+        } catch (_E) {
         }
         callback(err);
       };
-      let timeoutErr = () => {
-        let err = new Error("Proxy socket timed out");
+      const timeoutErr = () => {
+        const err = new Error("Proxy socket timed out");
         err.code = "ETIMEDOUT";
         tempSocketErr(err);
       };
@@ -52058,7 +52231,7 @@ var require_http_proxy_client = __commonJS({
         if (finished) {
           return;
         }
-        let reqHeaders = {
+        const reqHeaders = {
           Host: destinationHost + ":" + destinationPort,
           Connection: "close"
         };
@@ -52072,7 +52245,7 @@ var require_http_proxy_client = __commonJS({
           "\r\n\r\n"
         );
         let headers = "";
-        let onSocketData = (chunk) => {
+        const onSocketData = (chunk) => {
           let match;
           let remainder;
           if (finished) {
@@ -52091,9 +52264,11 @@ var require_http_proxy_client = __commonJS({
             if (!match || (match[1] || "").charAt(0) !== "2") {
               try {
                 socket.destroy();
-              } catch (E) {
+              } catch (_E) {
               }
-              return callback(new Error("Invalid response from proxy" + (match && ": " + match[1] || "")));
+              const err = new Error("Invalid response from proxy" + (match && ": " + match[1] || ""));
+              err.code = errors.EPROXY;
+              return callback(err);
             }
             socket.removeListener("error", tempSocketErr);
             socket.removeListener("timeout", timeoutErr);
@@ -52124,11 +52299,9 @@ var require_mail_message = __commonJS({
         this.data = {};
         this.message = null;
         data = data || {};
-        let options = mailer.options || {};
-        let defaults = mailer._defaults || {};
-        Object.keys(data).forEach((key) => {
-          this.data[key] = data[key];
-        });
+        const options = mailer.options || {};
+        const defaults = mailer._defaults || {};
+        Object.assign(this.data, data);
         this.data.headers = this.data.headers || {};
         Object.keys(defaults).forEach((key) => {
           if (!(key in this.data)) {
@@ -52151,7 +52324,7 @@ var require_mail_message = __commonJS({
         return shared.resolveContent(...args);
       }
       resolveAll(callback) {
-        let keys = [
+        const keys = [
           [this.data, "html"],
           [this.data, "text"],
           [this.data, "watchHtml"],
@@ -52177,8 +52350,8 @@ var require_mail_message = __commonJS({
             keys.push([this.data.attachments, i]);
           });
         }
-        let mimeNode = new MimeNode();
-        let addressKeys = ["from", "to", "cc", "bcc", "sender", "replyTo"];
+        const mimeNode = new MimeNode();
+        const addressKeys = ["from", "to", "cc", "bcc", "sender", "replyTo"];
         addressKeys.forEach((address) => {
           let value;
           if (this.message) {
@@ -52192,18 +52365,18 @@ var require_mail_message = __commonJS({
             this.data[address] = null;
           }
         });
-        let singleKeys = ["from", "sender"];
+        const singleKeys = ["from", "sender"];
         singleKeys.forEach((address) => {
           if (this.data[address]) {
             this.data[address] = this.data[address].shift();
           }
         });
         let pos = 0;
-        let resolveNext = () => {
+        const resolveNext = () => {
           if (pos >= keys.length) {
             return callback(null, this.data);
           }
-          let args = keys[pos++];
+          const args = keys[pos++];
           if (!args[0] || !args[0][args[1]]) {
             return resolveNext();
           }
@@ -52211,7 +52384,7 @@ var require_mail_message = __commonJS({
             if (err) {
               return callback(err);
             }
-            let node = {
+            const node = {
               content: value
             };
             if (args[0][args[1]] && typeof args[0][args[1]] === "object" && !Buffer.isBuffer(args[0][args[1]])) {
@@ -52228,8 +52401,8 @@ var require_mail_message = __commonJS({
         setImmediate(() => resolveNext());
       }
       normalize(callback) {
-        let envelope = this.data.envelope || this.message.getEnvelope();
-        let messageId = this.message.messageId();
+        const envelope = this.data.envelope || this.message.getEnvelope();
+        const messageId = this.message.messageId();
         this.resolveAll((err, data) => {
           if (err) {
             return callback(err);
@@ -52277,7 +52450,7 @@ var require_mail_message = __commonJS({
             }
           });
           if (data.list && typeof data.list === "object") {
-            let listHeaders = this._getListHeaders(data.list);
+            const listHeaders = this._getListHeaders(data.list);
             listHeaders.forEach((entry) => {
               data.normalizedHeaders[entry.key] = entry.value.map((val) => val && val.value || val).join(", ");
             });
@@ -52319,13 +52492,11 @@ var require_mail_message = __commonJS({
         if (!this.message || !this.data.list || typeof this.data.list !== "object") {
           return;
         }
-        if (this.data.list && typeof this.data.list === "object") {
-          this._getListHeaders(this.data.list).forEach((listHeader) => {
-            listHeader.value.forEach((value) => {
-              this.message.addHeader(listHeader.key, value);
-            });
+        this._getListHeaders(this.data.list).forEach((listHeader) => {
+          listHeader.value.forEach((value) => {
+            this.message.addHeader(listHeader.key, value);
           });
-        }
+        });
       }
       _getListHeaders(listData) {
         return Object.keys(listData).map((key) => ({
@@ -52385,6 +52556,7 @@ var require_mailer = __commonJS({
     var MailComposer = require_mail_composer();
     var DKIM = require_dkim();
     var httpProxyClient = require_http_proxy_client();
+    var errors = require_errors7();
     var util2 = __require("util");
     var urllib = __require("url");
     var packageData = require_package2();
@@ -52444,6 +52616,9 @@ var require_mailer = __commonJS({
           this.transporter.on("idle", (...args) => {
             this.emit("idle", ...args);
           });
+          this.transporter.on("clear", (...args) => {
+            this.emit("clear", ...args);
+          });
         }
         ["close", "isIdle", "verify"].forEach((method) => {
           this[method] = (...args) => {
@@ -52453,17 +52628,16 @@ var require_mailer = __commonJS({
                 this.getSocket = false;
               }
               return this.transporter[method](...args);
-            } else {
-              this.logger.warn(
-                {
-                  tnx: "transport",
-                  methodName: method
-                },
-                "Non existing method %s called for transport",
-                method
-              );
-              return false;
             }
+            this.logger.warn(
+              {
+                tnx: "transport",
+                methodName: method
+              },
+              "Non existing method %s called for transport",
+              method
+            );
+            return false;
           };
         });
         if (this.options.proxy && typeof this.options.proxy === "string") {
@@ -52496,7 +52670,7 @@ var require_mailer = __commonJS({
           this.transporter.getSocket = this.getSocket;
           this.getSocket = false;
         }
-        let mail = new MailMessage(this, data);
+        const mail = new MailMessage(this, data);
         this.logger.debug(
           {
             tnx: "transport",
@@ -52540,7 +52714,7 @@ var require_mailer = __commonJS({
             }
             if (mail.data.dkim || this.dkim) {
               mail.message.processFunc((input) => {
-                let dkim = mail.data.dkim ? new DKIM(mail.data.dkim) : this.dkim;
+                const dkim = mail.data.dkim ? new DKIM(mail.data.dkim) : this.dkim;
                 this.logger.debug(
                   {
                     tnx: "DKIM",
@@ -52572,15 +52746,22 @@ var require_mailer = __commonJS({
         return promise;
       }
       getVersionString() {
-        return util2.format("%s (%s; +%s; %s/%s)", packageData.name, packageData.version, packageData.homepage, this.transporter.name, this.transporter.version);
+        return util2.format(
+          "%s (%s; +%s; %s/%s)",
+          packageData.name,
+          packageData.version,
+          packageData.homepage,
+          this.transporter.name,
+          this.transporter.version
+        );
       }
       _processPlugins(step, mail, callback) {
         step = (step || "").toString();
         if (!this._userPlugins.hasOwnProperty(step)) {
           return callback();
         }
-        let userPlugins = this._userPlugins[step] || [];
-        let defaultPlugins = this._defaultPlugins[step] || [];
+        const userPlugins = this._userPlugins[step] || [];
+        const defaultPlugins = this._defaultPlugins[step] || [];
         if (userPlugins.length) {
           this.logger.debug(
             {
@@ -52598,7 +52779,7 @@ var require_mailer = __commonJS({
         }
         let pos = 0;
         let block = "default";
-        let processPlugins = () => {
+        const processPlugins = () => {
           let curplugins = block === "default" ? defaultPlugins : userPlugins;
           if (pos >= curplugins.length) {
             if (block === "default" && userPlugins.length) {
@@ -52609,7 +52790,7 @@ var require_mailer = __commonJS({
               return callback();
             }
           }
-          let plugin = curplugins[pos++];
+          const plugin = curplugins[pos++];
           plugin(mail, (err) => {
             if (err) {
               return callback(err);
@@ -52625,9 +52806,9 @@ var require_mailer = __commonJS({
        * @param {String} proxyUrl Proxy configuration url
        */
       setupProxy(proxyUrl) {
-        let proxy = urllib.parse(proxyUrl);
+        const proxy = urllib.parse(proxyUrl);
         this.getSocket = (options, callback) => {
-          let protocol = proxy.protocol.replace(/:$/, "").toLowerCase();
+          const protocol = proxy.protocol.replace(/:$/, "").toLowerCase();
           if (this.meta.has("proxy_handler_" + protocol)) {
             return this.meta.get("proxy_handler_" + protocol)(proxy, options, callback);
           }
@@ -52635,9 +52816,9 @@ var require_mailer = __commonJS({
             // Connect using a HTTP CONNECT method
             case "http":
             case "https":
-              httpProxyClient(proxy.href, options.port, options.host, (err, socket) => {
-                if (err) {
-                  return callback(err);
+              httpProxyClient(proxy.href, options.port, options.host, (err2, socket) => {
+                if (err2) {
+                  return callback(err2);
                 }
                 return callback(null, {
                   connection: socket
@@ -52649,13 +52830,15 @@ var require_mailer = __commonJS({
             case "socks4":
             case "socks4a": {
               if (!this.meta.has("proxy_socks_module")) {
-                return callback(new Error("Socks module not loaded"));
+                let err2 = new Error("Socks module not loaded");
+                err2.code = errors.EPROXY;
+                return callback(err2);
               }
-              let connect = (ipaddress) => {
-                let proxyV2 = !!this.meta.get("proxy_socks_module").SocksClient;
-                let socksClient = proxyV2 ? this.meta.get("proxy_socks_module").SocksClient : this.meta.get("proxy_socks_module");
-                let proxyType = Number(proxy.protocol.replace(/\D/g, "")) || 5;
-                let connectionOpts = {
+              const connect = (ipaddress) => {
+                const proxyV2 = !!this.meta.get("proxy_socks_module").SocksClient;
+                const socksClient = proxyV2 ? this.meta.get("proxy_socks_module").SocksClient : this.meta.get("proxy_socks_module");
+                const proxyType = Number(proxy.protocol.replace(/\D/g, "")) || 5;
+                const connectionOpts = {
                   proxy: {
                     ipaddress,
                     port: Number(proxy.port),
@@ -52668,8 +52851,8 @@ var require_mailer = __commonJS({
                   command: "connect"
                 };
                 if (proxy.auth) {
-                  let username = decodeURIComponent(proxy.auth.split(":").shift());
-                  let password = decodeURIComponent(proxy.auth.split(":").pop());
+                  const username = decodeURIComponent(proxy.auth.split(":").shift());
+                  const password = decodeURIComponent(proxy.auth.split(":").pop());
                   if (proxyV2) {
                     connectionOpts.proxy.userId = username;
                     connectionOpts.proxy.password = password;
@@ -52682,9 +52865,9 @@ var require_mailer = __commonJS({
                     };
                   }
                 }
-                socksClient.createConnection(connectionOpts, (err, info) => {
-                  if (err) {
-                    return callback(err);
+                socksClient.createConnection(connectionOpts, (err2, info) => {
+                  if (err2) {
+                    return callback(err2);
                   }
                   return callback(null, {
                     connection: info.socket || info
@@ -52694,15 +52877,17 @@ var require_mailer = __commonJS({
               if (net2.isIP(proxy.hostname)) {
                 return connect(proxy.hostname);
               }
-              return dns.resolve(proxy.hostname, (err, address) => {
-                if (err) {
-                  return callback(err);
+              return dns.resolve(proxy.hostname, (err2, address) => {
+                if (err2) {
+                  return callback(err2);
                 }
                 connect(Array.isArray(address) ? address[0] : address);
               });
             }
           }
-          callback(new Error("Unknown proxy configuration"));
+          let err = new Error("Unknown proxy configuration");
+          err.code = errors.EPROXY;
+          callback(err);
         };
       }
       _convertDataImages(mail, callback) {
@@ -52715,7 +52900,7 @@ var require_mailer = __commonJS({
           }
           let cidCounter = 0;
           html = (html || "").toString().replace(/(<img\b[^<>]{0,1024} src\s{0,20}=[\s"']{0,20})(data:([^;]+);[^"'>\s]+)/gi, (match, prefix, dataUri, mimeType) => {
-            let cid = crypto2.randomBytes(10).toString("hex") + "@localhost";
+            const cid = crypto2.randomBytes(10).toString("hex") + "@localhost";
             if (!mail.data.attachments) {
               mail.data.attachments = [];
             }
@@ -52748,13 +52933,11 @@ var require_mailer = __commonJS({
 var require_data_stream = __commonJS({
   "node_modules/nodemailer/lib/smtp-connection/data-stream.js"(exports, module) {
     "use strict";
-    var stream = __require("stream");
-    var Transform = stream.Transform;
+    var { Transform } = __require("stream");
     var DataStream = class extends Transform {
       constructor(options) {
         super(options);
         this.options = options || {};
-        this._curLine = "";
         this.inByteCount = 0;
         this.outByteCount = 0;
         this.lastByte = false;
@@ -52763,7 +52946,7 @@ var require_data_stream = __commonJS({
        * Escapes dots
        */
       _transform(chunk, encoding, done) {
-        let chunks = [];
+        const chunks = [];
         let chunklen = 0;
         let i, len, lastPos = 0;
         let buf;
@@ -52838,18 +53021,27 @@ var require_smtp_connection = __commonJS({
   "node_modules/nodemailer/lib/smtp-connection/index.js"(exports, module) {
     "use strict";
     var packageInfo = require_package2();
-    var EventEmitter = __require("events").EventEmitter;
+    var { EventEmitter } = __require("events");
     var net2 = __require("net");
     var tls2 = __require("tls");
     var os2 = __require("os");
     var crypto2 = __require("crypto");
     var DataStream = require_data_stream();
-    var PassThrough = __require("stream").PassThrough;
+    var { PassThrough } = __require("stream");
     var shared = require_shared();
     var CONNECTION_TIMEOUT = 2 * 60 * 1e3;
     var SOCKET_TIMEOUT = 10 * 60 * 1e3;
     var GREETING_TIMEOUT = 30 * 1e3;
     var DNS_TIMEOUT = 30 * 1e3;
+    var TEARDOWN_NOOP = () => {
+    };
+    function decodeServerResponse(str) {
+      if (!str) {
+        return str;
+      }
+      const utf8 = Buffer.from(str, "binary").toString("utf8");
+      return utf8.includes("\uFFFD") ? str : utf8;
+    }
     var SMTPConnection = class extends EventEmitter {
       constructor(options) {
         super(options);
@@ -52865,19 +53057,18 @@ var require_smtp_connection = __commonJS({
         if (typeof this.options.secure === "undefined" && this.port === 465) {
           this.secureConnection = true;
         }
-        this.name = this.options.name || this._getHostname();
+        this.name = (this.options.name || this._getHostname()).toString().replace(/[\r\n]+/g, "");
         this.logger = shared.getLogger(this.options, {
           component: this.options.component || "smtp-connection",
           sid: this.id
         });
         this.customAuth = /* @__PURE__ */ new Map();
-        Object.keys(this.options.customAuth || {}).forEach((key) => {
-          let mapKey = (key || "").toString().trim().toUpperCase();
-          if (!mapKey) {
-            return;
+        for (const key of Object.keys(this.options.customAuth || {})) {
+          const mapKey = (key || "").toString().trim().toUpperCase();
+          if (mapKey) {
+            this.customAuth.set(mapKey, this.options.customAuth[key]);
           }
-          this.customAuth.set(mapKey, this.options.customAuth[key]);
-        });
+        }
         this.version = packageInfo.version;
         this.authenticated = false;
         this.destroyed = false;
@@ -52902,6 +53093,8 @@ var require_smtp_connection = __commonJS({
         this._onSocketClose = () => this._onClose();
         this._onSocketEnd = () => this._onEnd();
         this._onSocketTimeout = () => this._onTimeout();
+        this._onConnectionSocketError = (err) => this._onConnectionError(err, "ESOCKET");
+        this._connectionAttemptId = 0;
       }
       /**
        * Creates a connection to a SMTP server and sets up connection
@@ -52932,15 +53125,9 @@ var require_smtp_connection = __commonJS({
         if (this.options.localAddress) {
           opts.localAddress = this.options.localAddress;
         }
-        let setupConnectionHandlers = () => {
-          this._connectionTimeout = setTimeout(() => {
-            this._onError("Connection timeout", "ETIMEDOUT", false, "CONN");
-          }, this.options.connectionTimeout || CONNECTION_TIMEOUT);
-          this._socket.on("error", this._onSocketError);
-        };
         if (this.options.connection) {
           this._socket = this.options.connection;
-          setupConnectionHandlers();
+          this._setupConnectionHandlers();
           if (this.secureConnection && !this.alreadySecured) {
             setImmediate(
               () => this._upgradeConnection((err) => {
@@ -52957,110 +53144,130 @@ var require_smtp_connection = __commonJS({
           return;
         } else if (this.options.socket) {
           this._socket = this.options.socket;
-          return shared.resolveHostname(opts, (err, resolved) => {
-            if (err) {
-              return setImmediate(() => this._onError(err, "EDNS", false, "CONN"));
-            }
-            this.logger.debug(
-              {
-                tnx: "dns",
-                source: opts.host,
-                resolved: resolved.host,
-                cached: !!resolved.cached
-              },
-              "Resolved %s as %s [cache %s]",
-              opts.host,
-              resolved.host,
-              resolved.cached ? "hit" : "miss"
-            );
-            Object.keys(resolved).forEach((key) => {
-              if (key.charAt(0) !== "_" && resolved[key]) {
-                opts[key] = resolved[key];
-              }
-            });
+          return this._resolveAndConnect(opts, (_resolved) => {
             try {
               this._socket.connect(this.port, this.host, () => {
                 this._socket.setKeepAlive(true);
                 this._onConnect();
               });
-              setupConnectionHandlers();
-            } catch (E) {
-              return setImmediate(() => this._onError(E, "ECONNECTION", false, "CONN"));
-            }
-          });
-        } else if (this.secureConnection) {
-          if (this.options.tls) {
-            Object.keys(this.options.tls).forEach((key) => {
-              opts[key] = this.options.tls[key];
-            });
-          }
-          if (this.servername && !opts.servername) {
-            opts.servername = this.servername;
-          }
-          return shared.resolveHostname(opts, (err, resolved) => {
-            if (err) {
-              return setImmediate(() => this._onError(err, "EDNS", false, "CONN"));
-            }
-            this.logger.debug(
-              {
-                tnx: "dns",
-                source: opts.host,
-                resolved: resolved.host,
-                cached: !!resolved.cached
-              },
-              "Resolved %s as %s [cache %s]",
-              opts.host,
-              resolved.host,
-              resolved.cached ? "hit" : "miss"
-            );
-            Object.keys(resolved).forEach((key) => {
-              if (key.charAt(0) !== "_" && resolved[key]) {
-                opts[key] = resolved[key];
-              }
-            });
-            try {
-              this._socket = tls2.connect(opts, () => {
-                this._socket.setKeepAlive(true);
-                this._onConnect();
-              });
-              setupConnectionHandlers();
+              this._setupConnectionHandlers();
             } catch (E) {
               return setImmediate(() => this._onError(E, "ECONNECTION", false, "CONN"));
             }
           });
         } else {
-          return shared.resolveHostname(opts, (err, resolved) => {
-            if (err) {
-              return setImmediate(() => this._onError(err, "EDNS", false, "CONN"));
+          if (this.secureConnection) {
+            Object.assign(opts, this.options.tls || {});
+            if (this.servername && !opts.servername) {
+              opts.servername = this.servername;
             }
-            this.logger.debug(
-              {
-                tnx: "dns",
-                source: opts.host,
-                resolved: resolved.host,
-                cached: !!resolved.cached
-              },
-              "Resolved %s as %s [cache %s]",
-              opts.host,
-              resolved.host,
-              resolved.cached ? "hit" : "miss"
-            );
-            Object.keys(resolved).forEach((key) => {
-              if (key.charAt(0) !== "_" && resolved[key]) {
-                opts[key] = resolved[key];
-              }
-            });
-            try {
-              this._socket = net2.connect(opts, () => {
-                this._socket.setKeepAlive(true);
-                this._onConnect();
-              });
-              setupConnectionHandlers();
-            } catch (E) {
-              return setImmediate(() => this._onError(E, "ECONNECTION", false, "CONN"));
-            }
+          }
+          return this._resolveAndConnect(opts, (resolved) => {
+            this._fallbackAddresses = (resolved._addresses || []).filter((addr) => addr !== opts.host);
+            this._connectOpts = Object.assign({}, opts);
+            this._connectToHost(opts, this.secureConnection);
           });
         }
+      }
+      /**
+       * Resolves the hostname and applies resolved values to opts,
+       * then calls the provided callback with the resolved data
+       *
+       * @param {Object} opts Connection options (modified in place)
+       * @param {Function} callback Called with resolved data on success
+       */
+      _resolveAndConnect(opts, callback) {
+        return shared.resolveHostname(opts, (err, resolved) => {
+          if (err) {
+            return setImmediate(() => this._onError(err, "EDNS", false, "CONN"));
+          }
+          this.logger.debug(
+            {
+              tnx: "dns",
+              source: opts.host,
+              resolved: resolved.host,
+              cached: !!resolved.cached
+            },
+            "Resolved %s as %s [cache %s]",
+            opts.host,
+            resolved.host,
+            resolved.cached ? "hit" : "miss"
+          );
+          for (const key of Object.keys(resolved)) {
+            if (key.charAt(0) !== "_" && resolved[key]) {
+              opts[key] = resolved[key];
+            }
+          }
+          callback(resolved);
+        });
+      }
+      /**
+       * Attempts to connect to the specified host address
+       *
+       * @param {Object} opts Connection options
+       * @param {Boolean} secure Whether to use TLS
+       */
+      _connectToHost(opts, secure) {
+        this._connectionAttemptId++;
+        const currentAttemptId = this._connectionAttemptId;
+        const connectFn = secure ? tls2.connect : net2.connect;
+        try {
+          this._socket = connectFn(opts, () => {
+            if (this._connectionAttemptId !== currentAttemptId) {
+              return;
+            }
+            this._socket.setKeepAlive(true);
+            this._onConnect();
+          });
+          this._setupConnectionHandlers();
+        } catch (E) {
+          return setImmediate(() => this._onError(E, "ECONNECTION", false, "CONN"));
+        }
+      }
+      /**
+       * Sets up connection timeout and error handlers
+       */
+      _setupConnectionHandlers() {
+        this._connectionTimeout = setTimeout(() => {
+          this._onConnectionError("Connection timeout", "ETIMEDOUT");
+        }, this.options.connectionTimeout || CONNECTION_TIMEOUT);
+        this._socket.on("error", this._onConnectionSocketError);
+      }
+      /**
+       * Handles connection errors with fallback to alternative addresses
+       *
+       * @param {Error|String} err Error object or message
+       * @param {String} code Error code
+       */
+      _onConnectionError(err, code) {
+        clearTimeout(this._connectionTimeout);
+        const canFallback = this._fallbackAddresses && this._fallbackAddresses.length && this.stage === "init" && !this._destroyed;
+        if (!canFallback) {
+          this._onError(err, code, false, "CONN");
+          return;
+        }
+        const nextHost = this._fallbackAddresses.shift();
+        this.logger.info(
+          {
+            tnx: "network",
+            failedHost: this._connectOpts.host,
+            nextHost,
+            error: err.message || err
+          },
+          "Connection to %s failed, trying %s",
+          this._connectOpts.host,
+          nextHost
+        );
+        if (this._socket) {
+          try {
+            this._socket.removeListener("error", this._onConnectionSocketError);
+            this._socket.destroy();
+          } catch (_E) {
+          }
+          this._socket = null;
+        }
+        this._connectOpts.host = nextHost;
+        this._connectToHost(this._connectOpts, this.secureConnection);
       }
       /**
        * Sends QUIT
@@ -53080,10 +53287,7 @@ var require_smtp_connection = __commonJS({
           return;
         }
         this._closing = true;
-        let closeMethod = "end";
-        if (this.stage === "init") {
-          closeMethod = "destroy";
-        }
+        const closeMethod = this.stage === "init" ? "destroy" : "end";
         this.logger.debug(
           {
             tnx: "smtp"
@@ -53091,11 +53295,19 @@ var require_smtp_connection = __commonJS({
           'Closing connection to the server using "%s"',
           closeMethod
         );
-        let socket = this._socket && this._socket.socket || this._socket;
+        const socket = this._socket && this._socket.socket || this._socket;
         if (socket && !socket.destroyed) {
           try {
+            socket.setTimeout(0);
+            socket.removeListener("data", this._onSocketData);
+            socket.removeListener("timeout", this._onSocketTimeout);
+            socket.removeListener("close", this._onSocketClose);
+            socket.removeListener("end", this._onSocketEnd);
+            socket.removeListener("error", this._onSocketError);
+            socket.removeListener("error", this._onConnectionSocketError);
+            socket.on("error", TEARDOWN_NOOP);
             socket[closeMethod]();
-          } catch (E) {
+          } catch (_E) {
           }
         }
         this._destroy();
@@ -53127,10 +53339,10 @@ var require_smtp_connection = __commonJS({
           }
         }
         if (this.customAuth.has(this._authMethod)) {
-          let handler2 = this.customAuth.get(this._authMethod);
+          const handler2 = this.customAuth.get(this._authMethod);
           let lastResponse;
           let returned = false;
-          let resolve = () => {
+          const resolve = () => {
             if (returned) {
               return;
             }
@@ -53148,14 +53360,14 @@ var require_smtp_connection = __commonJS({
             this.authenticated = true;
             callback(null, true);
           };
-          let reject = (err) => {
+          const reject = (err) => {
             if (returned) {
               return;
             }
             returned = true;
             callback(this._formatError(err, "EAUTH", lastResponse, "AUTH " + this._authMethod));
           };
-          let handlerResponse = handler2({
+          const handlerResponse = handler2({
             auth: this._auth,
             method: this._authMethod,
             extensions: [].concat(this._supportedExtensions),
@@ -53258,7 +53470,7 @@ var require_smtp_connection = __commonJS({
           });
         }
         let returned = false;
-        let callback = function() {
+        const callback = function() {
           if (returned) {
             return;
           }
@@ -53268,10 +53480,10 @@ var require_smtp_connection = __commonJS({
         if (typeof message.on === "function") {
           message.on("error", (err) => callback(this._formatError(err, "ESTREAM", false, "API")));
         }
-        let startTime = Date.now();
+        const startTime = Date.now();
         this._setEnvelope(envelope, (err, info) => {
           if (err) {
-            let stream2 = new PassThrough();
+            const stream2 = new PassThrough();
             if (typeof message.pipe === "function") {
               message.pipe(stream2);
             } else {
@@ -53280,8 +53492,8 @@ var require_smtp_connection = __commonJS({
             }
             return callback(err);
           }
-          let envelopeTime = Date.now();
-          let stream = this._createSendStream((err2, str) => {
+          const envelopeTime = Date.now();
+          const stream = this._createSendStream((err2, str) => {
             if (err2) {
               return callback(err2);
             }
@@ -53344,6 +53556,8 @@ var require_smtp_connection = __commonJS({
         this._socket.removeListener("timeout", this._onSocketTimeout);
         this._socket.removeListener("close", this._onSocketClose);
         this._socket.removeListener("end", this._onSocketEnd);
+        this._socket.removeListener("error", this._onConnectionSocketError);
+        this._socket.on("error", this._onSocketError);
         this._socket.on("data", this._onSocketData);
         this._socket.once("close", this._onSocketClose);
         this._socket.once("end", this._onSocketEnd);
@@ -53403,7 +53617,12 @@ var require_smtp_connection = __commonJS({
           return;
         }
         err = this._formatError(err, type, data, command);
-        this.logger.error(data, err.message);
+        const transientCodes = ["ETIMEDOUT", "ESOCKET", "ECONNECTION"];
+        if (transientCodes.includes(err.code)) {
+          this.logger.warn(data, err.message);
+        } else {
+          this.logger.error(data, err.message);
+        }
         this.emit("error", err);
         this.close();
       }
@@ -53421,7 +53640,7 @@ var require_smtp_connection = __commonJS({
           err.response = response;
           err.message += ": " + response;
         }
-        let responseCode = typeof response === "string" && Number((response.match(/^\d+/) || [])[0]) || false;
+        const responseCode = typeof response === "string" && Number((response.match(/^\d+/) || [])[0]) || false;
         if (responseCode) {
           err.responseCode = responseCode;
         }
@@ -53438,15 +53657,15 @@ var require_smtp_connection = __commonJS({
       _onClose() {
         let serverResponse = false;
         if (this._remainder && this._remainder.trim()) {
+          this.lastServerResponse = serverResponse = decodeServerResponse(this._remainder.trim());
           if (this.options.debug || this.options.transactionLog) {
             this.logger.debug(
               {
                 tnx: "server"
               },
-              this._remainder.replace(/\r?\n$/, "")
+              serverResponse
             );
           }
-          this.lastServerResponse = serverResponse = this._remainder.trim();
         }
         this.logger.info(
           {
@@ -53500,14 +53719,14 @@ var require_smtp_connection = __commonJS({
       _upgradeConnection(callback) {
         this._socket.removeListener("data", this._onSocketData);
         this._socket.removeListener("timeout", this._onSocketTimeout);
-        let socketPlain = this._socket;
-        let opts = {
-          socket: this._socket,
-          host: this.host
-        };
-        Object.keys(this.options.tls || {}).forEach((key) => {
-          opts[key] = this.options.tls[key];
-        });
+        const socketPlain = this._socket;
+        const opts = Object.assign(
+          {
+            socket: this._socket,
+            host: this.host
+          },
+          this.options.tls || {}
+        );
         if (this.servername && !opts.servername) {
           opts.servername = this.servername;
         }
@@ -53519,6 +53738,7 @@ var require_smtp_connection = __commonJS({
             this._socket.on("data", this._onSocketData);
             socketPlain.removeListener("close", this._onSocketClose);
             socketPlain.removeListener("end", this._onSocketEnd);
+            socketPlain.removeListener("error", this._onSocketError);
             return callback(null, true);
           });
         } catch (err) {
@@ -53540,7 +53760,7 @@ var require_smtp_connection = __commonJS({
         if (!this._responseQueue.length) {
           return false;
         }
-        let str = this.lastServerResponse = (this._responseQueue.shift() || "").toString();
+        let str = this.lastServerResponse = decodeServerResponse((this._responseQueue.shift() || "").toString());
         if (/^\d+-/.test(str.split("\n").pop())) {
           return;
         }
@@ -53555,7 +53775,7 @@ var require_smtp_connection = __commonJS({
         if (!str.trim()) {
           setImmediate(() => this._processResponse());
         }
-        let action = this._responseActions.shift();
+        const action = this._responseActions.shift();
         if (typeof action === "function") {
           action.call(this, str);
           setImmediate(() => this._processResponse());
@@ -53596,7 +53816,7 @@ var require_smtp_connection = __commonJS({
        *        {from:{address:'...',name:'...'}, to:[address:'...',name:'...']}
        */
       _setEnvelope(envelope, callback) {
-        let args = [];
+        const args = [];
         let useSmtpUtf8 = false;
         this._envelope = envelope || {};
         this._envelope.from = (this._envelope.from && this._envelope.from.address || this._envelope.from || "").toString().trim();
@@ -53618,7 +53838,7 @@ var require_smtp_connection = __commonJS({
             useSmtpUtf8 = true;
           }
         }
-        this._envelope.rcptQueue = JSON.parse(JSON.stringify(this._envelope.to || []));
+        this._envelope.rcptQueue = [].concat(this._envelope.to || []);
         this._envelope.rejected = [];
         this._envelope.rejectedErrors = [];
         this._envelope.accepted = [];
@@ -53641,7 +53861,10 @@ var require_smtp_connection = __commonJS({
           this._using8BitMime = true;
         }
         if (this._envelope.size && this._supportedExtensions.includes("SIZE")) {
-          args.push("SIZE=" + this._envelope.size);
+          const sizeValue = Number(this._envelope.size) || 0;
+          if (sizeValue > 0) {
+            args.push("SIZE=" + sizeValue);
+          }
         }
         if (this._envelope.dsn && this._supportedExtensions.includes("DSN")) {
           if (this._envelope.dsn.ret) {
@@ -53650,6 +53873,19 @@ var require_smtp_connection = __commonJS({
           if (this._envelope.dsn.envid) {
             args.push("ENVID=" + shared.encodeXText(this._envelope.dsn.envid));
           }
+        }
+        if (this._envelope.requireTLSExtensionEnabled) {
+          if (!this.secure) {
+            return callback(
+              this._formatError("REQUIRETLS can only be used over TLS connections (RFC 8689)", "EREQUIRETLS", false, "MAIL FROM")
+            );
+          }
+          if (!this._supportedExtensions.includes("REQUIRETLS")) {
+            return callback(
+              this._formatError("Server does not support REQUIRETLS extension (RFC 8689)", "EREQUIRETLS", false, "MAIL FROM")
+            );
+          }
+          args.push("REQUIRETLS");
         }
         this._sendCommand("MAIL FROM:<" + this._envelope.from + ">" + (args.length ? " " + args.join(" ") : ""));
       }
@@ -53670,16 +53906,16 @@ var require_smtp_connection = __commonJS({
         if (ret && !["FULL", "HDRS"].includes(ret)) {
           throw new Error("ret: " + JSON.stringify(ret));
         }
-        let envid = (params.envid || params.id || "").toString() || null;
+        const envid = (params.envid || params.id || "").toString() || null;
         let notify = params.notify || null;
         if (notify) {
           if (typeof notify === "string") {
             notify = notify.split(",");
           }
           notify = notify.map((n) => n.trim().toUpperCase());
-          let validNotify = ["NEVER", "SUCCESS", "FAILURE", "DELAY"];
-          let invaliNotify = notify.filter((n) => !validNotify.includes(n));
-          if (invaliNotify.length || notify.length > 1 && notify.includes("NEVER")) {
+          const validNotify = ["NEVER", "SUCCESS", "FAILURE", "DELAY"];
+          const invalidNotify = notify.filter((n) => !validNotify.includes(n));
+          if (invalidNotify.length || notify.length > 1 && notify.includes("NEVER")) {
             throw new Error("notify: " + JSON.stringify(notify.join(",")));
           }
           notify = notify.join(",");
@@ -53696,7 +53932,7 @@ var require_smtp_connection = __commonJS({
         };
       }
       _getDsnRcptToArgs() {
-        let args = [];
+        const args = [];
         if (this._envelope.dsn && this._supportedExtensions.includes("DSN")) {
           if (this._envelope.dsn.notify) {
             args.push("NOTIFY=" + shared.encodeXText(this._envelope.dsn.notify));
@@ -53708,11 +53944,10 @@ var require_smtp_connection = __commonJS({
         return args.length ? " " + args.join(" ") : "";
       }
       _createSendStream(callback) {
-        let dataStream = new DataStream();
-        let logStream;
+        const dataStream = new DataStream();
         if (this.options.lmtp) {
           this._envelope.accepted.forEach((recipient, i) => {
-            let final = i === this._envelope.accepted.length - 1;
+            const final = i === this._envelope.accepted.length - 1;
             this._responseActions.push((str) => {
               this._actionLMTPStream(recipient, final, str, callback);
             });
@@ -53726,7 +53961,7 @@ var require_smtp_connection = __commonJS({
           end: false
         });
         if (this.options.debug) {
-          logStream = new PassThrough();
+          const logStream = new PassThrough();
           logStream.on("readable", () => {
             let chunk;
             while (chunk = logStream.read()) {
@@ -53805,7 +54040,12 @@ var require_smtp_connection = __commonJS({
         }
         if (str.charAt(0) !== "2") {
           if (this.options.requireTLS) {
-            this._onError(new Error("EHLO failed but HELO does not support required STARTTLS. response=" + str), "ECONNECTION", str, "EHLO");
+            this._onError(
+              new Error("EHLO failed but HELO does not support required STARTTLS. response=" + str),
+              "ECONNECTION",
+              str,
+              "EHLO"
+            );
             return;
           }
           this._responseActions.push(this._actionHELO);
@@ -53826,6 +54066,9 @@ var require_smtp_connection = __commonJS({
         }
         if (/[ -]8BITMIME\b/im.test(str)) {
           this._supportedExtensions.push("8BITMIME");
+        }
+        if (/[ -]REQUIRETLS\b/im.test(str)) {
+          this._supportedExtensions.push("REQUIRETLS");
         }
         if (/[ -]PIPELINING\b/im.test(str)) {
           this._supportedExtensions.push("PIPELINING");
@@ -53939,16 +54182,16 @@ var require_smtp_connection = __commonJS({
        * @param {String} str Message from the server
        */
       _actionAUTH_CRAM_MD5(str, callback) {
-        let challengeMatch = str.match(/^334\s+(.+)$/);
-        let challengeString = "";
+        const challengeMatch = str.match(/^334\s+(.+)$/);
         if (!challengeMatch) {
-          return callback(this._formatError("Invalid login sequence while waiting for server challenge string", "EAUTH", str, "AUTH CRAM-MD5"));
-        } else {
-          challengeString = challengeMatch[1];
+          return callback(
+            this._formatError("Invalid login sequence while waiting for server challenge string", "EAUTH", str, "AUTH CRAM-MD5")
+          );
         }
-        let base64decoded = Buffer.from(challengeString, "base64").toString("ascii"), hmacMD5 = crypto2.createHmac("md5", this._auth.credentials.pass);
+        const base64decoded = Buffer.from(challengeMatch[1], "base64").toString("ascii");
+        const hmacMD5 = crypto2.createHmac("md5", this._auth.credentials.pass);
         hmacMD5.update(base64decoded);
-        let prepended = this._auth.credentials.user + " " + hmacMD5.digest("hex");
+        const prepended = this._auth.credentials.user + " " + hmacMD5.digest("hex");
         this._responseActions.push((str2) => {
           this._actionAUTH_CRAM_MD5_PASS(str2, callback);
         });
@@ -54055,37 +54298,23 @@ var require_smtp_connection = __commonJS({
        * @param {String} str Message from the server
        */
       _actionMAIL(str, callback) {
-        let message, curRecipient;
         if (Number(str.charAt(0)) !== 2) {
-          if (this._usingSmtpUtf8 && /^550 /.test(str) && /[\x80-\uFFFF]/.test(this._envelope.from)) {
-            message = "Internationalized mailbox name not allowed";
-          } else {
-            message = "Mail command failed";
-          }
+          const message = this._usingSmtpUtf8 && /^550 /.test(str) && /[\x80-\uFFFF]/.test(this._envelope.from) ? "Internationalized mailbox name not allowed" : "Mail command failed";
           return callback(this._formatError(message, "EENVELOPE", str, "MAIL FROM"));
         }
         if (!this._envelope.rcptQueue.length) {
           return callback(this._formatError("Can't send mail - no recipients defined", "EENVELOPE", false, "API"));
-        } else {
-          this._recipientQueue = [];
-          if (this._supportedExtensions.includes("PIPELINING")) {
-            while (this._envelope.rcptQueue.length) {
-              curRecipient = this._envelope.rcptQueue.shift();
-              this._recipientQueue.push(curRecipient);
-              this._responseActions.push((str2) => {
-                this._actionRCPT(str2, callback);
-              });
-              this._sendCommand("RCPT TO:<" + curRecipient + ">" + this._getDsnRcptToArgs());
-            }
-          } else {
-            curRecipient = this._envelope.rcptQueue.shift();
-            this._recipientQueue.push(curRecipient);
-            this._responseActions.push((str2) => {
-              this._actionRCPT(str2, callback);
-            });
-            this._sendCommand("RCPT TO:<" + curRecipient + ">" + this._getDsnRcptToArgs());
-          }
         }
+        this._recipientQueue = [];
+        const usePipelining = this._supportedExtensions.includes("PIPELINING");
+        do {
+          const curRecipient = this._envelope.rcptQueue.shift();
+          this._recipientQueue.push(curRecipient);
+          this._responseActions.push((str2) => {
+            this._actionRCPT(str2, callback);
+          });
+          this._sendCommand("RCPT TO:<" + curRecipient + ">" + this._getDsnRcptToArgs());
+        } while (usePipelining && this._envelope.rcptQueue.length);
       }
       /**
        * Handle response for a RCPT TO: command
@@ -54093,13 +54322,10 @@ var require_smtp_connection = __commonJS({
        * @param {String} str Message from the server
        */
       _actionRCPT(str, callback) {
-        let message, err, curRecipient = this._recipientQueue.shift();
+        let err;
+        const curRecipient = this._recipientQueue.shift();
         if (Number(str.charAt(0)) !== 2) {
-          if (this._usingSmtpUtf8 && /^553 /.test(str) && /[\x80-\uFFFF]/.test(curRecipient)) {
-            message = "Internationalized mailbox name not allowed";
-          } else {
-            message = "Recipient command failed";
-          }
+          const message = this._usingSmtpUtf8 && /^553 /.test(str) && /[\x80-\uFFFF]/.test(curRecipient) ? "Internationalized mailbox name not allowed" : "Recipient command failed";
           this._envelope.rejected.push(curRecipient);
           err = this._formatError(message, "EENVELOPE", str, "RCPT TO");
           err.recipient = curRecipient;
@@ -54120,12 +54346,12 @@ var require_smtp_connection = __commonJS({
             return callback(err);
           }
         } else if (this._envelope.rcptQueue.length) {
-          curRecipient = this._envelope.rcptQueue.shift();
-          this._recipientQueue.push(curRecipient);
+          const nextRecipient = this._envelope.rcptQueue.shift();
+          this._recipientQueue.push(nextRecipient);
           this._responseActions.push((str2) => {
             this._actionRCPT(str2, callback);
           });
-          this._sendCommand("RCPT TO:<" + curRecipient + ">" + this._getDsnRcptToArgs());
+          this._sendCommand("RCPT TO:<" + nextRecipient + ">" + this._getDsnRcptToArgs());
         }
       }
       /**
@@ -54137,7 +54363,7 @@ var require_smtp_connection = __commonJS({
         if (!/^[23]/.test(str)) {
           return callback(this._formatError("Data command failed", "EENVELOPE", str, "DATA"));
         }
-        let response = {
+        const response = {
           accepted: this._envelope.accepted,
           rejected: this._envelope.rejected
         };
@@ -54158,9 +54384,8 @@ var require_smtp_connection = __commonJS({
       _actionSMTPStream(str, callback) {
         if (Number(str.charAt(0)) !== 2) {
           return callback(this._formatError("Message failed", "EMESSAGE", str, "DATA"));
-        } else {
-          return callback(null, str);
         }
+        return callback(null, str);
       }
       /**
        * Handle response for a DATA stream
@@ -54235,7 +54460,7 @@ var require_smtp_connection = __commonJS({
         let defaultHostname;
         try {
           defaultHostname = os2.hostname() || "";
-        } catch (err) {
+        } catch (_err) {
           defaultHostname = "localhost";
         }
         if (!defaultHostname || defaultHostname.indexOf(".") < 0) {
@@ -54255,20 +54480,23 @@ var require_smtp_connection = __commonJS({
 var require_xoauth2 = __commonJS({
   "node_modules/nodemailer/lib/xoauth2/index.js"(exports, module) {
     "use strict";
-    var Stream3 = __require("stream").Stream;
+    var { Stream: Stream3 } = __require("stream");
     var nmfetch = require_fetch();
     var crypto2 = __require("crypto");
     var shared = require_shared();
+    var errors = require_errors7();
     var XOAuth2 = class extends Stream3 {
       constructor(options, logger) {
         super();
         this.options = options || {};
         if (options && options.serviceClient) {
           if (!options.privateKey || !options.user) {
-            setImmediate(() => this.emit("error", new Error('Options "privateKey" and "user" are required for service account!')));
+            const err = new Error('Options "privateKey" and "user" are required for service account!');
+            err.code = errors.EOAUTH2;
+            setImmediate(() => this.emit("error", err));
             return;
           }
-          let serviceRequestTimeout = Math.min(Math.max(Number(this.options.serviceRequestTimeout) || 0, 0), 3600);
+          const serviceRequestTimeout = Math.min(Math.max(Number(this.options.serviceRequestTimeout) || 0, 0), 3600);
           this.options.serviceRequestTimeout = serviceRequestTimeout || 5 * 60;
         }
         this.logger = shared.getLogger(
@@ -54287,9 +54515,11 @@ var require_xoauth2 = __commonJS({
         if (this.options.expires && Number(this.options.expires)) {
           this.expires = this.options.expires;
         } else {
-          let timeout = Math.max(Number(this.options.timeout) || 0, 0);
+          const timeout = Math.max(Number(this.options.timeout) || 0, 0);
           this.expires = timeout && Date.now() + timeout * 1e3 || 0;
         }
+        this.renewing = false;
+        this.renewalQueue = [];
       }
       /**
        * Returns or generates (if previous has expired) a XOAuth2 token
@@ -54299,13 +54529,55 @@ var require_xoauth2 = __commonJS({
        */
       getToken(renew, callback) {
         if (!renew && this.accessToken && (!this.expires || this.expires > Date.now())) {
+          this.logger.debug(
+            {
+              tnx: "OAUTH2",
+              user: this.options.user,
+              action: "reuse"
+            },
+            "Reusing existing access token for %s",
+            this.options.user
+          );
           return callback(null, this.accessToken);
         }
-        let generateCallback = (...args) => {
-          if (args[0]) {
+        if (!this.provisionCallback && !this.options.refreshToken && !this.options.serviceClient) {
+          if (this.accessToken) {
+            this.logger.debug(
+              {
+                tnx: "OAUTH2",
+                user: this.options.user,
+                action: "reuse"
+              },
+              "Reusing existing access token (no refresh capability) for %s",
+              this.options.user
+            );
+            return callback(null, this.accessToken);
+          }
+          this.logger.error(
+            {
+              tnx: "OAUTH2",
+              user: this.options.user,
+              action: "renew"
+            },
+            "Cannot renew access token for %s: No refresh mechanism available",
+            this.options.user
+          );
+          const err = new Error("Can't create new access token for user");
+          err.code = errors.EOAUTH2;
+          return callback(err);
+        }
+        if (this.renewing) {
+          return this.renewalQueue.push({ renew, callback });
+        }
+        this.renewing = true;
+        const generateCallback = (err, accessToken) => {
+          this.renewalQueue.forEach((item) => item.callback(err, accessToken));
+          this.renewalQueue = [];
+          this.renewing = false;
+          if (err) {
             this.logger.error(
               {
-                err: args[0],
+                err,
                 tnx: "OAUTH2",
                 user: this.options.user,
                 action: "renew"
@@ -54324,7 +54596,7 @@ var require_xoauth2 = __commonJS({
               this.options.user
             );
           }
-          callback(...args);
+          callback(err, accessToken);
         };
         if (this.provisionCallback) {
           this.provisionCallback(this.options.user, !!renew, (err, accessToken, expires) => {
@@ -54365,8 +54637,8 @@ var require_xoauth2 = __commonJS({
         let urlOptions;
         let loggedUrlOptions;
         if (this.options.serviceClient) {
-          let iat = Math.floor(Date.now() / 1e3);
-          let tokenData = {
+          const iat = Math.floor(Date.now() / 1e3);
+          const tokenData = {
             iss: this.options.serviceClient,
             scope: this.options.scope || "https://mail.google.com/",
             sub: this.options.user,
@@ -54377,8 +54649,10 @@ var require_xoauth2 = __commonJS({
           let token;
           try {
             token = this.jwtSignRS256(tokenData);
-          } catch (err) {
-            return callback(new Error("Can't generate token. Check your auth options"));
+          } catch (_err) {
+            const err = new Error("Can't generate token. Check your auth options");
+            err.code = errors.EOAUTH2;
+            return callback(err);
           }
           urlOptions = {
             grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
@@ -54390,7 +54664,9 @@ var require_xoauth2 = __commonJS({
           };
         } else {
           if (!this.options.refreshToken) {
-            return callback(new Error("Can't create new access token for user"));
+            const err = new Error("Can't create new access token for user");
+            err.code = errors.EOAUTH2;
+            return callback(err);
           }
           urlOptions = {
             client_id: this.options.clientId || "",
@@ -54405,10 +54681,8 @@ var require_xoauth2 = __commonJS({
             grant_type: "refresh_token"
           };
         }
-        Object.keys(this.options.customParams).forEach((key) => {
-          urlOptions[key] = this.options.customParams[key];
-          loggedUrlOptions[key] = this.options.customParams[key];
-        });
+        Object.assign(urlOptions, this.options.customParams);
+        Object.assign(loggedUrlOptions, this.options.customParams);
         this.logger.debug(
           {
             tnx: "OAUTH2",
@@ -54438,16 +54712,14 @@ var require_xoauth2 = __commonJS({
               "Response: %s",
               (body || "").toString()
             );
-            return callback(new Error("Invalid authentication response"));
+            const err2 = new Error("Invalid authentication response");
+            err2.code = errors.EOAUTH2;
+            return callback(err2);
           }
-          let logData = {};
-          Object.keys(data).forEach((key) => {
-            if (key !== "access_token") {
-              logData[key] = data[key];
-            } else {
-              logData[key] = (data[key] || "").toString().substr(0, 6) + "...";
-            }
-          });
+          const logData = Object.assign({}, data);
+          if (logData.access_token) {
+            logData.access_token = (logData.access_token || "").toString().substr(0, 6) + "...";
+          }
           this.logger.debug(
             {
               tnx: "OAUTH2",
@@ -54465,13 +54737,17 @@ var require_xoauth2 = __commonJS({
             if (data.error_uri) {
               errorMessage += " (" + data.error_uri + ")";
             }
-            return callback(new Error(errorMessage));
+            const err2 = new Error(errorMessage);
+            err2.code = errors.EOAUTH2;
+            return callback(err2);
           }
           if (data.access_token) {
             this.updateToken(data.access_token, data.expires_in);
             return callback(null, this.accessToken);
           }
-          return callback(new Error("No access token"));
+          const err = new Error("No access token");
+          err.code = errors.EOAUTH2;
+          return callback(err);
         });
       }
       /**
@@ -54481,7 +54757,7 @@ var require_xoauth2 = __commonJS({
        * @return {String} Base64 encoded token for IMAP or SMTP login
        */
       buildXOAuth2Token(accessToken) {
-        let authData = ["user=" + (this.options.user || ""), "auth=Bearer " + (accessToken || this.accessToken), "", ""];
+        const authData = ["user=" + (this.options.user || ""), "auth=Bearer " + (accessToken || this.accessToken), "", ""];
         return Buffer.from(authData.join(""), "utf-8").toString("base64");
       }
       /**
@@ -54498,9 +54774,9 @@ var require_xoauth2 = __commonJS({
        */
       postRequest(url, payload, params, callback) {
         let returned = false;
-        let chunks = [];
+        const chunks = [];
         let chunklen = 0;
-        let req = nmfetch(url, {
+        const req = nmfetch(url, {
           method: "post",
           headers: params.customHeaders,
           body: payload,
@@ -54548,7 +54824,7 @@ var require_xoauth2 = __commonJS({
        */
       jwtSignRS256(payload) {
         payload = ['{"alg":"RS256","typ":"JWT"}', JSON.stringify(payload)].map((val) => this.toBase64URL(val)).join(".");
-        let signature = crypto2.createSign("RSA-SHA256").update(payload).sign(this.options.privateKey);
+        const signature = crypto2.createSign("RSA-SHA256").update(payload).sign(this.options.privateKey);
         return payload + "." + this.toBase64URL(signature);
       }
     };
@@ -54563,6 +54839,7 @@ var require_pool_resource = __commonJS({
     var SMTPConnection = require_smtp_connection();
     var assign = require_shared().assign;
     var XOAuth2 = require_xoauth2();
+    var errors = require_errors7();
     var EventEmitter = __require("events");
     var PoolResource = class extends EventEmitter {
       constructor(pool) {
@@ -54573,7 +54850,7 @@ var require_pool_resource = __commonJS({
         if (this.options.auth) {
           switch ((this.options.auth.type || "").toString().toUpperCase()) {
             case "OAUTH2": {
-              let oauth2 = new XOAuth2(this.options.auth, this.logger);
+              const oauth2 = new XOAuth2(this.options.auth, this.logger);
               oauth2.provisionCallback = this.pool.mailer && this.pool.mailer.get("oauth2_provision_cb") || oauth2.provisionCallback;
               this.auth = {
                 type: "OAUTH2",
@@ -54634,10 +54911,7 @@ var require_pool_resource = __commonJS({
               options.host || "",
               options.port || ""
             );
-            options = assign(false, options);
-            Object.keys(socketOptions).forEach((key) => {
-              options[key] = socketOptions[key];
-            });
+            options = Object.assign(assign(false, options), socketOptions);
           }
           this.connection = new SMTPConnection(options);
           this.connection.once("error", (err2) => {
@@ -54654,19 +54928,19 @@ var require_pool_resource = __commonJS({
               return;
             }
             returned = true;
-            let timer2 = setTimeout(() => {
+            const timer2 = setTimeout(() => {
               if (returned) {
                 return;
               }
-              let err2 = new Error("Unexpected socket close");
+              const err2 = new Error("Unexpected socket close");
               if (this.connection && this.connection._socket && this.connection._socket.upgrading) {
-                err2.code = "ETLS";
+                err2.code = errors.ETLS;
               }
               callback(err2);
             }, 1e3);
             try {
               timer2.unref();
-            } catch (E) {
+            } catch (_E) {
             }
           });
           this.connection.connect(() => {
@@ -54710,9 +54984,9 @@ var require_pool_resource = __commonJS({
             return this.send(mail, callback);
           });
         }
-        let envelope = mail.message.getEnvelope();
-        let messageId = mail.message.messageId();
-        let recipients = [].concat(envelope.to || []);
+        const envelope = mail.message.getEnvelope();
+        const messageId = mail.message.messageId();
+        const recipients = [].concat(envelope.to || []);
         if (recipients.length > 3) {
           recipients.push("...and " + recipients.splice(2).length + " more");
         }
@@ -54730,6 +55004,9 @@ var require_pool_resource = __commonJS({
         if (mail.data.dsn) {
           envelope.dsn = mail.data.dsn;
         }
+        if (mail.data.requireTLSExtensionEnabled) {
+          envelope.requireTLSExtensionEnabled = mail.data.requireTLSExtensionEnabled;
+        }
         this.connection.send(envelope, mail.message.createReadStream(), (err, info) => {
           this.messages++;
           if (err) {
@@ -54743,10 +55020,9 @@ var require_pool_resource = __commonJS({
           };
           info.messageId = messageId;
           setImmediate(() => {
-            let err2;
             if (this.messages >= this.options.maxMessages) {
-              err2 = new Error("Resource exhausted");
-              err2.code = "EMAXLIMIT";
+              const err2 = new Error("Resource exhausted");
+              err2.code = errors.EMAXLIMIT;
               this.connection.close();
               this.emit("error", err2);
             } else {
@@ -54782,177 +55058,294 @@ var require_services = __commonJS({
   "node_modules/nodemailer/lib/well-known/services.json"(exports, module) {
     module.exports = {
       "1und1": {
+        description: "1&1 Mail (German hosting provider)",
         host: "smtp.1und1.de",
         port: 465,
         secure: true,
         authMethod: "LOGIN"
       },
+      "126": {
+        description: "126 Mail (NetEase)",
+        host: "smtp.126.com",
+        port: 465,
+        secure: true
+      },
+      "163": {
+        description: "163 Mail (NetEase)",
+        host: "smtp.163.com",
+        port: 465,
+        secure: true
+      },
       Aliyun: {
+        description: "Alibaba Cloud Mail",
         domains: ["aliyun.com"],
         host: "smtp.aliyun.com",
         port: 465,
         secure: true
       },
+      AliyunQiye: {
+        description: "Alibaba Cloud Enterprise Mail",
+        host: "smtp.qiye.aliyun.com",
+        port: 465,
+        secure: true
+      },
       AOL: {
+        description: "AOL Mail",
         domains: ["aol.com"],
         host: "smtp.aol.com",
         port: 587
       },
+      Aruba: {
+        description: "Aruba PEC (Italian email provider)",
+        domains: ["aruba.it", "pec.aruba.it"],
+        aliases: ["Aruba PEC"],
+        host: "smtps.aruba.it",
+        port: 465,
+        secure: true,
+        authMethod: "LOGIN"
+      },
       Bluewin: {
+        description: "Bluewin (Swiss email provider)",
         host: "smtpauths.bluewin.ch",
         domains: ["bluewin.ch"],
         port: 465
       },
+      BOL: {
+        description: "BOL Mail (Brazilian provider)",
+        domains: ["bol.com.br"],
+        host: "smtp.bol.com.br",
+        port: 587,
+        requireTLS: true
+      },
       DebugMail: {
+        description: "DebugMail (email testing service)",
         host: "debugmail.io",
         port: 25
       },
+      Disroot: {
+        description: "Disroot (privacy-focused provider)",
+        domains: ["disroot.org"],
+        host: "disroot.org",
+        port: 587,
+        secure: false,
+        authMethod: "LOGIN"
+      },
       DynectEmail: {
+        description: "Dyn Email Delivery",
         aliases: ["Dynect"],
         host: "smtp.dynect.net",
         port: 25
       },
+      ElasticEmail: {
+        description: "Elastic Email",
+        aliases: ["Elastic Email"],
+        host: "smtp.elasticemail.com",
+        port: 465,
+        secure: true
+      },
       Ethereal: {
+        description: "Ethereal Email (email testing service)",
         aliases: ["ethereal.email"],
         host: "smtp.ethereal.email",
         port: 587
       },
       FastMail: {
+        description: "FastMail",
         domains: ["fastmail.fm"],
         host: "smtp.fastmail.com",
         port: 465,
         secure: true
       },
-      "Forward Email": {
-        aliases: ["FE", "ForwardEmail"],
-        domains: ["forwardemail.net"],
-        host: "smtp.forwardemail.net",
-        port: 465,
-        secure: true
-      },
       "Feishu Mail": {
+        description: "Feishu Mail (Lark)",
         aliases: ["Feishu", "FeishuMail"],
         domains: ["www.feishu.cn"],
         host: "smtp.feishu.cn",
         port: 465,
         secure: true
       },
+      "Forward Email": {
+        description: "Forward Email (email forwarding service)",
+        aliases: ["FE", "ForwardEmail"],
+        domains: ["forwardemail.net"],
+        host: "smtp.forwardemail.net",
+        port: 465,
+        secure: true
+      },
       GandiMail: {
+        description: "Gandi Mail",
         aliases: ["Gandi", "Gandi Mail"],
         host: "mail.gandi.net",
         port: 587
       },
       Gmail: {
+        description: "Gmail",
         aliases: ["Google Mail"],
         domains: ["gmail.com", "googlemail.com"],
         host: "smtp.gmail.com",
         port: 465,
         secure: true
       },
+      GmailWorkspace: {
+        description: "Gmail Workspace",
+        aliases: ["Google Workspace Mail"],
+        host: "smtp-relay.gmail.com",
+        port: 465,
+        secure: true
+      },
+      GMX: {
+        description: "GMX Mail",
+        domains: ["gmx.com", "gmx.net", "gmx.de"],
+        host: "mail.gmx.com",
+        port: 587
+      },
       Godaddy: {
+        description: "GoDaddy Email (US)",
         host: "smtpout.secureserver.net",
         port: 25
       },
       GodaddyAsia: {
+        description: "GoDaddy Email (Asia)",
         host: "smtp.asia.secureserver.net",
         port: 25
       },
       GodaddyEurope: {
+        description: "GoDaddy Email (Europe)",
         host: "smtp.europe.secureserver.net",
         port: 25
       },
       "hot.ee": {
+        description: "Hot.ee (Estonian email provider)",
         host: "mail.hot.ee"
       },
       Hotmail: {
+        description: "Outlook.com / Hotmail",
         aliases: ["Outlook", "Outlook.com", "Hotmail.com"],
         domains: ["hotmail.com", "outlook.com"],
         host: "smtp-mail.outlook.com",
         port: 587
       },
       iCloud: {
+        description: "iCloud Mail",
         aliases: ["Me", "Mac"],
         domains: ["me.com", "mac.com"],
         host: "smtp.mail.me.com",
         port: 587
       },
       Infomaniak: {
+        description: "Infomaniak Mail (Swiss hosting provider)",
         host: "mail.infomaniak.com",
         domains: ["ik.me", "ikmail.com", "etik.com"],
         port: 587
       },
+      KolabNow: {
+        description: "KolabNow (secure email service)",
+        domains: ["kolabnow.com"],
+        aliases: ["Kolab"],
+        host: "smtp.kolabnow.com",
+        port: 465,
+        secure: true,
+        authMethod: "LOGIN"
+      },
       Loopia: {
+        description: "Loopia (Swedish hosting provider)",
         host: "mailcluster.loopia.se",
         port: 465
       },
+      Loops: {
+        description: "Loops",
+        host: "smtp.loops.so",
+        port: 587
+      },
       "mail.ee": {
+        description: "Mail.ee (Estonian email provider)",
         host: "smtp.mail.ee"
       },
       "Mail.ru": {
+        description: "Mail.ru",
         host: "smtp.mail.ru",
         port: 465,
         secure: true
       },
       "Mailcatch.app": {
+        description: "Mailcatch (email testing service)",
         host: "sandbox-smtp.mailcatch.app",
         port: 2525
       },
       Maildev: {
+        description: "MailDev (local email testing)",
         port: 1025,
         ignoreTLS: true
       },
+      MailerSend: {
+        description: "MailerSend",
+        host: "smtp.mailersend.net",
+        port: 587
+      },
       Mailgun: {
+        description: "Mailgun",
         host: "smtp.mailgun.org",
         port: 465,
         secure: true
       },
       Mailjet: {
+        description: "Mailjet",
         host: "in.mailjet.com",
         port: 587
       },
       Mailosaur: {
+        description: "Mailosaur (email testing service)",
         host: "mailosaur.io",
         port: 25
       },
       Mailtrap: {
+        description: "Mailtrap",
         host: "live.smtp.mailtrap.io",
         port: 587
       },
       Mandrill: {
+        description: "Mandrill (by Mailchimp)",
         host: "smtp.mandrillapp.com",
         port: 587
       },
       Naver: {
+        description: "Naver Mail (Korean email provider)",
         host: "smtp.naver.com",
         port: 587
       },
+      OhMySMTP: {
+        description: "OhMySMTP (email delivery service)",
+        host: "smtp.ohmysmtp.com",
+        port: 587,
+        secure: false
+      },
       One: {
+        description: "One.com Email",
         host: "send.one.com",
         port: 465,
         secure: true
       },
       OpenMailBox: {
+        description: "OpenMailBox",
         aliases: ["OMB", "openmailbox.org"],
         host: "smtp.openmailbox.org",
         port: 465,
         secure: true
       },
       Outlook365: {
+        description: "Microsoft 365 / Office 365",
         host: "smtp.office365.com",
         port: 587,
         secure: false
       },
-      OhMySMTP: {
-        host: "smtp.ohmysmtp.com",
-        port: 587,
-        secure: false
-      },
       Postmark: {
+        description: "Postmark",
         aliases: ["PostmarkApp"],
         host: "smtp.postmarkapp.com",
         port: 2525
       },
       Proton: {
+        description: "Proton Mail",
         aliases: ["ProtonMail", "Proton.me", "Protonmail.com", "Protonmail.ch"],
         domains: ["proton.me", "protonmail.com", "pm.me", "protonmail.ch"],
         host: "smtp.protonmail.ch",
@@ -54960,99 +55353,196 @@ var require_services = __commonJS({
         requireTLS: true
       },
       "qiye.aliyun": {
+        description: "Alibaba Mail Enterprise Edition",
         host: "smtp.mxhichina.com",
         port: "465",
         secure: true
       },
       QQ: {
+        description: "QQ Mail",
         domains: ["qq.com"],
         host: "smtp.qq.com",
         port: 465,
         secure: true
       },
       QQex: {
+        description: "QQ Enterprise Mail",
         aliases: ["QQ Enterprise"],
         domains: ["exmail.qq.com"],
         host: "smtp.exmail.qq.com",
         port: 465,
         secure: true
       },
+      Resend: {
+        description: "Resend",
+        host: "smtp.resend.com",
+        port: 465,
+        secure: true
+      },
+      Runbox: {
+        description: "Runbox (Norwegian email provider)",
+        domains: ["runbox.com"],
+        host: "smtp.runbox.com",
+        port: 465,
+        secure: true
+      },
       SendCloud: {
+        description: "SendCloud (Chinese email delivery)",
         host: "smtp.sendcloud.net",
         port: 2525
       },
       SendGrid: {
+        description: "SendGrid",
         host: "smtp.sendgrid.net",
         port: 587
       },
       SendinBlue: {
+        description: "Brevo (formerly Sendinblue)",
         aliases: ["Brevo"],
         host: "smtp-relay.brevo.com",
         port: 587
       },
       SendPulse: {
+        description: "SendPulse",
         host: "smtp-pulse.com",
         port: 465,
         secure: true
       },
       SES: {
+        description: "AWS SES US East (N. Virginia)",
         host: "email-smtp.us-east-1.amazonaws.com",
-        port: 465,
-        secure: true
-      },
-      "SES-US-EAST-1": {
-        host: "email-smtp.us-east-1.amazonaws.com",
-        port: 465,
-        secure: true
-      },
-      "SES-US-WEST-2": {
-        host: "email-smtp.us-west-2.amazonaws.com",
-        port: 465,
-        secure: true
-      },
-      "SES-EU-WEST-1": {
-        host: "email-smtp.eu-west-1.amazonaws.com",
-        port: 465,
-        secure: true
-      },
-      "SES-AP-SOUTH-1": {
-        host: "email-smtp.ap-south-1.amazonaws.com",
         port: 465,
         secure: true
       },
       "SES-AP-NORTHEAST-1": {
+        description: "AWS SES Asia Pacific (Tokyo)",
         host: "email-smtp.ap-northeast-1.amazonaws.com",
         port: 465,
         secure: true
       },
       "SES-AP-NORTHEAST-2": {
+        description: "AWS SES Asia Pacific (Seoul)",
         host: "email-smtp.ap-northeast-2.amazonaws.com",
         port: 465,
         secure: true
       },
       "SES-AP-NORTHEAST-3": {
+        description: "AWS SES Asia Pacific (Osaka)",
         host: "email-smtp.ap-northeast-3.amazonaws.com",
         port: 465,
         secure: true
       },
+      "SES-AP-SOUTH-1": {
+        description: "AWS SES Asia Pacific (Mumbai)",
+        host: "email-smtp.ap-south-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
       "SES-AP-SOUTHEAST-1": {
+        description: "AWS SES Asia Pacific (Singapore)",
         host: "email-smtp.ap-southeast-1.amazonaws.com",
         port: 465,
         secure: true
       },
       "SES-AP-SOUTHEAST-2": {
+        description: "AWS SES Asia Pacific (Sydney)",
         host: "email-smtp.ap-southeast-2.amazonaws.com",
         port: 465,
         secure: true
       },
+      "SES-CA-CENTRAL-1": {
+        description: "AWS SES Canada (Central)",
+        host: "email-smtp.ca-central-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-EU-CENTRAL-1": {
+        description: "AWS SES Europe (Frankfurt)",
+        host: "email-smtp.eu-central-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-EU-NORTH-1": {
+        description: "AWS SES Europe (Stockholm)",
+        host: "email-smtp.eu-north-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-EU-WEST-1": {
+        description: "AWS SES Europe (Ireland)",
+        host: "email-smtp.eu-west-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-EU-WEST-2": {
+        description: "AWS SES Europe (London)",
+        host: "email-smtp.eu-west-2.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-EU-WEST-3": {
+        description: "AWS SES Europe (Paris)",
+        host: "email-smtp.eu-west-3.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-SA-EAST-1": {
+        description: "AWS SES South America (S\xE3o Paulo)",
+        host: "email-smtp.sa-east-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-US-EAST-1": {
+        description: "AWS SES US East (N. Virginia)",
+        host: "email-smtp.us-east-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-US-EAST-2": {
+        description: "AWS SES US East (Ohio)",
+        host: "email-smtp.us-east-2.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-US-GOV-EAST-1": {
+        description: "AWS SES GovCloud (US-East)",
+        host: "email-smtp.us-gov-east-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-US-GOV-WEST-1": {
+        description: "AWS SES GovCloud (US-West)",
+        host: "email-smtp.us-gov-west-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-US-WEST-1": {
+        description: "AWS SES US West (N. California)",
+        host: "email-smtp.us-west-1.amazonaws.com",
+        port: 465,
+        secure: true
+      },
+      "SES-US-WEST-2": {
+        description: "AWS SES US West (Oregon)",
+        host: "email-smtp.us-west-2.amazonaws.com",
+        port: 465,
+        secure: true
+      },
       Seznam: {
+        description: "Seznam Email (Czech email provider)",
         aliases: ["Seznam Email"],
         domains: ["seznam.cz", "email.cz", "post.cz", "spoluzaci.cz"],
         host: "smtp.seznam.cz",
         port: 465,
         secure: true
       },
+      SMTP2GO: {
+        description: "SMTP2GO",
+        host: "mail.smtp2go.com",
+        port: 2525
+      },
       Sparkpost: {
+        description: "SparkPost",
         aliases: ["SparkPost", "SparkPost Mail"],
         domains: ["sparkpost.com"],
         host: "smtp.sparkpostmail.com",
@@ -55060,36 +55550,44 @@ var require_services = __commonJS({
         secure: false
       },
       Tipimail: {
+        description: "Tipimail (email delivery service)",
         host: "smtp.tipimail.com",
         port: 587
       },
+      Tutanota: {
+        description: "Tutanota (Tuta Mail)",
+        domains: ["tutanota.com", "tuta.com", "tutanota.de", "tuta.io"],
+        host: "smtp.tutanota.com",
+        port: 465,
+        secure: true
+      },
       Yahoo: {
+        description: "Yahoo Mail",
         domains: ["yahoo.com"],
         host: "smtp.mail.yahoo.com",
         port: 465,
         secure: true
       },
       Yandex: {
+        description: "Yandex Mail",
         domains: ["yandex.ru"],
         host: "smtp.yandex.ru",
         port: 465,
         secure: true
       },
+      Zimbra: {
+        description: "Zimbra Mail Server",
+        aliases: ["Zimbra Collaboration"],
+        host: "smtp.zimbra.com",
+        port: 587,
+        requireTLS: true
+      },
       Zoho: {
+        description: "Zoho Mail",
         host: "smtp.zoho.com",
         port: 465,
         secure: true,
         authMethod: "LOGIN"
-      },
-      "126": {
-        host: "smtp.126.com",
-        port: 465,
-        secure: true
-      },
-      "163": {
-        host: "smtp.163.com",
-        port: 465,
-        secure: true
       }
     };
   }
@@ -55102,23 +55600,23 @@ var require_well_known = __commonJS({
     var services = require_services();
     var normalized = {};
     Object.keys(services).forEach((key) => {
-      let service = services[key];
-      normalized[normalizeKey(key)] = normalizeService(service);
+      const service = services[key];
+      const normalizedService = normalizeService(service);
+      normalized[normalizeKey(key)] = normalizedService;
       [].concat(service.aliases || []).forEach((alias) => {
-        normalized[normalizeKey(alias)] = normalizeService(service);
+        normalized[normalizeKey(alias)] = normalizedService;
       });
       [].concat(service.domains || []).forEach((domain) => {
-        normalized[normalizeKey(domain)] = normalizeService(service);
+        normalized[normalizeKey(domain)] = normalizedService;
       });
     });
     function normalizeKey(key) {
       return key.replace(/[^a-zA-Z0-9.-]/g, "").toLowerCase();
     }
     function normalizeService(service) {
-      let filter = ["domains", "aliases"];
-      let response = {};
+      const response = {};
       Object.keys(service).forEach((key) => {
-        if (filter.indexOf(key) < 0) {
+        if (!["domains", "aliases"].includes(key)) {
           response[key] = service[key];
         }
       });
@@ -55140,6 +55638,7 @@ var require_smtp_pool = __commonJS({
     var SMTPConnection = require_smtp_connection();
     var wellKnown = require_well_known();
     var shared = require_shared();
+    var errors = require_errors7();
     var packageData = require_package2();
     var SMTPPool = class extends EventEmitter {
       constructor(options) {
@@ -55174,9 +55673,8 @@ var require_smtp_pool = __commonJS({
         this.logger = shared.getLogger(this.options, {
           component: this.options.component || "smtp-pool"
         });
-        let connection2 = new SMTPConnection(this.options);
         this.name = "SMTP (pool)";
-        this.version = packageData.version + "[client:" + connection2.version + "]";
+        this.version = packageData.version + "[client:" + packageData.version + "]";
         this._rateLimit = {
           counter: 0,
           timeout: null,
@@ -55233,7 +55731,7 @@ var require_smtp_pool = __commonJS({
        */
       close() {
         let connection2;
-        let len = this._connections.length;
+        const len = this._connections.length;
         this._closed = true;
         clearTimeout(this._rateLimit.timeout);
         if (!len && !this._queue.length) {
@@ -55265,7 +55763,7 @@ var require_smtp_pool = __commonJS({
         if (!this._queue.length) {
           return;
         }
-        let invokeCallbacks = () => {
+        const invokeCallbacks = () => {
           if (!this._queue.length) {
             this.logger.debug(
               {
@@ -55275,7 +55773,7 @@ var require_smtp_pool = __commonJS({
             );
             return;
           }
-          let entry = this._queue.shift();
+          const entry = this._queue.shift();
           if (entry && typeof entry.callback === "function") {
             try {
               entry.callback(new Error("Connection pool was closed"));
@@ -55301,8 +55799,6 @@ var require_smtp_pool = __commonJS({
        * an available connection, then use this connection to send the mail
        */
       _processMessages() {
-        let connection2;
-        let i, len;
         if (this._closed) {
           return;
         }
@@ -55313,12 +55809,7 @@ var require_smtp_pool = __commonJS({
           }
           return;
         }
-        for (i = 0, len = this._connections.length; i < len; i++) {
-          if (this._connections[i].available) {
-            connection2 = this._connections[i];
-            break;
-          }
-        }
+        let connection2 = this._connections.find((c) => c.available);
         if (!connection2 && this._connections.length < this.options.maxConnections) {
           connection2 = this._createConnection();
         }
@@ -55330,7 +55821,7 @@ var require_smtp_pool = __commonJS({
           this.idling = true;
           this.emit("idle");
         }
-        let entry = connection2.queueEntry = this._queue.shift();
+        const entry = connection2.queueEntry = this._queue.shift();
         entry.messageId = (connection2.queueEntry.mail.message.getHeader("message-id") || "").replace(/[<>\s]/g, "");
         connection2.available = false;
         this.logger.debug(
@@ -55375,7 +55866,7 @@ var require_smtp_pool = __commonJS({
        * Creates a new pool resource
        */
       _createConnection() {
-        let connection2 = new PoolResource(this);
+        const connection2 = new PoolResource(this);
         connection2.id = ++this._connectionCounter;
         this.logger.info(
           {
@@ -55403,8 +55894,8 @@ var require_smtp_pool = __commonJS({
           }
         });
         connection2.once("error", (err) => {
-          if (err.code !== "EMAXLIMIT") {
-            this.logger.error(
+          if (err.code !== errors.EMAXLIMIT) {
+            this.logger.warn(
               {
                 err,
                 tnx: "pool",
@@ -55468,6 +55959,9 @@ var require_smtp_pool = __commonJS({
               this._continueProcessing();
             }, 50);
           } else {
+            if (!this._closed && this.idling && !this._connections.length) {
+              this.emit("clear");
+            }
             this._continueProcessing();
           }
         });
@@ -55501,7 +55995,7 @@ var require_smtp_pool = __commonJS({
         }
       }
       _requeueEntryOnConnectionClose(connection2) {
-        connection2.queueEntry.requeueAttempts = connection2.queueEntry.requeueAttempts + 1;
+        connection2.queueEntry.requeueAttempts += 1;
         this.logger.debug(
           {
             tnx: "pool",
@@ -55533,7 +56027,7 @@ var require_smtp_pool = __commonJS({
        * @param {Object} connection The PoolResource to remove
        */
       _removeConnection(connection2) {
-        let index = this._connections.indexOf(connection2);
+        const index = this._connections.indexOf(connection2);
         if (index !== -1) {
           this._connections.splice(index, 1);
         }
@@ -55547,14 +56041,15 @@ var require_smtp_pool = __commonJS({
         if (!this._rateLimit.limit) {
           return callback();
         }
-        let now = Date.now();
+        const now = Date.now();
         if (this._rateLimit.counter < this._rateLimit.limit) {
           return callback();
         }
         this._rateLimit.waiting.push(callback);
         if (this._rateLimit.checkpoint <= now - this._rateLimit.delta) {
           return this._clearRateLimit();
-        } else if (!this._rateLimit.timeout) {
+        }
+        if (!this._rateLimit.timeout) {
           this._rateLimit.timeout = setTimeout(() => this._clearRateLimit(), this._rateLimit.delta - (now - this._rateLimit.checkpoint));
           this._rateLimit.checkpoint = now;
         }
@@ -55568,7 +56063,7 @@ var require_smtp_pool = __commonJS({
         this._rateLimit.counter = 0;
         this._rateLimit.checkpoint = false;
         while (this._rateLimit.waiting.length) {
-          let cb = this._rateLimit.waiting.shift();
+          const cb = this._rateLimit.waiting.shift();
           setImmediate(cb);
         }
       }
@@ -55590,7 +56085,7 @@ var require_smtp_pool = __commonJS({
             callback = shared.callbackPromise(resolve, reject);
           });
         }
-        let auth = new PoolResource(this).auth;
+        const auth = new PoolResource(this).auth;
         this.getSocket(this.options, (err, socketOptions) => {
           if (err) {
             return callback(err);
@@ -55612,12 +56107,9 @@ var require_smtp_pool = __commonJS({
               options.host || "",
               options.port || ""
             );
-            options = shared.assign(false, options);
-            Object.keys(socketOptions).forEach((key) => {
-              options[key] = socketOptions[key];
-            });
+            options = Object.assign(shared.assign(false, options), socketOptions);
           }
-          let connection2 = new SMTPConnection(options);
+          const connection2 = new SMTPConnection(options);
           let returned = false;
           connection2.once("error", (err2) => {
             if (returned) {
@@ -55634,7 +56126,7 @@ var require_smtp_pool = __commonJS({
             returned = true;
             return callback(new Error("Connection closed"));
           });
-          let finalize = () => {
+          const finalize = () => {
             if (returned) {
               return;
             }
@@ -55659,8 +56151,8 @@ var require_smtp_pool = __commonJS({
                 finalize();
               });
             } else if (!auth && connection2.allowsAuth && options.forceAuth) {
-              let err2 = new Error("Authentication info was not provided");
-              err2.code = "NoAuth";
+              const err2 = new Error("Authentication info was not provided");
+              err2.code = errors.ENOAUTH;
               returned = true;
               connection2.close();
               return callback(err2);
@@ -55685,6 +56177,7 @@ var require_smtp_transport = __commonJS({
     var wellKnown = require_well_known();
     var shared = require_shared();
     var XOAuth2 = require_xoauth2();
+    var errors = require_errors7();
     var packageData = require_package2();
     var SMTPTransport = class extends EventEmitter {
       constructor(options) {
@@ -55717,9 +56210,8 @@ var require_smtp_transport = __commonJS({
         this.logger = shared.getLogger(this.options, {
           component: this.options.component || "smtp-transport"
         });
-        let connection2 = new SMTPConnection(this.options);
         this.name = "SMTP";
-        this.version = packageData.version + "[client:" + connection2.version + "]";
+        this.version = packageData.version + "[client:" + packageData.version + "]";
         if (this.options.auth) {
           this.auth = this.getAuth({});
         }
@@ -55738,21 +56230,12 @@ var require_smtp_transport = __commonJS({
         if (!authOpts) {
           return this.auth;
         }
-        let hasAuth = false;
-        let authData = {};
-        if (this.options.auth && typeof this.options.auth === "object") {
-          Object.keys(this.options.auth).forEach((key) => {
-            hasAuth = true;
-            authData[key] = this.options.auth[key];
-          });
-        }
-        if (authOpts && typeof authOpts === "object") {
-          Object.keys(authOpts).forEach((key) => {
-            hasAuth = true;
-            authData[key] = authOpts[key];
-          });
-        }
-        if (!hasAuth) {
+        const authData = Object.assign(
+          {},
+          this.options.auth && typeof this.options.auth === "object" ? this.options.auth : {},
+          authOpts && typeof authOpts === "object" ? authOpts : {}
+        );
+        if (Object.keys(authData).length === 0) {
           return false;
         }
         switch ((authData.type || "").toString().toUpperCase()) {
@@ -55760,7 +56243,7 @@ var require_smtp_transport = __commonJS({
             if (!authData.service && !authData.user) {
               return false;
             }
-            let oauth2 = new XOAuth2(authData, this.logger);
+            const oauth2 = new XOAuth2(authData, this.logger);
             oauth2.provisionCallback = this.mailer && this.mailer.get("oauth2_provision_cb") || oauth2.provisionCallback;
             oauth2.on("token", (token) => this.mailer.emit("token", token));
             oauth2.on("error", (err) => this.emit("error", err));
@@ -55813,12 +56296,9 @@ var require_smtp_transport = __commonJS({
               options.host || "",
               options.port || ""
             );
-            options = shared.assign(false, options);
-            Object.keys(socketOptions).forEach((key) => {
-              options[key] = socketOptions[key];
-            });
+            options = Object.assign(shared.assign(false, options), socketOptions);
           }
-          let connection2 = new SMTPConnection(options);
+          const connection2 = new SMTPConnection(options);
           connection2.once("error", (err2) => {
             if (returned) {
               return;
@@ -55831,31 +56311,34 @@ var require_smtp_transport = __commonJS({
             if (returned) {
               return;
             }
-            let timer2 = setTimeout(() => {
+            const timer2 = setTimeout(() => {
               if (returned) {
                 return;
               }
               returned = true;
-              let err2 = new Error("Unexpected socket close");
+              const err2 = new Error("Unexpected socket close");
               if (connection2 && connection2._socket && connection2._socket.upgrading) {
-                err2.code = "ETLS";
+                err2.code = errors.ETLS;
               }
               callback(err2);
             }, 1e3);
             try {
               timer2.unref();
-            } catch (E) {
+            } catch (_E) {
             }
           });
-          let sendMessage = () => {
-            let envelope = mail.message.getEnvelope();
-            let messageId = mail.message.messageId();
-            let recipients = [].concat(envelope.to || []);
+          const sendMessage = () => {
+            const envelope = mail.message.getEnvelope();
+            const messageId = mail.message.messageId();
+            const recipients = [].concat(envelope.to || []);
             if (recipients.length > 3) {
               recipients.push("...and " + recipients.splice(2).length + " more");
             }
             if (mail.data.dsn) {
               envelope.dsn = mail.data.dsn;
+            }
+            if (mail.data.requireTLSExtensionEnabled) {
+              envelope.requireTLSExtensionEnabled = mail.data.requireTLSExtensionEnabled;
             }
             this.logger.info(
               {
@@ -55905,7 +56388,7 @@ var require_smtp_transport = __commonJS({
             if (returned) {
               return;
             }
-            let auth = this.getAuth(mail.data.auth);
+            const auth = this.getAuth(mail.data.auth);
             if (auth && (connection2.allowsAuth || options.forceAuth)) {
               connection2.login(auth, (err2) => {
                 if (auth && auth !== this.auth && auth.oauth2) {
@@ -55960,12 +56443,9 @@ var require_smtp_transport = __commonJS({
               options.host || "",
               options.port || ""
             );
-            options = shared.assign(false, options);
-            Object.keys(socketOptions).forEach((key) => {
-              options[key] = socketOptions[key];
-            });
+            options = Object.assign(shared.assign(false, options), socketOptions);
           }
-          let connection2 = new SMTPConnection(options);
+          const connection2 = new SMTPConnection(options);
           let returned = false;
           connection2.once("error", (err2) => {
             if (returned) {
@@ -55982,7 +56462,7 @@ var require_smtp_transport = __commonJS({
             returned = true;
             return callback(new Error("Connection closed"));
           });
-          let finalize = () => {
+          const finalize = () => {
             if (returned) {
               return;
             }
@@ -55994,7 +56474,7 @@ var require_smtp_transport = __commonJS({
             if (returned) {
               return;
             }
-            let authData = this.getAuth({});
+            const authData = this.getAuth({});
             if (authData && (connection2.allowsAuth || options.forceAuth)) {
               connection2.login(authData, (err2) => {
                 if (returned) {
@@ -56008,8 +56488,8 @@ var require_smtp_transport = __commonJS({
                 finalize();
               });
             } else if (!authData && connection2.allowsAuth && options.forceAuth) {
-              let err2 = new Error("Authentication info was not provided");
-              err2.code = "NoAuth";
+              const err2 = new Error("Authentication info was not provided");
+              err2.code = errors.ENOAUTH;
               returned = true;
               connection2.close();
               return callback(err2);
@@ -56038,33 +56518,30 @@ var require_smtp_transport = __commonJS({
 var require_sendmail_transport = __commonJS({
   "node_modules/nodemailer/lib/sendmail-transport/index.js"(exports, module) {
     "use strict";
-    var spawn = __require("child_process").spawn;
+    var { spawn } = __require("child_process");
     var packageData = require_package2();
     var shared = require_shared();
+    var errors = require_errors7();
     var SendmailTransport = class {
       constructor(options) {
         options = options || {};
         this._spawn = spawn;
-        this.options = options || {};
+        this.options = options;
         this.name = "Sendmail";
         this.version = packageData.version;
         this.path = "sendmail";
         this.args = false;
-        this.winbreak = false;
         this.logger = shared.getLogger(this.options, {
           component: this.options.component || "sendmail"
         });
-        if (options) {
-          if (typeof options === "string") {
-            this.path = options;
-          } else if (typeof options === "object") {
-            if (options.path) {
-              this.path = options.path;
-            }
-            if (Array.isArray(options.args)) {
-              this.args = options.args;
-            }
-            this.winbreak = ["win", "windows", "dos", "\r\n"].includes((options.newline || "").toString().toLowerCase());
+        if (typeof options === "string") {
+          this.path = options;
+        } else if (typeof options === "object") {
+          if (options.path) {
+            this.path = options.path;
+          }
+          if (Array.isArray(options.args)) {
+            this.args = options.args;
           }
         }
       }
@@ -56076,21 +56553,17 @@ var require_sendmail_transport = __commonJS({
        */
       send(mail, done) {
         mail.message.keepBcc = true;
-        let envelope = mail.data.envelope || mail.message.getEnvelope();
-        let messageId = mail.message.messageId();
-        let args;
-        let sendmail;
+        const envelope = mail.data.envelope || mail.message.getEnvelope();
+        const messageId = mail.message.messageId();
         let returned;
         const hasInvalidAddresses = [].concat(envelope.from || []).concat(envelope.to || []).some((addr) => /^-/.test(addr));
         if (hasInvalidAddresses) {
-          return done(new Error("Can not send mail. Invalid envelope addresses."));
+          const err = new Error("Can not send mail. Invalid envelope addresses.");
+          err.code = errors.ESENDMAIL;
+          return done(err);
         }
-        if (this.args) {
-          args = ["-i"].concat(this.args).concat(envelope.to);
-        } else {
-          args = ["-i"].concat(envelope.from ? ["-f", envelope.from] : []).concat(envelope.to);
-        }
-        let callback = (err) => {
+        const args = this.args ? ["-i"].concat(this.args).concat(envelope.to) : ["-i"].concat(envelope.from ? ["-f", envelope.from] : []).concat(envelope.to);
+        const callback = (err) => {
           if (returned) {
             return;
           }
@@ -56098,15 +56571,15 @@ var require_sendmail_transport = __commonJS({
           if (typeof done === "function") {
             if (err) {
               return done(err);
-            } else {
-              return done(null, {
-                envelope: mail.data.envelope || mail.message.getEnvelope(),
-                messageId,
-                response: "Messages queued for delivery"
-              });
             }
+            return done(null, {
+              envelope,
+              messageId,
+              response: "Messages queued for delivery"
+            });
           }
         };
+        let sendmail;
         try {
           sendmail = this._spawn(this.path, args);
         } catch (E) {
@@ -56139,12 +56612,10 @@ var require_sendmail_transport = __commonJS({
             if (!code) {
               return callback();
             }
-            let err;
-            if (code === 127) {
-              err = new Error("Sendmail command not found, process exited with code " + code);
-            } else {
-              err = new Error("Sendmail exited with code " + code);
-            }
+            const err = new Error(
+              code === 127 ? "Sendmail command not found, process exited with code " + code : "Sendmail exited with code " + code
+            );
+            err.code = errors.ESENDMAIL;
             this.logger.error(
               {
                 err,
@@ -56171,7 +56642,7 @@ var require_sendmail_transport = __commonJS({
             );
             callback(err);
           });
-          let recipients = [].concat(envelope.to || []);
+          const recipients = [].concat(envelope.to || []);
           if (recipients.length > 3) {
             recipients.push("...and " + recipients.splice(2).length + " more");
           }
@@ -56184,7 +56655,7 @@ var require_sendmail_transport = __commonJS({
             messageId,
             recipients.join(", ")
           );
-          let sourceStream = mail.message.createReadStream();
+          const sourceStream = mail.message.createReadStream();
           sourceStream.once("error", (err) => {
             this.logger.error(
               {
@@ -56201,7 +56672,9 @@ var require_sendmail_transport = __commonJS({
           });
           sourceStream.pipe(sendmail.stdin);
         } else {
-          return callback(new Error("sendmail was not found"));
+          const err = new Error("sendmail was not found");
+          err.code = errors.ESENDMAIL;
+          return callback(err);
         }
       }
     };
@@ -56218,7 +56691,7 @@ var require_stream_transport = __commonJS({
     var StreamTransport = class {
       constructor(options) {
         options = options || {};
-        this.options = options || {};
+        this.options = options;
         this.name = "StreamTransport";
         this.version = packageData.version;
         this.logger = shared.getLogger(this.options, {
@@ -56234,9 +56707,9 @@ var require_stream_transport = __commonJS({
        */
       send(mail, done) {
         mail.message.keepBcc = true;
-        let envelope = mail.data.envelope || mail.message.getEnvelope();
-        let messageId = mail.message.messageId();
-        let recipients = [].concat(envelope.to || []);
+        const envelope = mail.data.envelope || mail.message.getEnvelope();
+        const messageId = mail.message.messageId();
+        const recipients = [].concat(envelope.to || []);
         if (recipients.length > 3) {
           recipients.push("...and " + recipients.splice(2).length + " more");
         }
@@ -56281,12 +56754,12 @@ var require_stream_transport = __commonJS({
               );
             });
             return done(null, {
-              envelope: mail.data.envelope || mail.message.getEnvelope(),
+              envelope,
               messageId,
               message: stream
             });
           }
-          let chunks = [];
+          const chunks = [];
           let chunklen = 0;
           stream.on("readable", () => {
             let chunk;
@@ -56311,7 +56784,7 @@ var require_stream_transport = __commonJS({
           stream.on(
             "end",
             () => done(null, {
-              envelope: mail.data.envelope || mail.message.getEnvelope(),
+              envelope,
               messageId,
               message: Buffer.concat(chunks, chunklen)
             })
@@ -56332,7 +56805,7 @@ var require_json_transport = __commonJS({
     var JSONTransport = class {
       constructor(options) {
         options = options || {};
-        this.options = options || {};
+        this.options = options;
         this.name = "JSONTransport";
         this.version = packageData.version;
         this.logger = shared.getLogger(this.options, {
@@ -56347,9 +56820,9 @@ var require_json_transport = __commonJS({
        */
       send(mail, done) {
         mail.message.keepBcc = true;
-        let envelope = mail.data.envelope || mail.message.getEnvelope();
-        let messageId = mail.message.messageId();
-        let recipients = [].concat(envelope.to || []);
+        const envelope = mail.data.envelope || mail.message.getEnvelope();
+        const messageId = mail.message.messageId();
+        const recipients = [].concat(envelope.to || []);
         if (recipients.length > 3) {
           recipients.push("...and " + recipients.splice(2).length + " more");
         }
@@ -56400,106 +56873,24 @@ var require_ses_transport = __commonJS({
     var packageData = require_package2();
     var shared = require_shared();
     var LeWindows = require_le_windows();
+    var MimeNode = require_mime_node();
     var SESTransport = class extends EventEmitter {
       constructor(options) {
         super();
         options = options || {};
-        this.options = options || {};
+        this.options = options;
         this.ses = this.options.SES;
         this.name = "SESTransport";
         this.version = packageData.version;
         this.logger = shared.getLogger(this.options, {
           component: this.options.component || "ses-transport"
         });
-        this.maxConnections = Number(this.options.maxConnections) || Infinity;
-        this.connections = 0;
-        this.sendingRate = Number(this.options.sendingRate) || Infinity;
-        this.sendingRateTTL = null;
-        this.rateInterval = 1e3;
-        this.rateMessages = [];
-        this.pending = [];
-        this.idling = true;
-        setImmediate(() => {
-          if (this.idling) {
-            this.emit("idle");
-          }
-        });
       }
-      /**
-       * Schedules a sending of a message
-       *
-       * @param {Object} emailMessage MailComposer object
-       * @param {Function} callback Callback function to run when the sending is completed
-       */
-      send(mail, callback) {
-        if (this.connections >= this.maxConnections) {
-          this.idling = false;
-          return this.pending.push({
-            mail,
-            callback
-          });
+      getRegion(cb) {
+        if (this.ses.sesClient.config && typeof this.ses.sesClient.config.region === "function") {
+          return this.ses.sesClient.config.region().then((region) => cb(null, region)).catch((err) => cb(err));
         }
-        if (!this._checkSendingRate()) {
-          this.idling = false;
-          return this.pending.push({
-            mail,
-            callback
-          });
-        }
-        this._send(mail, (...args) => {
-          setImmediate(() => callback(...args));
-          this._sent();
-        });
-      }
-      _checkRatedQueue() {
-        if (this.connections >= this.maxConnections || !this._checkSendingRate()) {
-          return;
-        }
-        if (!this.pending.length) {
-          if (!this.idling) {
-            this.idling = true;
-            this.emit("idle");
-          }
-          return;
-        }
-        let next = this.pending.shift();
-        this._send(next.mail, (...args) => {
-          setImmediate(() => next.callback(...args));
-          this._sent();
-        });
-      }
-      _checkSendingRate() {
-        clearTimeout(this.sendingRateTTL);
-        let now = Date.now();
-        let oldest = false;
-        for (let i = this.rateMessages.length - 1; i >= 0; i--) {
-          if (this.rateMessages[i].ts >= now - this.rateInterval && (!oldest || this.rateMessages[i].ts < oldest)) {
-            oldest = this.rateMessages[i].ts;
-          }
-          if (this.rateMessages[i].ts < now - this.rateInterval && !this.rateMessages[i].pending) {
-            this.rateMessages.splice(i, 1);
-          }
-        }
-        if (this.rateMessages.length < this.sendingRate) {
-          return true;
-        }
-        let delay = Math.max(oldest + 1001, now + 20);
-        this.sendingRateTTL = setTimeout(() => this._checkRatedQueue(), now - delay);
-        try {
-          this.sendingRateTTL.unref();
-        } catch (E) {
-        }
-        return false;
-      }
-      _sent() {
-        this.connections--;
-        this._checkRatedQueue();
-      }
-      /**
-       * Returns true if there are free slots in the queue
-       */
-      isIdle() {
-        return this.idling;
+        return cb(null, false);
       }
       /**
        * Compiles a mailcomposer message and forwards it to SES
@@ -56507,16 +56898,15 @@ var require_ses_transport = __commonJS({
        * @param {Object} emailMessage MailComposer object
        * @param {Function} callback Callback function to run when the sending is completed
        */
-      _send(mail, callback) {
-        let statObject = {
-          ts: Date.now(),
-          pending: true
-        };
-        this.connections++;
-        this.rateMessages.push(statObject);
-        let envelope = mail.data.envelope || mail.message.getEnvelope();
-        let messageId = mail.message.messageId();
-        let recipients = [].concat(envelope.to || []);
+      send(mail, callback) {
+        let fromHeader = mail.message._headers.find((header) => /^from$/i.test(header.key));
+        if (fromHeader) {
+          const mimeNode = new MimeNode("text/plain");
+          fromHeader = mimeNode._convertAddresses(mimeNode._parseAddresses(fromHeader.value));
+        }
+        const envelope = mail.data.envelope || mail.message.getEnvelope();
+        const messageId = mail.message.messageId();
+        const recipients = [].concat(envelope.to || []);
         if (recipients.length > 3) {
           recipients.push("...and " + recipients.splice(2).length + " more");
         }
@@ -56529,7 +56919,7 @@ var require_ses_transport = __commonJS({
           messageId,
           recipients.join(", ")
         );
-        let getRawMessage = (next) => {
+        const getRawMessage = (next) => {
           if (!mail.data._dkim) {
             mail.data._dkim = {};
           }
@@ -56538,9 +56928,9 @@ var require_ses_transport = __commonJS({
           } else {
             mail.data._dkim.skipFields = "date:message-id";
           }
-          let sourceStream = mail.message.createReadStream();
-          let stream = sourceStream.pipe(new LeWindows());
-          let chunks = [];
+          const sourceStream = mail.message.createReadStream();
+          const stream = sourceStream.pipe(new LeWindows());
+          const chunks = [];
           let chunklen = 0;
           stream.on("readable", () => {
             let chunk;
@@ -56550,9 +56940,7 @@ var require_ses_transport = __commonJS({
             }
           });
           sourceStream.once("error", (err) => stream.emit("error", err));
-          stream.once("error", (err) => {
-            next(err);
-          });
+          stream.once("error", (err) => next(err));
           stream.once("end", () => next(null, Buffer.concat(chunks, chunklen)));
         };
         setImmediate(
@@ -56568,44 +56956,34 @@ var require_ses_transport = __commonJS({
                 messageId,
                 err.message
               );
-              statObject.pending = false;
               return callback(err);
             }
-            let sesMessage = {
-              RawMessage: {
-                // required
-                Data: raw
-                // required
+            const sesMessage = Object.assign(
+              {
+                Content: {
+                  Raw: {
+                    // required
+                    Data: raw
+                    // required
+                  }
+                },
+                FromEmailAddress: fromHeader || envelope.from,
+                Destination: {
+                  ToAddresses: envelope.to
+                }
               },
-              Source: envelope.from,
-              Destinations: envelope.to
-            };
-            Object.keys(mail.data.ses || {}).forEach((key) => {
-              sesMessage[key] = mail.data.ses[key];
-            });
-            let ses = (this.ses.aws ? this.ses.ses : this.ses) || {};
-            let aws = this.ses.aws || {};
-            let getRegion = (cb) => {
-              if (ses.config && typeof ses.config.region === "function") {
-                return ses.config.region().then((region) => cb(null, region)).catch((err2) => cb(err2));
-              }
-              return cb(null, ses.config && ses.config.region || "us-east-1");
-            };
-            getRegion((err2, region) => {
+              mail.data.ses || {}
+            );
+            this.getRegion((err2, region) => {
               if (err2 || !region) {
                 region = "us-east-1";
               }
-              let sendPromise;
-              if (typeof ses.send === "function" && aws.SendRawEmailCommand) {
-                sendPromise = ses.send(new aws.SendRawEmailCommand(sesMessage));
-              } else {
-                sendPromise = ses.sendRawEmail(sesMessage).promise();
-              }
+              const command = new this.ses.SendEmailCommand(sesMessage);
+              const sendPromise = this.ses.sesClient.send(command);
               sendPromise.then((data) => {
                 if (region === "us-east-1") {
                   region = "email";
                 }
-                statObject.pending = false;
                 callback(null, {
                   envelope: {
                     from: envelope.from,
@@ -56625,7 +57003,6 @@ var require_ses_transport = __commonJS({
                   messageId,
                   err3.message
                 );
-                statObject.pending = false;
                 callback(err3);
               });
             });
@@ -56639,33 +57016,36 @@ var require_ses_transport = __commonJS({
        */
       verify(callback) {
         let promise;
-        let ses = (this.ses.aws ? this.ses.ses : this.ses) || {};
-        let aws = this.ses.aws || {};
-        const sesMessage = {
-          RawMessage: {
-            // required
-            Data: "From: invalid@invalid\r\nTo: invalid@invalid\r\n Subject: Invalid\r\n\r\nInvalid"
-          },
-          Source: "invalid@invalid",
-          Destinations: ["invalid@invalid"]
-        };
         if (!callback) {
           promise = new Promise((resolve, reject) => {
             callback = shared.callbackPromise(resolve, reject);
           });
         }
         const cb = (err) => {
-          if (err && (err.code || err.Code) !== "InvalidParameterValue") {
+          if (err && !["InvalidParameterValue", "MessageRejected"].includes(err.code || err.Code || err.name)) {
             return callback(err);
           }
           return callback(null, true);
         };
-        if (typeof ses.send === "function" && aws.SendRawEmailCommand) {
-          sesMessage.RawMessage.Data = Buffer.from(sesMessage.RawMessage.Data);
-          ses.send(new aws.SendRawEmailCommand(sesMessage), cb);
-        } else {
-          ses.sendRawEmail(sesMessage, cb);
-        }
+        const sesMessage = {
+          Content: {
+            Raw: {
+              Data: Buffer.from("From: <invalid@invalid>\r\nTo: <invalid@invalid>\r\n Subject: Invalid\r\n\r\nInvalid")
+            }
+          },
+          FromEmailAddress: "invalid@invalid",
+          Destination: {
+            ToAddresses: ["invalid@invalid"]
+          }
+        };
+        this.getRegion((err, region) => {
+          if (err || !region) {
+            region = "us-east-1";
+          }
+          const command = new this.ses.SendEmailCommand(sesMessage);
+          const sendPromise = this.ses.sesClient.send(command);
+          sendPromise.then((data) => cb(null, data)).catch((err2) => cb(err2));
+        });
         return promise;
       }
     };
@@ -56685,6 +57065,7 @@ var require_nodemailer = __commonJS({
     var StreamTransport = require_stream_transport();
     var JSONTransport = require_json_transport();
     var SESTransport = require_ses_transport();
+    var errors = require_errors7();
     var nmfetch = require_fetch();
     var packageData = require_package2();
     var ETHEREAL_API = (process.env.ETHEREAL_API || "https://api.nodemailer.com").replace(/\/+$/, "");
@@ -56693,15 +57074,14 @@ var require_nodemailer = __commonJS({
     var ETHEREAL_CACHE = ["true", "yes", "y", "1"].includes((process.env.ETHEREAL_CACHE || "yes").toString().trim().toLowerCase());
     var testAccount = false;
     module.exports.createTransport = function(transporter2, defaults) {
-      let urlConfig;
       let options;
-      let mailer;
       if (
         // provided transporter is a configuration object, not transporter plugin
         typeof transporter2 === "object" && typeof transporter2.send !== "function" || // provided transporter looks like a connection url
         typeof transporter2 === "string" && /^(smtps?|direct):/i.test(transporter2)
       ) {
-        if (urlConfig = typeof transporter2 === "string" ? transporter2 : transporter2.url) {
+        const urlConfig = typeof transporter2 === "string" ? transporter2 : transporter2.url;
+        if (urlConfig) {
           options = shared.parseConnectionUrl(urlConfig);
         } else {
           options = transporter2;
@@ -56715,13 +57095,19 @@ var require_nodemailer = __commonJS({
         } else if (options.jsonTransport) {
           transporter2 = new JSONTransport(options);
         } else if (options.SES) {
+          if (options.SES.ses && options.SES.aws) {
+            const error = new Error(
+              "Using legacy SES configuration, expecting @aws-sdk/client-sesv2, see https://nodemailer.com/transports/ses/"
+            );
+            error.code = errors.ECONFIG;
+            throw error;
+          }
           transporter2 = new SESTransport(options);
         } else {
           transporter2 = new SMTPTransport(options);
         }
       }
-      mailer = new Mailer(transporter2, options, defaults);
-      return mailer;
+      return new Mailer(transporter2, options, defaults);
     };
     module.exports.createTestAccount = function(apiUrl, callback) {
       let promise;
@@ -56739,17 +57125,17 @@ var require_nodemailer = __commonJS({
         return promise;
       }
       apiUrl = apiUrl || ETHEREAL_API;
-      let chunks = [];
+      const chunks = [];
       let chunklen = 0;
-      let requestHeaders = {};
-      let requestBody = {
+      const requestHeaders = {};
+      const requestBody = {
         requestor: packageData.name,
         version: packageData.version
       };
       if (ETHEREAL_API_KEY) {
         requestHeaders.Authorization = "Bearer " + ETHEREAL_API_KEY;
       }
-      let req = nmfetch(apiUrl + "/user", {
+      const req = nmfetch(apiUrl + "/user", {
         contentType: "application/json",
         method: "POST",
         headers: requestHeaders,
@@ -56764,16 +57150,12 @@ var require_nodemailer = __commonJS({
       });
       req.once("error", (err) => callback(err));
       req.once("end", () => {
-        let res = Buffer.concat(chunks, chunklen);
+        const res = Buffer.concat(chunks, chunklen);
         let data;
-        let err;
         try {
           data = JSON.parse(res.toString());
         } catch (E) {
-          err = E;
-        }
-        if (err) {
-          return callback(err);
+          return callback(E);
         }
         if (data.status !== "success" || data.error) {
           return callback(new Error(data.error || "Request failed"));
@@ -56788,7 +57170,7 @@ var require_nodemailer = __commonJS({
       if (!info || !info.response) {
         return false;
       }
-      let infoProps = /* @__PURE__ */ new Map();
+      const infoProps = /* @__PURE__ */ new Map();
       info.response.replace(/\[([^\]]+)\]$/, (m, props) => {
         props.replace(/\b([A-Z0-9]+)=([^\s]+)/g, (m2, key, value) => {
           infoProps.set(key, value);
@@ -65841,7 +66223,7 @@ var require_MaxRetriesPerRequestError = __commonJS({
 });
 
 // node_modules/ioredis/built/errors/index.js
-var require_errors7 = __commonJS({
+var require_errors8 = __commonJS({
   "node_modules/ioredis/built/errors/index.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -66518,7 +66900,7 @@ var require_event_handler = __commonJS({
     exports.readyHandler = exports.errorHandler = exports.closeHandler = exports.connectHandler = void 0;
     var redis_errors_1 = require_redis_errors();
     var Command_1 = require_Command();
-    var errors_1 = require_errors7();
+    var errors_1 = require_errors8();
     var utils_1 = require_utils3();
     var DataHandler_1 = require_DataHandler();
     var debug = (0, utils_1.Debug)("connection");
@@ -73741,8 +74123,8 @@ var envSchema = external_exports.object({
   POSTGRES_URL: external_exports.string().optional(),
   KV_URL: external_exports.string().optional(),
   REDIS_URL: external_exports.string().optional(),
-  DATABASE_URL: external_exports.string().min(1).default("postgres://elkatech:elkatech@127.0.0.1:5432/elkatech"),
-  INTERNAL_SERVICE_TOKEN: external_exports.string().min(1).default("dev-internal-token"),
+  DATABASE_URL: external_exports.string().min(1),
+  INTERNAL_SERVICE_TOKEN: external_exports.string().min(1),
   APP_BASE_URL: external_exports.string().url().default("http://127.0.0.1:8080"),
   GATEWAY_URL: external_exports.string().url().default("http://127.0.0.1:4000"),
   AUTH_SERVICE_URL: external_exports.string().url().default("http://127.0.0.1:4001"),
@@ -73756,7 +74138,10 @@ var envSchema = external_exports.object({
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
   SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
-  BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!")
+  BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8),
+  GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: external_exports.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional()
 });
 var cachedEnv = null;
 function getEnv() {

@@ -3316,7 +3316,7 @@ var require_validation = __commonJS({
     }
     function getEssenceMediaType(header) {
       if (!header) return "";
-      return header.split(/[ ;]/, 1)[0].trim().toLowerCase();
+      return header.trimStart().split(/[ ;]/, 1)[0].trim().toLowerCase();
     }
     module.exports = {
       symbols: { bodySchema, querystringSchema, responseSchema, paramsSchema, headersSchema },
@@ -10755,20 +10755,14 @@ var require_request = __commonJS({
       }
       if (typeof tp === "number") {
         return function(a, i) {
-          return a != null && i < tp;
+          return i < tp;
         };
       }
       if (typeof tp === "string") {
         const values2 = tp.split(",").map((it) => it.trim());
-        const trust2 = proxyAddr.compile(values2);
-        return function(a, i) {
-          return a != null && trust2(a, i);
-        };
+        return proxyAddr.compile(values2);
       }
-      const trust = proxyAddr.compile(tp);
-      return function(a, i) {
-        return a != null && trust(a, i);
-      };
+      return proxyAddr.compile(tp);
     }
     function buildRequest(R, trustProxy) {
       if (trustProxy) {
@@ -10820,7 +10814,8 @@ var require_request = __commonJS({
         },
         host: {
           get() {
-            if (this.headers["x-forwarded-host"] && proxyFn(this.raw.socket?.remoteAddress, 0)) {
+            const socketAddr = this.raw.socket?.remoteAddress;
+            if (this.headers["x-forwarded-host"] && socketAddr !== null && proxyFn(socketAddr, 0)) {
               return getLastEntryInMultiHeaderValue(this.headers["x-forwarded-host"]);
             }
             return this.headers.host ?? this.headers[":authority"] ?? "";
@@ -10828,7 +10823,8 @@ var require_request = __commonJS({
         },
         protocol: {
           get() {
-            if (this.headers["x-forwarded-proto"] && proxyFn(this.raw.socket?.remoteAddress, 0)) {
+            const socketAddr = this.raw.socket?.remoteAddress;
+            if (this.headers["x-forwarded-proto"] && socketAddr !== null && proxyFn(socketAddr, 0)) {
               return getLastEntryInMultiHeaderValue(this.headers["x-forwarded-proto"]);
             }
             if (this.socket) {
@@ -10937,16 +10933,13 @@ var require_request = __commonJS({
       },
       port: {
         get() {
-          const portFromHost = parseInt(this.host.split(":").slice(-1)[0]);
-          if (!isNaN(portFromHost)) {
-            return portFromHost;
-          }
+          const portReg = /(?<port>:\d+)$/;
           const host = this.headers.host ?? this.headers[":authority"] ?? "";
-          const portFromHeader = parseInt(host.split(":").slice(-1)[0]);
-          if (!isNaN(portFromHeader)) {
-            return portFromHeader;
+          const matches = portReg.exec(host);
+          if (matches === null || matches[1] === void 0) {
+            return null;
           }
-          return null;
+          return parseInt(matches.groups.port.slice(1), 10);
         }
       },
       protocol: {
@@ -15343,6 +15336,9 @@ var require_utils = __commonJS({
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
+    var isHexPair = RegExp.prototype.test.bind(/^[\da-f]{2}$/iu);
+    var isUnreserved = RegExp.prototype.test.bind(/^[\da-z\-._~]$/iu);
+    var isPathCharacter = RegExp.prototype.test.bind(/^[\da-z\-._~!$&'()*+,;=:@/]$/iu);
     function stringArrayToHexStripped(input) {
       let acc = "";
       let code = 0;
@@ -15535,27 +15531,77 @@ var require_utils = __commonJS({
       }
       return output.join("");
     }
-    function normalizeComponentEncoding(component, esc) {
-      const func = esc !== true ? escape : unescape;
-      if (component.scheme !== void 0) {
-        component.scheme = func(component.scheme);
+    var HOST_DELIMS = { "@": "%40", "/": "%2F", "?": "%3F", "#": "%23", ":": "%3A" };
+    var HOST_DELIM_RE = /[@/?#:]/g;
+    var HOST_DELIM_NO_COLON_RE = /[@/?#]/g;
+    function reescapeHostDelimiters(host, isIP) {
+      const re = isIP ? HOST_DELIM_NO_COLON_RE : HOST_DELIM_RE;
+      re.lastIndex = 0;
+      return host.replace(re, (ch) => HOST_DELIMS[ch]);
+    }
+    function normalizePercentEncoding(input, decodeUnreserved = false) {
+      if (input.indexOf("%") === -1) {
+        return input;
       }
-      if (component.userinfo !== void 0) {
-        component.userinfo = func(component.userinfo);
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (decodeUnreserved && isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        output += input[i];
       }
-      if (component.host !== void 0) {
-        component.host = func(component.host);
+      return output;
+    }
+    function normalizePathEncoding(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            const normalizedHex = hex.toUpperCase();
+            const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
+            if (decoded !== "." && isUnreserved(decoded)) {
+              output += decoded;
+            } else {
+              output += "%" + normalizedHex;
+            }
+            i += 2;
+            continue;
+          }
+        }
+        if (isPathCharacter(input[i])) {
+          output += input[i];
+        } else {
+          output += escape(input[i]);
+        }
       }
-      if (component.path !== void 0) {
-        component.path = func(component.path);
+      return output;
+    }
+    function escapePreservingEscapes(input) {
+      let output = "";
+      for (let i = 0; i < input.length; i++) {
+        if (input[i] === "%" && i + 2 < input.length) {
+          const hex = input.slice(i + 1, i + 3);
+          if (isHexPair(hex)) {
+            output += "%" + hex.toUpperCase();
+            i += 2;
+            continue;
+          }
+        }
+        output += escape(input[i]);
       }
-      if (component.query !== void 0) {
-        component.query = func(component.query);
-      }
-      if (component.fragment !== void 0) {
-        component.fragment = func(component.fragment);
-      }
-      return component;
+      return output;
     }
     function recomposeAuthority(component) {
       const uriTokens = [];
@@ -15570,7 +15616,7 @@ var require_utils = __commonJS({
           if (ipV6res.isIPV6 === true) {
             host = `[${ipV6res.escapedHost}]`;
           } else {
-            host = component.host;
+            host = reescapeHostDelimiters(host, false);
           }
         }
         uriTokens.push(host);
@@ -15584,7 +15630,10 @@ var require_utils = __commonJS({
     module.exports = {
       nonSimpleDomain,
       recomposeAuthority,
-      normalizeComponentEncoding,
+      reescapeHostDelimiters,
+      normalizePercentEncoding,
+      normalizePathEncoding,
+      escapePreservingEscapes,
       removeDotSegments,
       isIPv4,
       isUUID,
@@ -15808,12 +15857,12 @@ var require_schemes = __commonJS({
 var require_fast_uri = __commonJS({
   "node_modules/fast-uri/index.js"(exports, module) {
     "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizeComponentEncoding, isIPv4, nonSimpleDomain } = require_utils();
+    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, escapePreservingEscapes, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
     function normalize(uri, options) {
       if (typeof uri === "string") {
         uri = /** @type {T} */
-        serialize(parse2(uri, options), options);
+        normalizeString(uri, options);
       } else if (typeof uri === "object") {
         uri = /** @type {T} */
         parse2(serialize(uri, options), options);
@@ -15880,19 +15929,9 @@ var require_fast_uri = __commonJS({
       return target;
     }
     function equal(uriA, uriB, options) {
-      if (typeof uriA === "string") {
-        uriA = unescape(uriA);
-        uriA = serialize(normalizeComponentEncoding(parse2(uriA, options), true), { ...options, skipEscape: true });
-      } else if (typeof uriA === "object") {
-        uriA = serialize(normalizeComponentEncoding(uriA, true), { ...options, skipEscape: true });
-      }
-      if (typeof uriB === "string") {
-        uriB = unescape(uriB);
-        uriB = serialize(normalizeComponentEncoding(parse2(uriB, options), true), { ...options, skipEscape: true });
-      } else if (typeof uriB === "object") {
-        uriB = serialize(normalizeComponentEncoding(uriB, true), { ...options, skipEscape: true });
-      }
-      return uriA.toLowerCase() === uriB.toLowerCase();
+      const normalizedA = normalizeComparableURI(uriA, options);
+      const normalizedB = normalizeComparableURI(uriB, options);
+      return normalizedA !== void 0 && normalizedB !== void 0 && normalizedA.toLowerCase() === normalizedB.toLowerCase();
     }
     function serialize(cmpts, opts) {
       const component = {
@@ -15917,12 +15956,12 @@ var require_fast_uri = __commonJS({
       if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
       if (component.path !== void 0) {
         if (!options.skipEscape) {
-          component.path = escape(component.path);
+          component.path = escapePreservingEscapes(component.path);
           if (component.scheme !== void 0) {
             component.path = component.path.split("%3A").join(":");
           }
         } else {
-          component.path = unescape(component.path);
+          component.path = normalizePercentEncoding(component.path);
         }
       }
       if (options.reference !== "suffix" && component.scheme) {
@@ -15957,7 +15996,16 @@ var require_fast_uri = __commonJS({
       return uriTokens.join("");
     }
     var URI_PARSE = /^(?:([^#/:?]+):)?(?:\/\/((?:([^#/?@]*)@)?(\[[^#/?\]]+\]|[^#/:?]*)(?::(\d*))?))?([^#?]*)(?:\?([^#]*))?(?:#((?:.|[\n\r])*))?/u;
-    function parse2(uri, opts) {
+    function getParseError(parsed, matches) {
+      if (matches[2] !== void 0 && parsed.path && parsed.path[0] !== "/") {
+        return 'URI path must start with "/" when authority is present.';
+      }
+      if (typeof parsed.port === "number" && (parsed.port < 0 || parsed.port > 65535)) {
+        return "URI port is malformed.";
+      }
+      return void 0;
+    }
+    function parseWithStatus(uri, opts) {
       const options = Object.assign({}, opts);
       const parsed = {
         scheme: void 0,
@@ -15968,6 +16016,7 @@ var require_fast_uri = __commonJS({
         query: void 0,
         fragment: void 0
       };
+      let malformedAuthorityOrPort = false;
       let isIP = false;
       if (options.reference === "suffix") {
         if (options.scheme) {
@@ -15987,6 +16036,11 @@ var require_fast_uri = __commonJS({
         parsed.fragment = matches[8];
         if (isNaN(parsed.port)) {
           parsed.port = matches[5];
+        }
+        const parseError2 = getParseError(parsed, matches);
+        if (parseError2 !== void 0) {
+          parsed.error = parsed.error || parseError2;
+          malformedAuthorityOrPort = true;
         }
         if (parsed.host) {
           const ipv4result = isIPv4(parsed.host);
@@ -16026,14 +16080,18 @@ var require_fast_uri = __commonJS({
               parsed.scheme = unescape(parsed.scheme);
             }
             if (parsed.host !== void 0) {
-              parsed.host = unescape(parsed.host);
+              parsed.host = reescapeHostDelimiters(unescape(parsed.host), isIP);
             }
           }
           if (parsed.path) {
-            parsed.path = escape(unescape(parsed.path));
+            parsed.path = normalizePathEncoding(parsed.path);
           }
           if (parsed.fragment) {
-            parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
+            try {
+              parsed.fragment = encodeURI(decodeURIComponent(parsed.fragment));
+            } catch {
+              parsed.error = parsed.error || "URI malformed";
+            }
           }
         }
         if (schemeHandler && schemeHandler.parse) {
@@ -16042,7 +16100,29 @@ var require_fast_uri = __commonJS({
       } else {
         parsed.error = parsed.error || "URI can not be parsed.";
       }
-      return parsed;
+      return { parsed, malformedAuthorityOrPort };
+    }
+    function parse2(uri, opts) {
+      return parseWithStatus(uri, opts).parsed;
+    }
+    function normalizeString(uri, opts) {
+      return normalizeStringWithStatus(uri, opts).normalized;
+    }
+    function normalizeStringWithStatus(uri, opts) {
+      const { parsed, malformedAuthorityOrPort } = parseWithStatus(uri, opts);
+      return {
+        normalized: malformedAuthorityOrPort ? uri : serialize(parsed, opts),
+        malformedAuthorityOrPort
+      };
+    }
+    function normalizeComparableURI(uri, opts) {
+      if (typeof uri === "string") {
+        const { normalized, malformedAuthorityOrPort } = normalizeStringWithStatus(uri, opts);
+        return malformedAuthorityOrPort ? void 0 : normalized;
+      }
+      if (typeof uri === "object") {
+        return serialize(uri, opts);
+      }
     }
     var fastUri = {
       SCHEMES,
@@ -44809,7 +44889,7 @@ var require_light_my_request = __commonJS({
 var require_fastify = __commonJS({
   "node_modules/fastify/fastify.js"(exports, module) {
     "use strict";
-    var VERSION = "5.8.4";
+    var VERSION = "5.8.5";
     var Avvio = require_boot();
     var http = __require("node:http");
     var diagnostics = __require("node:diagnostics_channel");
@@ -62259,6 +62339,14 @@ var sessionResponseSchema = external_exports.object({
   csrfToken: external_exports.string(),
   user: authUserSchema
 });
+var oauthFindOrCreateInputSchema = external_exports.object({
+  provider: external_exports.literal("google"),
+  providerUserId: external_exports.string().min(1),
+  providerEmail: external_exports.string().email(),
+  emailVerified: external_exports.boolean(),
+  displayName: external_exports.string().min(1),
+  inviteToken: external_exports.string().optional()
+});
 var domainEventTypeSchema = external_exports.enum([
   "user.registered",
   "user.email_verified",
@@ -64419,8 +64507,8 @@ var envSchema = external_exports.object({
   POSTGRES_URL: external_exports.string().optional(),
   KV_URL: external_exports.string().optional(),
   REDIS_URL: external_exports.string().optional(),
-  DATABASE_URL: external_exports.string().min(1).default("postgres://elkatech:elkatech@127.0.0.1:5432/elkatech"),
-  INTERNAL_SERVICE_TOKEN: external_exports.string().min(1).default("dev-internal-token"),
+  DATABASE_URL: external_exports.string().min(1),
+  INTERNAL_SERVICE_TOKEN: external_exports.string().min(1),
   APP_BASE_URL: external_exports.string().url().default("http://127.0.0.1:8080"),
   GATEWAY_URL: external_exports.string().url().default("http://127.0.0.1:4000"),
   AUTH_SERVICE_URL: external_exports.string().url().default("http://127.0.0.1:4001"),
@@ -64434,7 +64522,10 @@ var envSchema = external_exports.object({
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
   SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
-  BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!")
+  BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8),
+  GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: external_exports.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional()
 });
 var cachedEnv = null;
 function getEnv() {
@@ -64878,6 +64969,131 @@ app.post("/internal/invite", async (request, reply) => {
     userId,
     inviteUrl
   };
+});
+app.post("/internal/oauth/find-or-create", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const input = oauthFindOrCreateInputSchema.parse(request.body);
+  if (!input.emailVerified) {
+    return reply.code(400).send({ message: "Google email is not verified. Please verify your Google email first." });
+  }
+  const email = input.providerEmail.toLowerCase();
+  const existingIdentities = await sql`
+    select user_id
+    from auth.oauth_identities
+    where provider = ${input.provider}
+      and provider_user_id = ${input.providerUserId}
+    limit 1
+  `;
+  let userId;
+  if (existingIdentities.length > 0) {
+    userId = existingIdentities[0].user_id;
+  } else {
+    const existingUsers = await sql`
+      select *
+      from auth.users
+      where lower(email) = ${email}
+      limit 1
+    `;
+    if (existingUsers.length > 0) {
+      userId = existingUsers[0].id;
+      await sql`
+        insert into auth.oauth_identities (id, user_id, provider, provider_user_id, provider_email)
+        values (${randomUUID()}, ${userId}, ${input.provider}, ${input.providerUserId}, ${email})
+        on conflict (provider, provider_user_id) do nothing
+      `;
+      if (!existingUsers[0].email_verified) {
+        await sql`
+          update auth.users
+          set email_verified = true, updated_at = now()
+          where id = ${userId}
+        `;
+      }
+    } else {
+      let role = "customer";
+      if (input.inviteToken) {
+        const inviteRows = await sql`
+          select id, user_id, email, role
+          from auth.tokens
+          where token_hash = ${hashToken(input.inviteToken)}
+            and purpose = 'invite_signup'
+            and consumed_at is null
+            and expires_at > now()
+          limit 1
+        `;
+        const invite = inviteRows[0];
+        if (invite && invite.role && invite.email.toLowerCase() === email) {
+          role = invite.role;
+          userId = invite.user_id ?? randomUUID();
+          await sql`
+            update auth.tokens
+            set consumed_at = now()
+            where id = ${invite.id}
+          `;
+        } else {
+          userId = randomUUID();
+        }
+      } else {
+        userId = randomUUID();
+      }
+      await sql`
+        insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+        values (
+          ${userId},
+          ${email},
+          ${input.displayName},
+          ${role},
+          ${null},
+          ${true},
+          ${"active"}
+        )
+        on conflict (id)
+        do update set
+          email = excluded.email,
+          display_name = excluded.display_name,
+          role = excluded.role,
+          email_verified = excluded.email_verified,
+          status = excluded.status,
+          updated_at = now()
+      `;
+      await sql`
+        insert into auth.oauth_identities (id, user_id, provider, provider_user_id, provider_email)
+        values (${randomUUID()}, ${userId}, ${input.provider}, ${input.providerUserId}, ${email})
+        on conflict (provider, provider_user_id) do nothing
+      `;
+    }
+  }
+  const userRows = await sql`
+    select * from auth.users where id = ${userId} limit 1
+  `;
+  const user = userRows[0];
+  if (!user) {
+    return reply.code(500).send({ message: "Failed to resolve user after OAuth." });
+  }
+  const sessionToken = generateToken();
+  const csrfToken = generateToken(16);
+  await sql`
+    insert into auth.sessions (
+      id, token_hash, csrf_token, user_id, user_agent, ip_address, expires_at
+    )
+    values (
+      ${randomUUID()},
+      ${hashToken(sessionToken)},
+      ${csrfToken},
+      ${user.id},
+      ${request.headers["user-agent"] ?? null},
+      ${request.ip},
+      now() + ${sql`${env.SESSION_TTL_HOURS} * interval '1 hour'`}
+    )
+  `;
+  return reply.send(
+    sessionResponseSchema.parse({
+      sessionToken,
+      csrfToken,
+      user: mapUser(user)
+    })
+  );
 });
 var port = Number(new URL(env.AUTH_SERVICE_URL).port || "4001");
 if (!process.env.VERCEL) {
