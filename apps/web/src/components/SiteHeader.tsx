@@ -97,10 +97,10 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
             isLightHeader
               ? hasGlassShell
                 ? "border-slate-300/80 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.10)] backdrop-blur-2xl before:bg-white/90 before:opacity-100"
-                : "border-slate-200/70 bg-white/75 shadow-[0_12px_30px_rgba(15,23,42,0.06)] backdrop-blur-2xl before:bg-white/80 before:opacity-100"
+                : "border-transparent bg-white/35 shadow-none backdrop-blur-sm before:bg-white/80 before:opacity-0"
               : hasGlassShell
                 ? "border-white/10 bg-[#07111f]/75 shadow-[0_12px_40px_rgba(0,0,0,0.28)] backdrop-blur-2xl before:bg-white/15 before:opacity-100"
-                : "border-white/10 bg-[#07111f]/75 shadow-none backdrop-blur-2xl before:bg-white/15 before:opacity-0 lg:border-transparent lg:bg-[#020817]/25 lg:backdrop-blur-sm"
+                : "border-transparent bg-[#020817]/20 shadow-none backdrop-blur-sm before:bg-white/15 before:opacity-0"
           )}
         >
           <a href={useHomeAnchors ? "#home" : "/"} className="flex shrink-0 items-center gap-2">

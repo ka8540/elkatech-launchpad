@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, FileText, Wrench } from "lucide-react";
 import IntroAnimation from "@/components/IntroAnimation";
+import ProductPageBackground from "@/components/ProductPageBackground";
 import SiteHeader from "@/components/SiteHeader";
 import StableReveal from "@/components/StableReveal";
 import { toPublicAsset } from "@/lib/assets";
@@ -132,15 +133,14 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="relative isolate min-h-screen overflow-hidden bg-background text-foreground">
       {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
       <SiteHeader variant="light" />
+      <ProductPageBackground />
 
-      <div className="pt-20 md:pt-24 lg:pt-28">
+      <div className="relative z-10 pt-20 md:pt-24 lg:pt-28">
         <section className="relative">
           <div className="absolute inset-x-0 top-0 h-px section-divider" />
-          <div className="absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.10),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.06),transparent)] dark:bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.06),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.04),transparent)]" />
-          <div className="pointer-events-none absolute inset-0 -z-10 ambient-surface-left" />
           <div className="mx-auto max-w-6xl px-4 pb-10 pt-10 md:pt-14">
             <StableReveal variant="section">
               <h1 className="text-3xl font-bold tracking-tight md:text-5xl">{title}</h1>
