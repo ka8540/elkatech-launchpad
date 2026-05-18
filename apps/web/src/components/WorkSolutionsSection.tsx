@@ -75,23 +75,24 @@ const containerVariants: Variants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: 0.06,
-      delayChildren: 0.06,
+      staggerChildren: 0.08,
+      delayChildren: 0.04,
     },
   },
 };
 
-const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 24 },
+const createItemVariants = (shouldReduceMotion: boolean): Variants => ({
+  hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 28 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: shouldReduceMotion ? 0.25 : 0.6, ease: [0.22, 1, 0.36, 1] },
   },
-};
+});
 
 const WorkSolutionsSection = () => {
   const shouldReduceMotion = useReducedMotion();
+  const itemVariants = createItemVariants(shouldReduceMotion);
 
   return (
     <section id="work" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
@@ -121,21 +122,21 @@ const WorkSolutionsSection = () => {
         <motion.div
           className="grid md:grid-cols-2 gap-6"
           variants={containerVariants}
-          initial={shouldReduceMotion ? false : "hidden"}
-          whileInView={shouldReduceMotion ? undefined : "visible"}
+          initial="hidden"
+          whileInView="visible"
           viewport={{ once: true, amount: 0.1 }}
         >
           {categories.map((category) => (
             <motion.div
               key={category.title}
               variants={itemVariants}
-              className="group transform-gpu overflow-hidden rounded-2xl border border-blue-400/15 bg-slate-900/70 backdrop-blur-sm transition-all duration-500 hover:-translate-y-1 hover:border-accent/35 hover:bg-slate-900/80 hover:shadow-[0_24px_60px_rgba(2,132,199,0.12)]"
+              className="group relative transform-gpu overflow-hidden rounded-2xl border border-blue-500/20 bg-slate-950/60 backdrop-blur-sm transition-all duration-500 motion-safe:hover:-translate-y-1 motion-reduce:hover:translate-y-0 hover:border-blue-400/40 hover:bg-slate-900/70 hover:shadow-[0_18px_50px_rgba(14,165,233,0.12)]"
             >
               <div className="relative h-72 md:h-80 overflow-hidden">
                 <img
                   src={toPublicAsset(category.image)}
                   alt={category.title}
-                  className="h-full w-full transform-gpu object-cover transition duration-500 group-hover:scale-[1.02] group-hover:brightness-105"
+                  className="h-full w-full transform-gpu object-cover transition duration-700 ease-out motion-safe:group-hover:scale-[1.015] motion-reduce:group-hover:scale-100 group-hover:brightness-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[hsl(215,60%,8%)] via-[hsl(215,60%,8%)]/40 to-transparent" />
               </div>
