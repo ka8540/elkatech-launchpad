@@ -134,9 +134,9 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
   return (
     <div className="min-h-screen bg-background text-foreground">
       {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
-      <SiteHeader />
+      <SiteHeader variant="light" />
 
-      <div className="pt-16 md:pt-20 lg:pt-24">
+      <div className="pt-20 md:pt-24 lg:pt-28">
         <section className="relative">
           <div className="absolute inset-x-0 top-0 h-px section-divider" />
           <div className="absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.10),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.06),transparent)] dark:bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.06),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.04),transparent)]" />

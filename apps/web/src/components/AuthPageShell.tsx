@@ -10,7 +10,7 @@ type AuthPageShellProps = {
 const AuthPageShell = ({ title, subtitle, children }: AuthPageShellProps) => {
   return (
     <div className="min-h-screen bg-steel-gradient">
-      <SiteHeader />
+      <SiteHeader variant="light" />
       <div className="container mx-auto px-4 pb-16 pt-28 md:px-6 md:pt-32">
         <div className="mx-auto max-w-md rounded-3xl border bg-card p-8 shadow-elevated">
           <div className="mb-8">
