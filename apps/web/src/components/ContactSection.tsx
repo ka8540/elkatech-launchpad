@@ -1,10 +1,10 @@
-import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Send, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { toast } from "sonner";
+import StableReveal from "@/components/StableReveal";
 
 const WHATSAPP_NUMBER = "917203033486";
 const PHONE_NUMBER = "+917203033486";
@@ -52,12 +52,7 @@ const ContactSection = () => {
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
           {/* Left Column - Info */}
-          <motion.div
-            initial={{ opacity: 0, x: -25 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.5 }}
-          >
+          <StableReveal>
             <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
               Contact Us
             </span>
@@ -131,15 +126,10 @@ const ContactSection = () => {
                 Chat on WhatsApp
               </a>
             </Button>
-          </motion.div>
+          </StableReveal>
 
           {/* Right Column - Form */}
-          <motion.div
-            initial={{ opacity: 0, x: 25 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
+          <StableReveal delay={0.04}>
             <form
               onSubmit={handleSubmit}
               className="bg-card rounded-2xl p-8 border border-border shadow-elevated"
@@ -238,16 +228,12 @@ const ContactSection = () => {
                 </Button>
               </div>
             </form>
-          </motion.div>
+          </StableReveal>
         </div>
 
         {/* Google Maps Embed */}
-        <motion.div
+        <StableReveal
           className="mt-16 rounded-2xl overflow-hidden border border-white/10"
-          initial={{ opacity: 0, y: 25 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
         >
           <iframe
             src="https://www.google.com/maps?q=3GWW%2B237%20Vandematram%20Prime%20Gota%20Ahmedabad&z=18&output=embed"
@@ -260,7 +246,7 @@ const ContactSection = () => {
             title="Elkatech Office Location – Vandematram Prime, Gota, Ahmedabad"
             className="w-full"
           />
-        </motion.div>
+        </StableReveal>
       </div>
     </section>
   );

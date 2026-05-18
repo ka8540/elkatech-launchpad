@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import StableReveal from "@/components/StableReveal";
 
 const brands = [
   "Mimaki",
@@ -19,13 +19,7 @@ const BrandsSection = () => {
     <section id="brands" className="py-20 md:py-28 bg-background relative">
       <div className="container mx-auto px-4 md:px-6">
         {/* Section Header */}
-        <motion.div
-          className="text-center max-w-2xl mx-auto mb-14"
-          initial={{ opacity: 0, y: 25 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5 }}
-        >
+        <StableReveal className="text-center max-w-2xl mx-auto mb-14">
           <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
             Trusted Partners
           </span>
@@ -36,48 +30,27 @@ const BrandsSection = () => {
           <p className="text-muted-foreground text-lg">
             We work with internationally recognized brands known for reliability and performance.
           </p>
-        </motion.div>
+        </StableReveal>
 
         {/* Brands Grid */}
-        <motion.div
-          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-80px" }}
-          variants={{
-            hidden: { opacity: 0 },
-            visible: {
-              opacity: 1,
-              transition: { staggerChildren: 0.05 },
-            },
-          }}
-        >
-          {brands.map((brand) => (
-            <motion.div
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {brands.map((brand, index) => (
+            <StableReveal
               key={brand}
-              variants={{
-                hidden: { opacity: 0, scale: 0.95 },
-                visible: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
-              }}
+              delay={index * 0.03}
               className="group flex items-center justify-center h-20 md:h-24 rounded-xl bg-card border border-border hover:border-accent/30 hover:shadow-soft transition-all duration-300"
             >
               <span className="font-display text-lg md:text-xl font-semibold text-muted-foreground group-hover:text-foreground transition-colors duration-300">
                 {brand}
               </span>
-            </motion.div>
+            </StableReveal>
           ))}
-        </motion.div>
+        </div>
 
         {/* Note */}
-        <motion.p
-          className="text-center text-sm text-muted-foreground mt-8"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.3 }}
-        >
-          * Logos and brand assets are property of their respective owners.
-        </motion.p>
+        <StableReveal delay={0.12} className="text-center text-sm text-muted-foreground mt-8">
+          <p>* Logos and brand assets are property of their respective owners.</p>
+        </StableReveal>
       </div>
     </section>
   );

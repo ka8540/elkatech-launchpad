@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
 import { MessageSquare, HeartHandshake, Lightbulb, Clock, Building, CheckCircle } from "lucide-react";
+import StableReveal from "@/components/StableReveal";
 
 const reasons = [
   {
@@ -42,13 +42,7 @@ const WhyElkatech = () => {
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         {/* Section Header */}
-        <motion.div
-          className="text-center max-w-2xl mx-auto mb-16"
-          initial={{ opacity: 0, y: 25 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5 }}
-        >
+        <StableReveal className="text-center max-w-2xl mx-auto mb-16">
           <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
             Why Choose Us
           </span>
@@ -59,33 +53,14 @@ const WhyElkatech = () => {
           <p className="text-muted-foreground text-lg">
             We believe in building trust through actions, not just words. Here's what sets us apart.
           </p>
-        </motion.div>
+        </StableReveal>
 
         {/* Reasons Grid */}
-        <motion.div
-          className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: "-80px" }}
-          variants={{
-            hidden: { opacity: 0 },
-            visible: {
-              opacity: 1,
-              transition: { staggerChildren: 0.08 },
-            },
-          }}
-        >
-          {reasons.map((reason) => (
-            <motion.div
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {reasons.map((reason, index) => (
+            <StableReveal
               key={reason.title}
-              variants={{
-                hidden: { opacity: 0, y: 20 },
-                visible: {
-                  opacity: 1,
-                  y: 0,
-                  transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
-                },
-              }}
+              delay={index * 0.04}
               className="group flex items-start gap-4 p-6 rounded-xl bg-card border border-border hover:border-accent/30 hover:shadow-soft transition-all duration-300"
             >
               {/* Icon */}
@@ -102,9 +77,9 @@ const WhyElkatech = () => {
                   {reason.description}
                 </p>
               </div>
-            </motion.div>
+            </StableReveal>
           ))}
-        </motion.div>
+        </div>
       </div>
     </section>
   );

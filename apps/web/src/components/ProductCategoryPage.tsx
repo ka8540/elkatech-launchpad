@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, FileText, Wrench } from "lucide-react";
 import IntroAnimation from "@/components/IntroAnimation";
 import SiteHeader from "@/components/SiteHeader";
+import StableReveal from "@/components/StableReveal";
 import { toPublicAsset } from "@/lib/assets";
 
 export type ProductSpec = [string, string];
@@ -140,22 +140,13 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
         <section className="relative">
           <div className="absolute inset-0 -z-10 bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.10),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.06),transparent)] dark:bg-[radial-gradient(60%_60%_at_20%_10%,rgba(255,255,255,0.06),transparent),radial-gradient(50%_50%_at_80%_10%,rgba(255,255,255,0.04),transparent)]" />
           <div className="mx-auto max-w-6xl px-4 pb-10 pt-10 md:pt-14">
-            <motion.h1
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-3xl font-bold tracking-tight md:text-5xl"
-            >
-              {title}
-            </motion.h1>
+            <StableReveal>
+              <h1 className="text-3xl font-bold tracking-tight md:text-5xl">{title}</h1>
+            </StableReveal>
 
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-              className="mt-4 max-w-3xl text-base text-muted-foreground md:text-lg"
-            >
-              {intro}
-            </motion.p>
+            <StableReveal delay={0.04}>
+              <p className="mt-4 max-w-3xl text-base text-muted-foreground md:text-lg">{intro}</p>
+            </StableReveal>
 
             <div className="mt-8 flex flex-wrap gap-3">
               <a
@@ -177,12 +168,9 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
         <section id="products" className="mx-auto max-w-6xl px-4 pb-16">
           <div className="space-y-10">
             {products.map((product, index) => (
-              <motion.div
+              <StableReveal
                 key={product.id}
-                initial={{ opacity: 0, y: 14 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
-                transition={{ duration: 0.35, delay: index * 0.03 }}
+                delay={index * 0.04}
                 className="rounded-3xl border bg-card"
               >
                 <div className="p-5 md:p-7">
@@ -236,7 +224,7 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </StableReveal>
             ))}
           </div>
         </section>

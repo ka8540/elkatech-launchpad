@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
 import { Heart, Users, HandshakeIcon, Target } from "lucide-react";
+import StableReveal from "@/components/StableReveal";
 
 const values = [
   {
@@ -28,11 +28,6 @@ const values = [
   },
 ];
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0 },
-};
-
 const AboutSection = () => {
   return (
     <section
@@ -44,13 +39,7 @@ const AboutSection = () => {
       <div className="container mx-auto px-4 md:px-6">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           {/* Left Column - Content */}
-          <motion.div
-            initial={{ opacity: 0, x: -25 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            layout={false}
-          >
+          <StableReveal>
             <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
               About Elkatech
             </span>
@@ -77,27 +66,14 @@ const AboutSection = () => {
                 just for a single purchase, but for your business journey ahead.
               </p>
             </div>
-          </motion.div>
+          </StableReveal>
 
           {/* Right Column - Values */}
-            <motion.div
-              className="grid sm:grid-cols-2 gap-4"
-              layout
-              transition={{ layout: { duration: 0.35, ease: "easeOut" } }}
-            >
-              {values.map((value) => (
-                <motion.div
+            <div className="grid sm:grid-cols-2 gap-4">
+              {values.map((value, index) => (
+                <StableReveal
                   key={value.title}
-                  layout
-                  initial={{ opacity: 0, y: 16 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.25 }}
-                  transition={{
-                    duration: 0.55,
-                    ease: "easeOut",
-                    layout: { duration: 0.35, ease: "easeOut" },
-                  }}
-                  style={{ willChange: "transform, opacity" }}
+                  delay={index * 0.04}
                   className="group p-5 rounded-xl bg-card border border-border hover:border-accent/30 hover:shadow-soft transition-all duration-300"
                 >
                   <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mb-3 group-hover:bg-accent/20 transition-colors duration-300">
@@ -111,9 +87,9 @@ const AboutSection = () => {
                   <p className="text-sm text-muted-foreground leading-relaxed">
                     {value.description}
                   </p>
-                </motion.div>
+                </StableReveal>
               ))}
-            </motion.div>
+            </div>
 
         </div>
       </div>

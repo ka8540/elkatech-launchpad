@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import {
   Package,
   Truck,
@@ -10,6 +9,7 @@ import {
   Banknote,
   Receipt,
 } from "lucide-react";
+import StableReveal from "@/components/StableReveal";
 
 const features = [
   {
@@ -85,13 +85,7 @@ const InfrastructureSection = () => {
         {/* ✅ TOP: 2-column layout only for image + features */}
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left: image */}
-          <motion.div
-            initial={{ opacity: 0, x: -25 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.5 }}
-            className="relative"
-          >
+          <StableReveal className="relative">
             <div className="aspect-[4/3] rounded-2xl bg-navy-gradient overflow-hidden relative">
               <div className="aspect-[4/3] rounded-2xl overflow-hidden relative">
                 <img
@@ -109,12 +103,9 @@ const InfrastructureSection = () => {
             </div>
 
             {/* overlay stat */}
-            <motion.div
+            <StableReveal
               className="absolute -bottom-6 -right-6 bg-card rounded-xl p-5 shadow-card border border-border"
-              initial={{ opacity: 0, scale: 0.9 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.3, duration: 0.4 }}
+              delay={0.08}
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -125,16 +116,11 @@ const InfrastructureSection = () => {
                   <p className="text-sm text-muted-foreground">{factsheet.shipmentMode}</p>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
+            </StableReveal>
+          </StableReveal>
 
           {/* Right: intro + feature cards */}
-          <motion.div
-            initial={{ opacity: 0, x: 25 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-          >
+          <StableReveal delay={0.04}>
             <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
               Infrastructure
             </span>
@@ -148,12 +134,9 @@ const InfrastructureSection = () => {
 
             <div className="space-y-4">
               {features.map((feature, index) => (
-                <motion.div
+                <StableReveal
                   key={feature.title}
-                  initial={{ opacity: 0, y: 15 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.2 + index * 0.1, duration: 0.4 }}
+                  delay={0.08 + index * 0.04}
                   className="flex items-start gap-4 p-4 rounded-xl bg-card border border-border hover:border-accent/30 transition-all duration-300"
                 >
                   <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
@@ -167,21 +150,15 @@ const InfrastructureSection = () => {
                       {feature.description}
                     </p>
                   </div>
-                </motion.div>
+                </StableReveal>
               ))}
             </div>
-          </motion.div>
+          </StableReveal>
         </div>
 
         {/* ✅ BOTTOM: full width content AFTER the 2 columns */}
         <div className="mt-16">
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 0.5 }}
-            className="rounded-3xl border bg-card p-6 md:p-8"
-          >
+          <StableReveal className="rounded-3xl border bg-card p-6 md:p-8">
             <div className="flex items-center gap-2 mb-6">
               <Building2 className="w-5 h-5 text-accent" />
               <h3 className="font-display text-xl md:text-2xl font-semibold text-foreground">
@@ -265,7 +242,7 @@ const InfrastructureSection = () => {
                 </p>
               </div>
             </div>
-          </motion.div>
+          </StableReveal>
         </div>
       </div>
     </section>

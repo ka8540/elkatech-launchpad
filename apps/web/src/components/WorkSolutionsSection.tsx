@@ -1,6 +1,6 @@
-import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import StableReveal from "@/components/StableReveal";
 import { toPublicAsset } from "@/lib/assets";
 
 const categories = [
@@ -78,13 +78,7 @@ const WorkSolutionsSection = () => {
       <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/3 rounded-full blur-3xl" />
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
-        <motion.div
-          className="text-center max-w-3xl mx-auto mb-16"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.6 }}
-        >
+        <StableReveal className="text-center max-w-3xl mx-auto mb-16">
           <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
             Work & Solutions
           </span>
@@ -95,7 +89,7 @@ const WorkSolutionsSection = () => {
             Explore our machinery categories tailored for commercial printing, signage, and
             fabrication workflows.
           </p>
-        </motion.div>
+        </StableReveal>
 
         <div className="grid md:grid-cols-2 gap-6">
           {categories.map((category) => (
