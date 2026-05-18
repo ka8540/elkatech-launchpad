@@ -8,6 +8,7 @@ const path = require('path');
 
 const migrations = [
   'services/auth/migrations/001_init.sql',
+  'services/auth/migrations/002_oauth_identities.sql',
   'services/catalog/migrations/001_init.sql',
   'services/service-desk/migrations/001_init.sql',
   'services/notification/migrations/001_init.sql',

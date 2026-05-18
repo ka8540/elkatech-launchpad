@@ -75,6 +75,32 @@ function ensureInternal(request: { headers: Record<string, unknown> }) {
   return request.headers["x-internal-token"] === env.INTERNAL_SERVICE_TOKEN;
 }
 
+let oauthIdentitiesTableReady: Promise<void> | null = null;
+
+async function ensureOauthIdentitiesTable() {
+  if (!oauthIdentitiesTableReady) {
+    oauthIdentitiesTableReady = (async () => {
+      await sql`
+        create table if not exists auth.oauth_identities (
+          id uuid primary key,
+          user_id uuid not null references auth.users(id) on delete cascade,
+          provider text not null,
+          provider_user_id text not null,
+          provider_email text not null,
+          created_at timestamptz not null default now(),
+          updated_at timestamptz not null default now(),
+          unique(provider, provider_user_id)
+        )
+      `;
+    })().catch((error) => {
+      oauthIdentitiesTableReady = null;
+      throw error;
+    });
+  }
+
+  return oauthIdentitiesTableReady;
+}
+
 app.get("/health", async () => ({ ok: true, service: "auth" }));
 
 app.post("/signup", async (request, reply) => {
@@ -536,6 +562,7 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
   }
 
   const email = input.providerEmail.toLowerCase();
+  await ensureOauthIdentitiesTable();
 
   // 1. Check for existing OAuth identity
   const existingIdentities = await sql<{ user_id: string }[]>`
