@@ -11,7 +11,7 @@
     "@elkatech/config": "1.0.0",
     "@elkatech/contracts": "1.0.0",
     "fastify": "^5.1.0",
-    "nodemailer": "^6.10.0",
+    "nodemailer": "^8.0.7",
     "zod": "^3.25.76"
   },
   "main": "dist/index.js"
