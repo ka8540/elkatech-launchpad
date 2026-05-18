@@ -1,4 +1,5 @@
 {
+  "framework": "vite",
   "buildCommand": "npm run build --workspaces --if-present",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
