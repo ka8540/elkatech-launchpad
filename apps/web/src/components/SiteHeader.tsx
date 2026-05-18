@@ -34,12 +34,12 @@ const SiteHeader = ({ useHomeAnchors = false }: SiteHeaderProps) => {
   }));
 
   return (
-    <div className="fixed left-0 right-0 top-0 z-40 lg:flex lg:justify-center lg:px-4 lg:pt-3">
+    <div className="fixed left-0 right-0 top-0 z-50 px-4 pt-4 lg:flex lg:justify-center">
       <header
-        className={`px-4 transition-all duration-300 md:px-6 lg:rounded-full ${
+        className={`relative w-full max-w-7xl overflow-hidden rounded-[28px] border px-4 shadow-[0_12px_40px_rgba(0,0,0,0.25)] backdrop-blur-2xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-x-5 before:top-px before:h-px before:bg-white/15 before:content-[''] md:px-6 lg:rounded-full ${
           isScrolled
-            ? "bg-background/80 shadow-soft backdrop-blur-xl lg:border lg:border-border/50"
-            : "bg-background/30 backdrop-blur-sm lg:border lg:border-transparent"
+            ? "border-white/[0.12] bg-[#07111f]/[0.78]"
+            : "border-white/10 bg-[#07111f]/65"
         }`}
       >
         <div className="flex h-12 items-center justify-between gap-4 md:h-14 md:gap-8">
@@ -63,7 +63,7 @@ const SiteHeader = ({ useHomeAnchors = false }: SiteHeaderProps) => {
               />
               <path
                 d="M30 30 L55 30"
-                stroke="hsl(var(--foreground))"
+                stroke="white"
                 strokeWidth="4"
                 strokeLinecap="round"
               />
@@ -75,19 +75,19 @@ const SiteHeader = ({ useHomeAnchors = false }: SiteHeaderProps) => {
               />
               <path
                 d="M30 70 L55 70"
-                stroke="hsl(var(--foreground))"
+                stroke="white"
                 strokeWidth="4"
                 strokeLinecap="round"
               />
               <path
                 d="M30 30 L30 70"
-                stroke="hsl(var(--foreground))"
+                stroke="white"
                 strokeWidth="4"
                 strokeLinecap="round"
               />
               <circle cx="68" cy="50" r="6" fill="hsl(var(--accent))" />
             </svg>
-            <span className="font-display text-lg font-bold text-foreground">
+            <span className="font-display text-lg font-bold text-white">
               Elkatech
             </span>
           </a>
@@ -97,17 +97,17 @@ const SiteHeader = ({ useHomeAnchors = false }: SiteHeaderProps) => {
               <a
                 key={item.label}
                 href={item.href}
-                className="text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                className="text-sm font-medium text-white/75 transition-colors duration-200 hover:text-white"
               >
                 {item.label}
               </a>
             ))}
           </nav>
 
-          <div className="hidden items-center gap-4 md:flex">
+          <div className="hidden items-center gap-4 md:flex [&_button:hover]:bg-white/10 [&_button]:text-white">
             <a
               href="/login"
-              className="rounded-full border border-border bg-transparent px-5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              className="rounded-full border border-white/15 bg-white/[0.03] px-5 py-2 text-sm font-medium text-white transition-colors hover:border-white/25 hover:bg-white/10"
             >
               Service Portal
             </a>
@@ -115,29 +115,29 @@ const SiteHeader = ({ useHomeAnchors = false }: SiteHeaderProps) => {
           </div>
 
           <button
-            className="rounded-lg p-2 transition-colors hover:bg-muted lg:hidden"
+            className="rounded-full border border-white/10 p-2 text-white transition-colors hover:bg-white/10 lg:hidden"
             onClick={() => setIsMenuOpen((open) => !open)}
             aria-label="Toggle menu"
             type="button"
           >
             {isMenuOpen ? (
-              <X className="h-6 w-6 text-foreground" />
+              <X className="h-6 w-6" />
             ) : (
-              <Menu className="h-6 w-6 text-foreground" />
+              <Menu className="h-6 w-6" />
             )}
           </button>
         </div>
 
         {isMenuOpen && (
           <div
-            className="rounded-b-2xl border-t border-border bg-background py-4 lg:hidden"
+            className="border-t border-white/10 py-3 lg:hidden"
           >
             <nav className="flex flex-col gap-1">
               {navItems.map((item) => (
                 <a
                   key={item.label}
                   href={item.href}
-                  className="rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground"
+                  className="rounded-2xl px-3 py-2.5 text-sm font-medium text-white/75 transition-colors duration-200 hover:bg-white/10 hover:text-white"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   {item.label}
@@ -145,12 +145,12 @@ const SiteHeader = ({ useHomeAnchors = false }: SiteHeaderProps) => {
               ))}
               <a
                 href="/login"
-                className="mt-2 block w-full rounded-lg border border-border bg-transparent px-3 py-2.5 text-center text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                className="mt-2 block w-full rounded-2xl border border-white/15 bg-white/[0.03] px-3 py-2.5 text-center text-sm font-medium text-white transition-colors hover:border-white/25 hover:bg-white/10"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Service Portal
               </a>
-              <div className="flex items-center gap-2 px-3 pt-3">
+              <div className="flex items-center gap-2 px-3 pt-3 [&_button:hover]:bg-white/10 [&_button]:text-white">
                 <ThemeToggle />
               </div>
             </nav>

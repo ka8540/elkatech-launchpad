@@ -1,4 +1,4 @@
-import { motion, type Variants } from "framer-motion";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toPublicAsset } from "@/lib/assets";
@@ -75,22 +75,24 @@ const containerVariants: Variants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.1,
+      staggerChildren: 0.06,
+      delayChildren: 0.06,
     },
   },
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 24 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+    transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] },
   },
 };
 
 const WorkSolutionsSection = () => {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <section id="work" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-3xl" />
@@ -119,21 +121,21 @@ const WorkSolutionsSection = () => {
         <motion.div
           className="grid md:grid-cols-2 gap-6"
           variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
+          initial={shouldReduceMotion ? false : "hidden"}
+          whileInView={shouldReduceMotion ? undefined : "visible"}
           viewport={{ once: true, amount: 0.1 }}
         >
           {categories.map((category) => (
             <motion.div
               key={category.title}
               variants={itemVariants}
-              className="group bg-white/5 backdrop-blur-sm rounded-2xl overflow-hidden border border-white/10 hover:border-accent/30 hover:bg-white/10 transition-all duration-300"
+              className="group transform-gpu overflow-hidden rounded-2xl border border-blue-400/15 bg-slate-900/70 backdrop-blur-sm transition-all duration-500 hover:-translate-y-1 hover:border-accent/35 hover:bg-slate-900/80 hover:shadow-[0_24px_60px_rgba(2,132,199,0.12)]"
             >
               <div className="relative h-72 md:h-80 overflow-hidden">
                 <img
                   src={toPublicAsset(category.image)}
                   alt={category.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="h-full w-full transform-gpu object-cover transition duration-500 group-hover:scale-[1.02] group-hover:brightness-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[hsl(215,60%,8%)] via-[hsl(215,60%,8%)]/40 to-transparent" />
               </div>
