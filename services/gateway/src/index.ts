@@ -65,6 +65,10 @@ function serviceDeskUrl(request: { headers: Record<string, string | string[] | u
   return serviceBaseUrl(request, env.SERVICE_DESK_URL);
 }
 
+function notificationServiceUrl(request: { headers: Record<string, string | string[] | undefined> }) {
+  return serviceBaseUrl(request, env.NOTIFICATION_SERVICE_URL);
+}
+
 function requestInternalHeaders(
   request: { headers: Record<string, string | string[] | undefined> },
   extra: Record<string, string> = {},
@@ -76,6 +80,21 @@ function requestInternalHeaders(
   }
 
   return headers;
+}
+
+async function triggerNotificationPoll(request: { headers: Record<string, string | string[] | undefined> }) {
+  try {
+    await fetchJson(`${notificationServiceUrl(request)}/poll`, {
+      method: "POST",
+      headers: requestInternalHeaders(request),
+      body: JSON.stringify({}),
+    });
+  } catch (error) {
+    app.log.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      "notification poll trigger failed",
+    );
+  }
 }
 
 function getSessionCookie(request: { cookies: Record<string, string | undefined> }) {
@@ -177,6 +196,7 @@ app.post("/api/auth/signup", { config: { rateLimit: { max: 5, timeWindow: "1 min
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
 
   return reply.code(201).send(response);
 });
@@ -239,11 +259,13 @@ app.get("/api/auth/me", async (request, reply) => {
 
 app.post("/api/auth/forgot-password", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = forgotPasswordInputSchema.parse(request.body);
-  return fetchJson<{ message: string }>(`${authServiceUrl(request)}/forgot-password`, {
+  const response = await fetchJson<{ message: string }>(`${authServiceUrl(request)}/forgot-password`, {
     method: "POST",
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 app.post("/api/auth/reset-password", async (request) => {
@@ -257,20 +279,24 @@ app.post("/api/auth/reset-password", async (request) => {
 
 app.post("/api/auth/verify-email", async (request) => {
   const input = verifyEmailInputSchema.parse(request.body);
-  return fetchJson<{ message: string }>(`${authServiceUrl(request)}/verify-email`, {
+  const response = await fetchJson<{ message: string }>(`${authServiceUrl(request)}/verify-email`, {
     method: "POST",
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 app.post("/api/auth/resend-verification", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = z.object({ email: z.string().email() }).parse(request.body);
-  return fetchJson<{ message: string }>(`${authServiceUrl(request)}/resend-verification`, {
+  const response = await fetchJson<{ message: string }>(`${authServiceUrl(request)}/resend-verification`, {
     method: "POST",
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 // ─── Google OAuth ───────────────────────────────────────────────────────────
@@ -427,6 +453,7 @@ app.get("/api/auth/google/callback", async (request, reply) => {
 
     // Set session cookies (same as email/password login)
     setSessionCookies(reply, oauthResult);
+    await triggerNotificationPoll(request);
 
     // Redirect to portal
     const defaultPath = oauthResult.user.role === "customer" ? "/app/requests" : "/app/queue";
@@ -465,11 +492,13 @@ app.post("/api/requests", async (request, reply) => {
   }
 
   const input = createServiceRequestInputSchema.parse(request.body);
-  return fetchJson(`${serviceDeskUrl(request)}/requests`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 app.get("/api/requests", async (request, reply) => {
@@ -500,11 +529,13 @@ app.post("/api/requests/:requestId/messages", async (request, reply) => {
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = createRequestMessageInputSchema.parse(request.body);
 
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/messages`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/messages`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 app.post("/api/requests/:requestId/claim", async (request, reply) => {
@@ -513,10 +544,12 @@ app.post("/api/requests/:requestId/claim", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/claim`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/claim`, {
     method: "POST",
     headers: userHeaders(request, session.user),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 app.post("/api/requests/:requestId/assign", async (request, reply) => {
@@ -526,11 +559,13 @@ app.post("/api/requests/:requestId/assign", async (request, reply) => {
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = z.object({ engineerId: z.string().uuid() }).parse(request.body);
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/assign`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/assign`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 app.post("/api/requests/:requestId/status", async (request, reply) => {
@@ -540,11 +575,13 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/status`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/status`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 app.get("/api/admin/users", async (request, reply) => {
@@ -562,7 +599,7 @@ app.post("/api/admin/users/invite", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
 
   const input = inviteUserInputSchema.parse(request.body);
-  return fetchJson(`${authServiceUrl(request)}/internal/invite`, {
+  const response = await fetchJson(`${authServiceUrl(request)}/internal/invite`, {
     method: "POST",
     headers: requestInternalHeaders(request, {
       "x-user-id": session.user.id,
@@ -570,6 +607,8 @@ app.post("/api/admin/users/invite", async (request, reply) => {
     }),
     body: JSON.stringify(input),
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 
 const port = Number(new URL(env.GATEWAY_URL).port || "4000");

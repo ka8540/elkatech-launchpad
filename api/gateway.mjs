@@ -63636,6 +63636,9 @@ function catalogServiceUrl(request) {
 function serviceDeskUrl(request) {
   return serviceBaseUrl(request, env.SERVICE_DESK_URL);
 }
+function notificationServiceUrl(request) {
+  return serviceBaseUrl(request, env.NOTIFICATION_SERVICE_URL);
+}
 function requestInternalHeaders(request, extra = {}) {
   const headers = internalHeaders(extra);
   const cookie2 = request.headers.cookie;
@@ -63643,6 +63646,20 @@ function requestInternalHeaders(request, extra = {}) {
     headers.cookie = Array.isArray(cookie2) ? cookie2.join("; ") : cookie2;
   }
   return headers;
+}
+async function triggerNotificationPoll(request) {
+  try {
+    await fetchJson(`${notificationServiceUrl(request)}/poll`, {
+      method: "POST",
+      headers: requestInternalHeaders(request),
+      body: JSON.stringify({})
+    });
+  } catch (error) {
+    app.log.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      "notification poll trigger failed"
+    );
+  }
 }
 function getSessionCookie(request) {
   return request.cookies[env.SESSION_COOKIE_NAME];
@@ -63722,6 +63739,7 @@ app.post("/api/auth/signup", { config: { rateLimit: { max: 5, timeWindow: "1 min
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
   return reply.code(201).send(response);
 });
 app.post("/api/auth/login", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
@@ -63771,11 +63789,13 @@ app.get("/api/auth/me", async (request, reply) => {
 });
 app.post("/api/auth/forgot-password", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = forgotPasswordInputSchema.parse(request.body);
-  return fetchJson(`${authServiceUrl(request)}/forgot-password`, {
+  const response = await fetchJson(`${authServiceUrl(request)}/forgot-password`, {
     method: "POST",
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 app.post("/api/auth/reset-password", async (request) => {
   const input = resetPasswordInputSchema.parse(request.body);
@@ -63787,19 +63807,23 @@ app.post("/api/auth/reset-password", async (request) => {
 });
 app.post("/api/auth/verify-email", async (request) => {
   const input = verifyEmailInputSchema.parse(request.body);
-  return fetchJson(`${authServiceUrl(request)}/verify-email`, {
+  const response = await fetchJson(`${authServiceUrl(request)}/verify-email`, {
     method: "POST",
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 app.post("/api/auth/resend-verification", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = external_exports.object({ email: external_exports.string().email() }).parse(request.body);
-  return fetchJson(`${authServiceUrl(request)}/resend-verification`, {
+  const response = await fetchJson(`${authServiceUrl(request)}/resend-verification`, {
     method: "POST",
     headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 var GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 var GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -63913,6 +63937,7 @@ app.get("/api/auth/google/callback", async (request, reply) => {
       })
     });
     setSessionCookies(reply, oauthResult);
+    await triggerNotificationPoll(request);
     const defaultPath = oauthResult.user.role === "customer" ? "/app/requests" : "/app/queue";
     return reply.redirect(returnTo || defaultPath);
   } catch {
@@ -63944,11 +63969,13 @@ app.post("/api/requests", async (request, reply) => {
     return reply.code(403).send({ message: "Verify your email before creating requests." });
   }
   const input = createServiceRequestInputSchema.parse(request.body);
-  return fetchJson(`${serviceDeskUrl(request)}/requests`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 app.get("/api/requests", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
@@ -63972,21 +63999,25 @@ app.post("/api/requests/:requestId/messages", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = createRequestMessageInputSchema.parse(request.body);
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/messages`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/messages`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 app.post("/api/requests/:requestId/claim", async (request, reply) => {
   const session = await requireSession(request, reply, ["engineer", "admin"]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/claim`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/claim`, {
     method: "POST",
     headers: userHeaders(request, session.user)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 app.post("/api/requests/:requestId/assign", async (request, reply) => {
   const session = await requireSession(request, reply, ["admin"]);
@@ -63994,11 +64025,13 @@ app.post("/api/requests/:requestId/assign", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = external_exports.object({ engineerId: external_exports.string().uuid() }).parse(request.body);
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/assign`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/assign`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 app.post("/api/requests/:requestId/status", async (request, reply) => {
   const session = await requireSession(request, reply, ["engineer", "admin"]);
@@ -64006,11 +64039,13 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
-  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/status`, {
+  const response = await fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/status`, {
     method: "POST",
     headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 app.get("/api/admin/users", async (request, reply) => {
   const session = await requireSession(request, reply, ["admin"]);
@@ -64024,7 +64059,7 @@ app.post("/api/admin/users/invite", async (request, reply) => {
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const input = inviteUserInputSchema.parse(request.body);
-  return fetchJson(`${authServiceUrl(request)}/internal/invite`, {
+  const response = await fetchJson(`${authServiceUrl(request)}/internal/invite`, {
     method: "POST",
     headers: requestInternalHeaders(request, {
       "x-user-id": session.user.id,
@@ -64032,6 +64067,8 @@ app.post("/api/admin/users/invite", async (request, reply) => {
     }),
     body: JSON.stringify(input)
   });
+  await triggerNotificationPoll(request);
+  return response;
 });
 var port = Number(new URL(env.GATEWAY_URL).port || "4000");
 if (!process.env.VERCEL) {

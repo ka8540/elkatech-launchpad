@@ -74306,6 +74306,9 @@ ${payload.body}`
 var app = (0, import_fastify.default)({ logger: true });
 var sql = getDb();
 var env = getNotificationEnv();
+function ensureInternal(request) {
+  return request.headers["x-internal-token"] === env.INTERNAL_SERVICE_TOKEN;
+}
 var transporter = import_nodemailer.default.createTransport({
   host: env.SMTP_HOST,
   port: env.SMTP_PORT,
@@ -74422,6 +74425,13 @@ async function poll() {
   await processOutbox("service_desk", "outbox", "service-desk");
 }
 app.get("/health", async () => ({ ok: true, service: "notification" }));
+app.post("/poll", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  await poll();
+  return { ok: true };
+});
 void poll().catch((error) => {
   app.log.error(error);
 });

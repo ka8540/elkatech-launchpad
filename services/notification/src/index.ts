@@ -9,6 +9,10 @@ const app = Fastify({ logger: true });
 const sql = getDb();
 const env = getNotificationEnv();
 
+function ensureInternal(request: { headers: Record<string, unknown> }) {
+  return request.headers["x-internal-token"] === env.INTERNAL_SERVICE_TOKEN;
+}
+
 // SMTP transport. With Resend: host smtp.resend.com, port 587, user "resend",
 // pass = Resend API key (from env only). Auth is omitted when no credentials
 // are configured so a local auth-less SMTP server still works.
@@ -149,6 +153,15 @@ async function poll() {
 }
 
 app.get("/health", async () => ({ ok: true, service: "notification" }));
+
+app.post("/poll", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  await poll();
+  return { ok: true };
+});
 
 // Run once on boot, then on an interval, so a freshly created verification
 // email is not stuck waiting for the first tick.
