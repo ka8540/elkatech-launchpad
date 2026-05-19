@@ -326,6 +326,30 @@ npm run build -w @elkatech/web
 npm run preview -w @elkatech/web
 ```
 
+## Email verification local testing
+
+New email/password signups must verify their email before they can create service requests. To exercise the full flow locally:
+
+1. Start infrastructure (PostgreSQL + Mailpit):
+
+   ```sh
+   npm run dev:infra
+   ```
+
+2. Apply migrations and start all services:
+
+   ```sh
+   npm run db:migrate
+   npm run dev
+   ```
+
+3. Sign up at `http://127.0.0.1:8080/signup` with a unique email.
+4. Open Mailpit at `http://127.0.0.1:8025` and open the “Verify your Elkatech account” email.
+5. Click the verification link — it points at `http://127.0.0.1:8080/verify-email?token=<token>`.
+6. Confirm the verify page shows success, then sign in. `GET /api/auth/me` now returns the user with `emailVerified: true`, and service request creation is unlocked.
+
+The notification service polls the `auth.outbox` table every few seconds and sends mail through SMTP/Mailpit. If an email is missing, check its logs for `notification emails sent` or `notification email delivery failed`. Signed-in users can also request a fresh link with the “Resend verification email” button shown in the portal.
+
 ## Build and Type Checking
 
 ```sh

@@ -21,7 +21,9 @@ import {
 import { toast } from "sonner";
 import type { CatalogProduct, RequestPriority } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
+import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
+import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -175,6 +177,7 @@ function GuidancePanel({
 const RequestNewPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { data: session } = useSession();
   const requestedProductId = searchParams.get("product") ?? "";
   const productsQuery = useQuery({
     queryKey: ["catalog", "products"],
@@ -217,6 +220,60 @@ const RequestNewPage = () => {
       toast.error(error.message);
     },
   });
+
+  // Email verification is required before a service request can be created.
+  // The gateway enforces this too (403); guarding here gives a clear,
+  // polished message instead of a generic submit failure.
+  const unverifiedUser =
+    session?.user && !session.user.emailVerified ? session.user : null;
+
+  if (unverifiedUser) {
+    return (
+      <div className="mx-auto max-w-3xl min-w-0 space-y-6 overflow-x-hidden">
+        <header className={cn(
+          "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
+          "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
+        )}>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%)]" />
+          <div className="relative min-w-0">
+            <div className="mb-5 flex items-center gap-3">
+              <div className={cn(
+                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
+                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
+              )}>
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
+            </div>
+            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white">
+              Verify your email first
+            </h1>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+              For your account&apos;s security, service requests can only be created once your
+              email address is verified. It takes less than a minute.
+            </p>
+          </div>
+        </header>
+
+        <VerifyEmailNotice email={unverifiedUser.email} />
+
+        <Button
+          asChild
+          variant="outline"
+          className={cn(
+            "h-11 w-fit rounded-full px-5",
+            "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+            "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
+          )}
+        >
+          <Link to="/app/requests">
+            <ArrowLeft className="h-4 w-4" />
+            Back to requests
+          </Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-7xl min-w-0 space-y-8 overflow-x-hidden">

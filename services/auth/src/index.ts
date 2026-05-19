@@ -398,6 +398,39 @@ app.post("/verify-email", async (request, reply) => {
   return { message: "Email verified successfully." };
 });
 
+app.post("/resend-verification", async (request) => {
+  const schema = z.object({ email: z.string().email() });
+  const input = schema.parse(request.body);
+
+  const userRows = await sql<UserRow[]>`
+    select *
+    from auth.users
+    where lower(email) = ${input.email.toLowerCase()}
+    limit 1
+  `;
+
+  const user = userRows[0];
+  // Only emit a new verification email for accounts that still need it.
+  // The response is always identical so the endpoint cannot be used to
+  // probe which emails have accounts.
+  if (user && !user.email_verified) {
+    const verifyToken = await createVerificationToken(user.id, user.email);
+    await emitOutbox("user", user.id, "user.registered", {
+      userId: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      role: user.role,
+      invitation: false,
+      verifyUrl: `${env.APP_BASE_URL}/verify-email?token=${verifyToken}`,
+    });
+    request.log.info({ userId: user.id }, "queued verification email resend");
+  }
+
+  return {
+    message: "If that account still needs verification, a new email is on its way.",
+  };
+});
+
 app.post("/internal/session/resolve", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });

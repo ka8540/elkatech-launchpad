@@ -4,6 +4,7 @@ import type { ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
+import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -340,6 +341,8 @@ const RequestsPage = () => {
   });
 
   const isCustomer = session?.user?.role === "customer";
+  const unverifiedUser =
+    session?.user && !session.user.emailVerified ? session.user : null;
 
   /* ── Derive stats ─── */
   const requests = data ?? [];
@@ -402,6 +405,13 @@ const RequestsPage = () => {
           </Button>
         </div>
       </header>
+
+      {/* ── Email verification notice ─────────────────────────────────────── */}
+      {unverifiedUser && (
+        <div className="relative">
+          <VerifyEmailNotice email={unverifiedUser.email} />
+        </div>
+      )}
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

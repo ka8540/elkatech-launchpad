@@ -222,6 +222,15 @@ app.post("/api/auth/verify-email", async (request) => {
   });
 });
 
+app.post("/api/auth/resend-verification", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
+  const input = z.object({ email: z.string().email() }).parse(request.body);
+  return fetchJson<{ message: string }>(`${env.AUTH_SERVICE_URL}/resend-verification`, {
+    method: "POST",
+    headers: internalHeaders(),
+    body: JSON.stringify(input),
+  });
+});
+
 // ─── Google OAuth ───────────────────────────────────────────────────────────
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
