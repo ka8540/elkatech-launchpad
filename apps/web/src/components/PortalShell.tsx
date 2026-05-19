@@ -307,7 +307,7 @@ const PortalShell = () => {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       {collapsed && !isMobile ? (
         /* Collapsed: expand button on top, logo centered below */
-        <div className="flex flex-col items-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
+        <div className="flex flex-col items-center border-b border-slate-200 px-3 py-4 dark:border-white/10">
           <button
             onClick={() => setCollapsed(false)}
             className={cn(
@@ -325,7 +325,7 @@ const PortalShell = () => {
             to="/"
             title="Back to homepage"
             aria-label="ElkaTech"
-            className="mt-6 flex items-center justify-center text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
+            className="mt-5 flex items-center justify-center text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
           >
             <ElkaTechMark size={42} />
           </Link>
