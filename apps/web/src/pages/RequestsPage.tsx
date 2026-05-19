@@ -4,10 +4,16 @@ import type { ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
 import StatusBadge from "@/components/StatusBadge";
+import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
 import { Button } from "@/components/ui/button";
 
 const RequestsPage = () => {
   const { data: session } = useSession();
+  const blocked = isCustomerActionBlocked(session?.user);
+  const blockedStatus =
+    blocked && session?.user && session.user.approvalStatus !== "approved"
+      ? session.user.approvalStatus
+      : null;
   const { data, isLoading } = useQuery({
     queryKey: ["requests", "mine"],
     queryFn: () => apiRequest<ServiceRequest[]>("/api/requests"),
@@ -22,10 +28,14 @@ const RequestsPage = () => {
             {session?.user?.role === "customer" ? "Your Service Requests" : "Assigned Work"}
           </h2>
         </div>
-        <Button asChild variant="cta">
-          <Link to="/app/requests/new">Create Service Request</Link>
+        <Button asChild variant="cta" disabled={blocked}>
+          <Link to="/app/requests/new" aria-disabled={blocked} tabIndex={blocked ? -1 : 0}>
+            Create Service Request
+          </Link>
         </Button>
       </div>
+
+      {blockedStatus && <ApprovalStateCard status={blockedStatus} variant="banner" />}
 
       {isLoading ? (
         <div className="rounded-3xl border bg-card p-6 text-sm text-muted-foreground shadow-soft">

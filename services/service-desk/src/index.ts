@@ -107,7 +107,11 @@ async function getUserById(userId: string) {
   });
 }
 
-app.get("/health", async () => ({ ok: true, service: "service-desk" }));
+app.get("/health", async () => ({
+  ok: true,
+  service: "service-desk",
+  environment: env.NODE_ENV,
+}));
 
 app.post("/requests", async (request, reply) => {
   if (!ensureInternal(request.headers)) {

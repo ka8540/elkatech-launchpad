@@ -3,10 +3,12 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import AuthPageShell from "@/components/AuthPageShell";
 import { apiRequest } from "@/lib/api";
+import { isFirebaseConfigured } from "@/lib/firebase";
 
 const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") ?? "";
+  const firebaseReady = isFirebaseConfigured();
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -17,10 +19,30 @@ const VerifyEmailPage = () => {
   });
 
   useEffect(() => {
-    if (token) {
+    // Only run the legacy backend verification flow for legacy tokens.
+    if (token && !firebaseReady) {
       mutation.mutate();
     }
-  }, [mutation, token]);
+  }, [mutation, token, firebaseReady]);
+
+  if (firebaseReady) {
+    return (
+      <AuthPageShell
+        title="Verify your email"
+        subtitle="We’ve sent you a verification email. Open it and follow the link to confirm your address."
+      >
+        <div className="space-y-4 text-sm text-muted-foreground">
+          <p>
+            Check your inbox for the verification email. Once you confirm your email there, you can
+            continue to sign in.
+          </p>
+          <Link to="/login" className="inline-flex text-accent hover:underline">
+            Continue to sign in
+          </Link>
+        </div>
+      </AuthPageShell>
+    );
+  }
 
   return (
     <AuthPageShell
@@ -30,7 +52,9 @@ const VerifyEmailPage = () => {
       <div className="space-y-4 text-sm text-muted-foreground">
         {mutation.isPending && <p>Verifying your email...</p>}
         {mutation.isSuccess && <p className="text-foreground">{mutation.data.message}</p>}
-        {mutation.isError && <p>{mutation.error.message}</p>}
+        {mutation.isError && (
+          <p>This verification link is no longer valid. Please sign in to request a new one.</p>
+        )}
         <Link to="/login" className="inline-flex text-accent hover:underline">
           Continue to sign in
         </Link>

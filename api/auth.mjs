@@ -5371,56 +5371,91 @@ var require_on_exit_leak_free = __commonJS({
 var require_package = __commonJS({
   "node_modules/thread-stream/package.json"(exports, module) {
     module.exports = {
-      name: "thread-stream",
-      version: "4.0.0",
-      description: "A streaming way to send data to a Node.js Worker Thread",
-      main: "index.js",
-      types: "index.d.ts",
-      engines: {
-        node: ">=20"
+      _from: "thread-stream@^4.0.0",
+      _id: "thread-stream@4.2.0",
+      _inBundle: false,
+      _integrity: "sha512-e2zZ96wSChazBsbENf/Pcm/4swHt2cEKQ92rhUjkL9GCKiTDJIaTBenjE/m9DXi0QBmTMDkFDdOomUy20A1tDQ==",
+      _location: "/thread-stream",
+      _phantomChildren: {},
+      _requested: {
+        type: "range",
+        registry: true,
+        raw: "thread-stream@^4.0.0",
+        name: "thread-stream",
+        escapedName: "thread-stream",
+        rawSpec: "^4.0.0",
+        saveSpec: null,
+        fetchSpec: "^4.0.0"
       },
+      _requiredBy: [
+        "/pino"
+      ],
+      _resolved: "https://registry.npmjs.org/thread-stream/-/thread-stream-4.2.0.tgz",
+      _shasum: "054063e93baab22363d05b784d6c7e439230cac7",
+      _spec: "thread-stream@^4.0.0",
+      _where: "/Users/klsterfx/Desktop/elkatech-launchpad/node_modules/pino",
+      author: {
+        name: "Matteo Collina",
+        email: "hello@matteocollina.com"
+      },
+      bugs: {
+        url: "https://github.com/mcollina/thread-stream/issues"
+      },
+      bundleDependencies: false,
       dependencies: {
-        "real-require": "^0.2.0"
+        "real-require": "^1.0.0"
       },
+      deprecated: false,
+      description: "A streaming way to send data to a Node.js Worker Thread",
       devDependencies: {
-        "@types/node": "^22.0.0",
+        "@types/node": "^25.0.2",
         "@yao-pkg/pkg": "^6.0.0",
-        borp: "^0.21.0",
+        borp: "^1.0.0",
         desm: "^1.3.0",
         eslint: "^9.39.1",
         fastbench: "^1.0.1",
-        husky: "^9.0.6",
-        neostandard: "^0.12.2",
-        "pino-elasticsearch": "^8.0.0",
-        "sonic-boom": "^4.0.1",
+        neostandard: "^0.13.0",
+        "pino-elasticsearch": "^9.0.0",
+        "sonic-boom": "^5.0.0",
         "ts-node": "^10.8.0",
         typescript: "~5.7.3"
       },
-      scripts: {
-        build: "tsc --noEmit",
-        lint: "eslint",
-        test: "npm run lint && npm run build && npm run transpile && borp --pattern 'test/*.test.{js,mjs}'",
-        "test:ci": "npm run lint && npm run transpile && borp --pattern 'test/*.test.{js,mjs}'",
-        "test:yarn": "npm run transpile && borp --pattern 'test/*.test.js'",
-        transpile: "sh ./test/ts/transpile.sh",
-        prepare: "husky install"
+      engines: {
+        node: ">=20"
       },
-      repository: {
-        type: "git",
-        url: "git+https://github.com/mcollina/thread-stream.git"
-      },
+      homepage: "https://github.com/mcollina/thread-stream#readme",
       keywords: [
         "worker",
         "thread",
         "threads",
         "stream"
       ],
-      author: "Matteo Collina <hello@matteocollina.com>",
       license: "MIT",
-      bugs: {
-        url: "https://github.com/mcollina/thread-stream/issues"
+      main: "index.js",
+      name: "thread-stream",
+      repository: {
+        type: "git",
+        url: "git+https://github.com/mcollina/thread-stream.git"
       },
-      homepage: "https://github.com/mcollina/thread-stream#readme"
+      scripts: {
+        build: "tsc --noEmit",
+        lint: "eslint",
+        test: 'npm run lint && npm run build && npm run transpile && borp --pattern "test/*.test.{js,mjs}"',
+        "test:ci": 'npm run lint && npm run transpile && borp --pattern "test/*.test.{js,mjs}"',
+        "test:yarn": 'npm run transpile && borp --pattern "test/*.test.js"',
+        transpile: "sh ./test/ts/transpile.sh"
+      },
+      types: "index.d.ts",
+      version: "4.2.0",
+      warnings: [
+        {
+          code: "ENOTSUP",
+          required: {
+            node: ">=20"
+          },
+          pkgid: "thread-stream@4.2.0"
+        }
+      ]
     };
   }
 });
@@ -5467,7 +5502,13 @@ var require_wait = __commonJS({
         const remaining = max === Infinity ? WAIT_MS : Math.min(WAIT_MS, Math.max(1, max - Date.now()));
         const result = Atomics.waitAsync(state, index, expected, remaining);
         if (result.async) {
-          result.value.then(check);
+          result.value.then((res) => {
+            if (res === "ok") {
+              done(null, "ok");
+              return;
+            }
+            check();
+          });
         } else {
           setImmediate(check);
         }
@@ -5482,11 +5523,13 @@ var require_wait = __commonJS({
 var require_indexes = __commonJS({
   "node_modules/thread-stream/lib/indexes.js"(exports, module) {
     "use strict";
+    var SEQ_INDEX = 2;
     var WRITE_INDEX = 4;
     var READ_INDEX = 8;
     module.exports = {
       WRITE_INDEX,
-      READ_INDEX
+      READ_INDEX,
+      SEQ_INDEX
     };
   }
 });
@@ -5503,12 +5546,27 @@ var require_thread_stream = __commonJS({
     var { wait } = require_wait();
     var {
       WRITE_INDEX,
-      READ_INDEX
+      READ_INDEX,
+      SEQ_INDEX
     } = require_indexes();
     var buffer2 = __require("buffer");
     var assert = __require("assert");
     var kImpl = /* @__PURE__ */ Symbol("kImpl");
     var MAX_STRING = buffer2.constants.MAX_STRING_LENGTH;
+    function noop3() {
+    }
+    function updateState(stream, fn) {
+      Atomics.add(stream[kImpl].state, SEQ_INDEX, 1);
+      fn();
+      Atomics.add(stream[kImpl].state, SEQ_INDEX, 1);
+      Atomics.notify(stream[kImpl].state, SEQ_INDEX);
+    }
+    function resetIndexes(stream) {
+      updateState(stream, () => {
+        Atomics.store(stream[kImpl].state, READ_INDEX, 0);
+        Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
+      });
+    }
     var FakeWeakRef = class {
       constructor(value) {
         this._value = value;
@@ -5537,6 +5595,7 @@ var require_thread_stream = __commonJS({
       const toExecute = bundlerOverrides["thread-stream-worker"] || join(__dirname, "lib", "worker.js");
       const worker = new Worker(toExecute, {
         ...opts.workerOpts,
+        name: opts.workerOpts?.name || "thread-stream",
         trackUnmanagedFds: false,
         workerData: {
           filename: filename.indexOf("file://") === 0 ? filename : pathToFileURL(filename).href,
@@ -5564,52 +5623,37 @@ var require_thread_stream = __commonJS({
       }
     }
     function nextFlush(stream) {
-      const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
-      let leftover = stream[kImpl].data.length - writeIndex;
-      if (leftover > 0) {
-        if (stream[kImpl].buf.length === 0) {
-          stream[kImpl].flushing = false;
-          if (stream[kImpl].ending) {
-            end(stream);
-          } else if (stream[kImpl].needDrain) {
-            process.nextTick(drain, stream);
+      while (true) {
+        const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
+        const leftover = stream[kImpl].data.length - writeIndex;
+        if (leftover > 0) {
+          if (stream[kImpl].bufLen === 0) {
+            stream[kImpl].flushing = false;
+            if (stream[kImpl].ending) {
+              end(stream);
+            } else if (stream[kImpl].needDrain) {
+              process.nextTick(drain, stream);
+            }
+            return;
           }
-          return;
+          write(stream, leftover, noop3);
+          continue;
         }
-        let toWrite = stream[kImpl].buf.slice(0, leftover);
-        let toWriteBytes = Buffer.byteLength(toWrite);
-        if (toWriteBytes <= leftover) {
-          stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-          write(stream, toWrite, nextFlush.bind(null, stream));
-        } else {
-          stream.flush(() => {
+        if (leftover === 0) {
+          if (writeIndex === 0 && stream[kImpl].bufLen === 0) {
+            return;
+          }
+          waitForRead(stream, () => {
             if (stream.destroyed) {
               return;
             }
-            Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-            Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-            Atomics.notify(stream[kImpl].state, READ_INDEX);
-            while (toWriteBytes > stream[kImpl].data.length) {
-              leftover = leftover / 2;
-              toWrite = stream[kImpl].buf.slice(0, leftover);
-              toWriteBytes = Buffer.byteLength(toWrite);
-            }
-            stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-            write(stream, toWrite, nextFlush.bind(null, stream));
+            resetIndexes(stream);
+            nextFlush(stream);
           });
-        }
-      } else if (leftover === 0) {
-        if (writeIndex === 0 && stream[kImpl].buf.length === 0) {
           return;
         }
-        stream.flush(() => {
-          Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-          Atomics.notify(stream[kImpl].state, READ_INDEX);
-          nextFlush(stream);
-        });
-      } else {
         destroy(stream, new Error("overwritten"));
+        return;
       }
     }
     function onWorkerMessage(msg) {
@@ -5619,10 +5663,13 @@ var require_thread_stream = __commonJS({
         this.terminate();
         return;
       }
+      if (msg?.code == null) {
+        return;
+      }
       switch (msg.code) {
         case "READY":
           this.stream = new WeakRef2(stream);
-          stream.flush(() => {
+          waitForRead(stream, () => {
             stream[kImpl].ready = true;
             stream.emit("ready");
           });
@@ -5637,6 +5684,18 @@ var require_thread_stream = __commonJS({
             stream.emit(msg.name, msg.args);
           }
           break;
+        case "FLUSHED": {
+          if (msg.context !== "thread-stream") {
+            destroy(stream, new Error("this should not happen: " + msg.code));
+            break;
+          }
+          const cb = stream[kImpl].flushCallbacks.get(msg.id);
+          if (cb) {
+            stream[kImpl].flushCallbacks.delete(msg.id);
+            process.nextTick(cb);
+          }
+          break;
+        }
         case "WARNING":
           process.emitWarning(msg.err);
           break;
@@ -5675,13 +5734,18 @@ var require_thread_stream = __commonJS({
         this[kImpl].finished = false;
         this[kImpl].errored = null;
         this[kImpl].closed = false;
-        this[kImpl].buf = "";
+        this[kImpl].buf = [];
+        this[kImpl].bufHead = 0;
+        this[kImpl].bufLen = 0;
+        this[kImpl].flushCallbacks = /* @__PURE__ */ new Map();
+        this[kImpl].nextFlushId = 0;
         this.worker = createWorker(this, opts);
         this.on("message", (message, transferList) => {
           this.worker.postMessage(message, transferList);
         });
       }
       write(data) {
+        const dataBuf = Buffer.isBuffer(data) ? data : Buffer.from(data);
         if (this[kImpl].destroyed) {
           error(this, new Error("the worker has exited"));
           return false;
@@ -5690,7 +5754,7 @@ var require_thread_stream = __commonJS({
           error(this, new Error("the worker is ending"));
           return false;
         }
-        if (this[kImpl].flushing && this[kImpl].buf.length + data.length >= MAX_STRING) {
+        if (this[kImpl].flushing && this[kImpl].bufLen + dataBuf.length >= MAX_STRING) {
           try {
             writeSync(this);
             this[kImpl].flushing = true;
@@ -5699,7 +5763,8 @@ var require_thread_stream = __commonJS({
             return false;
           }
         }
-        this[kImpl].buf += data;
+        this[kImpl].buf.push(dataBuf);
+        this[kImpl].bufLen += dataBuf.length;
         if (this[kImpl].sync) {
           try {
             writeSync(this);
@@ -5713,7 +5778,7 @@ var require_thread_stream = __commonJS({
           this[kImpl].flushing = true;
           setImmediate(nextFlush, this);
         }
-        this[kImpl].needDrain = this[kImpl].data.length - this[kImpl].buf.length - Atomics.load(this[kImpl].state, WRITE_INDEX) <= 0;
+        this[kImpl].needDrain = this[kImpl].data.length - this[kImpl].bufLen - Atomics.load(this[kImpl].state, WRITE_INDEX) <= 0;
         return !this[kImpl].needDrain;
       }
       end() {
@@ -5724,24 +5789,13 @@ var require_thread_stream = __commonJS({
         end(this);
       }
       flush(cb) {
-        if (this[kImpl].destroyed) {
-          if (typeof cb === "function") {
-            process.nextTick(cb, new Error("the worker has exited"));
-          }
-          return;
-        }
-        const writeIndex = Atomics.load(this[kImpl].state, WRITE_INDEX);
-        wait(this[kImpl].state, READ_INDEX, writeIndex, Infinity, (err, res) => {
+        cb = typeof cb === "function" ? cb : noop3;
+        flushBuffer(this, (err) => {
           if (err) {
-            destroy(this, err);
             process.nextTick(cb, err);
             return;
           }
-          if (res === "not-equal") {
-            this.flush(cb);
-            return;
-          }
-          process.nextTick(cb);
+          requestWorkerFlush(this, cb);
         });
       }
       flushSync() {
@@ -5785,6 +5839,79 @@ var require_thread_stream = __commonJS({
         return this[kImpl].errored;
       }
     };
+    function flushBuffer(stream, cb) {
+      if (stream[kImpl].destroyed) {
+        process.nextTick(cb, new Error("the worker has exited"));
+        return;
+      }
+      if (!stream[kImpl].sync && (stream[kImpl].flushing || stream[kImpl].bufLen > 0)) {
+        setImmediate(flushBuffer, stream, cb);
+        return;
+      }
+      waitForRead(stream, cb);
+    }
+    function waitForRead(stream, cb) {
+      const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
+      wait(stream[kImpl].state, READ_INDEX, writeIndex, Infinity, (err, res) => {
+        if (err) {
+          destroy(stream, err);
+          cb(err);
+          return;
+        }
+        if (res !== "ok") {
+          waitForRead(stream, cb);
+          return;
+        }
+        cb();
+      });
+    }
+    function requestWorkerFlush(stream, cb) {
+      if (stream[kImpl].destroyed) {
+        process.nextTick(cb, new Error("the worker has exited"));
+        return;
+      }
+      if (!stream[kImpl].ready) {
+        const onReady = () => {
+          cleanup();
+          requestWorkerFlush(stream, cb);
+        };
+        const onClose = () => {
+          cleanup();
+          process.nextTick(cb, new Error("the worker has exited"));
+        };
+        const cleanup = () => {
+          stream.off("ready", onReady);
+          stream.off("close", onClose);
+        };
+        stream.once("ready", onReady);
+        stream.once("close", onClose);
+        return;
+      }
+      const id = ++stream[kImpl].nextFlushId;
+      stream[kImpl].flushCallbacks.set(id, cb);
+      try {
+        stream.worker.postMessage({
+          code: "FLUSH",
+          context: "thread-stream",
+          id
+        });
+      } catch (err) {
+        stream[kImpl].flushCallbacks.delete(id);
+        destroy(stream, err);
+        process.nextTick(cb, err);
+      }
+    }
+    function failPendingFlushCallbacks(stream, err) {
+      const callbacks = stream[kImpl].flushCallbacks;
+      if (callbacks.size === 0) {
+        return;
+      }
+      const flushErr = err || new Error("the worker has exited");
+      for (const cb of callbacks.values()) {
+        process.nextTick(cb, flushErr);
+      }
+      callbacks.clear();
+    }
     function error(stream, err) {
       setImmediate(() => {
         stream.emit("error", err);
@@ -5795,6 +5922,7 @@ var require_thread_stream = __commonJS({
         return;
       }
       stream[kImpl].destroyed = true;
+      failPendingFlushCallbacks(stream, err);
       if (err) {
         stream[kImpl].errored = err;
         error(stream, err);
@@ -5812,12 +5940,37 @@ var require_thread_stream = __commonJS({
         });
       }
     }
-    function write(stream, data, cb) {
+    function write(stream, maxBytes, cb) {
       const current = Atomics.load(stream[kImpl].state, WRITE_INDEX);
-      const length = Buffer.byteLength(data);
-      stream[kImpl].data.write(data, current);
-      Atomics.store(stream[kImpl].state, WRITE_INDEX, current + length);
-      Atomics.notify(stream[kImpl].state, WRITE_INDEX);
+      let offset = current;
+      let remaining = maxBytes;
+      while (remaining > 0 && stream[kImpl].bufLen !== 0) {
+        const head = stream[kImpl].bufHead;
+        const buf = stream[kImpl].buf[head];
+        if (buf.length <= remaining) {
+          buf.copy(stream[kImpl].data, offset);
+          offset += buf.length;
+          remaining -= buf.length;
+          stream[kImpl].bufLen -= buf.length;
+          stream[kImpl].bufHead = head + 1;
+          if (stream[kImpl].bufHead === stream[kImpl].buf.length) {
+            stream[kImpl].buf.length = 0;
+            stream[kImpl].bufHead = 0;
+          } else if (stream[kImpl].bufHead >= 1024 && stream[kImpl].bufHead * 2 >= stream[kImpl].buf.length) {
+            stream[kImpl].buf.splice(0, stream[kImpl].bufHead);
+            stream[kImpl].bufHead = 0;
+          }
+          continue;
+        }
+        buf.copy(stream[kImpl].data, offset, 0, remaining);
+        stream[kImpl].buf[head] = buf.subarray(remaining);
+        stream[kImpl].bufLen -= remaining;
+        offset += remaining;
+        remaining = 0;
+      }
+      updateState(stream, () => {
+        Atomics.store(stream[kImpl].state, WRITE_INDEX, offset);
+      });
       cb();
       return true;
     }
@@ -5829,8 +5982,9 @@ var require_thread_stream = __commonJS({
       try {
         stream.flushSync();
         let readIndex = Atomics.load(stream[kImpl].state, READ_INDEX);
-        Atomics.store(stream[kImpl].state, WRITE_INDEX, -1);
-        Atomics.notify(stream[kImpl].state, WRITE_INDEX);
+        updateState(stream, () => {
+          Atomics.store(stream[kImpl].state, WRITE_INDEX, -1);
+        });
         let spins = 0;
         while (readIndex !== -1) {
           Atomics.wait(stream[kImpl].state, READ_INDEX, readIndex, 1e3);
@@ -5861,36 +6015,17 @@ var require_thread_stream = __commonJS({
         }
       };
       stream[kImpl].flushing = false;
-      while (stream[kImpl].buf.length !== 0) {
+      while (stream[kImpl].bufLen !== 0) {
         const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
-        let leftover = stream[kImpl].data.length - writeIndex;
+        const leftover = stream[kImpl].data.length - writeIndex;
         if (leftover === 0) {
           flushSync(stream);
-          Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-          Atomics.notify(stream[kImpl].state, READ_INDEX);
+          resetIndexes(stream);
           continue;
         } else if (leftover < 0) {
           throw new Error("overwritten");
         }
-        let toWrite = stream[kImpl].buf.slice(0, leftover);
-        let toWriteBytes = Buffer.byteLength(toWrite);
-        if (toWriteBytes <= leftover) {
-          stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-          write(stream, toWrite, cb);
-        } else {
-          flushSync(stream);
-          Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-          Atomics.notify(stream[kImpl].state, READ_INDEX);
-          while (toWriteBytes > stream[kImpl].buf.length) {
-            leftover = leftover / 2;
-            toWrite = stream[kImpl].buf.slice(0, leftover);
-            toWriteBytes = Buffer.byteLength(toWrite);
-          }
-          stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-          write(stream, toWrite, cb);
-        }
+        write(stream, leftover, cb);
       }
     }
     function flushSync(stream) {
@@ -10175,12 +10310,18 @@ var require_ipaddr = __commonJS({
           loopback: [new IPv6([0, 0, 0, 0, 0, 0, 0, 1]), 128],
           uniqueLocal: [new IPv6([64512, 0, 0, 0, 0, 0, 0, 0]), 7],
           ipv4Mapped: [new IPv6([0, 0, 0, 0, 0, 65535, 0, 0]), 96],
+          // RFC3879
+          deprecatedSiteLocal: [new IPv6([65216, 0, 0, 0, 0, 0, 0, 0]), 10],
           // RFC6666
           discard: [new IPv6([256, 0, 0, 0, 0, 0, 0, 0]), 64],
           // RFC6145
           rfc6145: [new IPv6([0, 0, 0, 0, 65535, 0, 0, 0]), 96],
-          // RFC6052
-          rfc6052: [new IPv6([100, 65435, 0, 0, 0, 0, 0, 0]), 96],
+          rfc6052: [
+            // RFC6052
+            [new IPv6([100, 65435, 0, 0, 0, 0, 0, 0]), 96],
+            // RFC8215
+            [new IPv6([100, 65435, 1, 0, 0, 0, 0, 0]), 48]
+          ],
           // RFC3056
           "6to4": [new IPv6([8194, 0, 0, 0, 0, 0, 0, 0]), 16],
           // RFC6052, RFC6146
@@ -10190,17 +10331,26 @@ var require_ipaddr = __commonJS({
           // RFC7450
           amt: [new IPv6([8193, 3, 0, 0, 0, 0, 0, 0]), 32],
           as112v6: [
+            // RFC7535
             [new IPv6([8193, 4, 274, 0, 0, 0, 0, 0]), 48],
+            // RFC7534
             [new IPv6([9760, 79, 32768, 0, 0, 0, 0, 0]), 48]
           ],
-          deprecated: [new IPv6([8193, 16, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC4843
+          deprecatedOrchid: [new IPv6([8193, 16, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC7343
           orchid2: [new IPv6([8193, 32, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC9374
           droneRemoteIdProtocolEntityTags: [new IPv6([8193, 48, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC9602
+          segmentRouting: [new IPv6([24320, 0, 0, 0, 0, 0, 0, 0]), 16],
           reserved: [
             // RFC3849
             [new IPv6([8193, 0, 0, 0, 0, 0, 0, 0]), 23],
             // RFC2928
-            [new IPv6([8193, 3512, 0, 0, 0, 0, 0, 0]), 32]
+            [new IPv6([8193, 3512, 0, 0, 0, 0, 0, 0]), 32],
+            // RFC9637
+            [new IPv6([16383, 0, 0, 0, 0, 0, 0, 0]), 20]
           ]
         };
         IPv6.prototype.isIPv4MappedAddress = function() {
@@ -16262,7 +16412,7 @@ var require_core = __commonJS({
       constructor(opts = {}) {
         this.schemas = {};
         this.refs = {};
-        this.formats = {};
+        this.formats = /* @__PURE__ */ Object.create(null);
         this._compilations = /* @__PURE__ */ new Set();
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
@@ -23873,7 +24023,7 @@ var require_core3 = __commonJS({
       constructor(opts = {}) {
         this.schemas = {};
         this.refs = {};
-        this.formats = {};
+        this.formats = /* @__PURE__ */ Object.create(null);
         this._compilations = /* @__PURE__ */ new Set();
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
@@ -30250,7 +30400,7 @@ var require_core5 = __commonJS({
       constructor(opts = {}) {
         this.schemas = {};
         this.refs = {};
-        this.formats = {};
+        this.formats = /* @__PURE__ */ Object.create(null);
         this._compilations = /* @__PURE__ */ new Set();
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
@@ -34910,7 +35060,7 @@ ${contextFunctionCode}`,
       const schemaId = location.schemaId || "";
       const jsonPointer = location.jsonPointer || "";
       const fullPath = `${schemaId}#${jsonPointer}`;
-      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema)) {
+      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema) || schemaId !== "") {
         const functionName = generateFuncName(context);
         context.functionsNamesBySchema.set(schema, functionName);
         const schemaRef = getSafeSchemaRef(context, location);
@@ -34957,7 +35107,7 @@ ${contextFunctionCode}`,
       const schemaId = location.schemaId || "";
       const jsonPointer = location.jsonPointer || "";
       const fullPath = `${schemaId}#${jsonPointer}`;
-      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema)) {
+      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema) || schemaId !== "") {
         const functionName = generateFuncName(context);
         context.functionsNamesBySchema.set(schema, functionName);
         const schemaRef = getSafeSchemaRef(context, location);
@@ -39383,9 +39533,10 @@ var require_safe_regex2 = __commonJS({
         if (starHeight > 1) return false;
         if (opts.reps > opts.limit) return false;
       }
-      if (node.options) {
-        for (i = 0, len = node.options.length; i < len; i++) {
-          ok = walk({ stack: node.options[i] }, opts, starHeight);
+      const options = node.options || node.value?.options;
+      if (options) {
+        for (i = 0, len = options.length; i < len; i++) {
+          ok = walk({ stack: options[i] }, opts, starHeight);
           if (!ok) return false;
         }
       }
@@ -39729,7 +39880,7 @@ var require_handler_storage = __commonJS({
             lines.push(`if (derivedConstraints.${constraint} !== undefined) return null`);
           }
         }
-        lines.push("return this.handlers[Math.floor(Math.log2(candidates))]");
+        lines.push("return this.handlers[31 - Math.clz32(candidates)]");
         this._getHandlerMatchingConstraints = new Function("derivedConstraints", lines.join("\n"));
       }
     };
@@ -40363,6 +40514,7 @@ var require_find_my_way = __commonJS({
       this.ignoreTrailingSlash = opts.ignoreTrailingSlash || false;
       this.ignoreDuplicateSlashes = opts.ignoreDuplicateSlashes || false;
       this.maxParamLength = opts.maxParamLength || 100;
+      this.onMaxParamLength = opts.onMaxParamLength || null;
       this.allowUnsafeRegex = opts.allowUnsafeRegex || false;
       this.constrainer = new Constrainer(opts.constraints);
       this.useSemicolonDelimiter = opts.useSemicolonDelimiter || false;
@@ -40751,6 +40903,7 @@ var require_find_my_way = __commonJS({
       const params = [];
       const pathLen = path.length;
       const brothersNodesStack = [];
+      let maxParamLengthExceeded = false;
       while (true) {
         if (pathIndex === pathLen && currentNode.isLeafNode) {
           const handle = currentNode.handlerStorage.getMatchingHandler(derivedConstraints);
@@ -40766,6 +40919,9 @@ var require_find_my_way = __commonJS({
         let node = currentNode.getNextNode(path, pathIndex, brothersNodesStack, params.length);
         if (node === null) {
           if (brothersNodesStack.length === 0) {
+            if (maxParamLengthExceeded && this.onMaxParamLength) {
+              return this._onMaxParamLength(originPath);
+            }
             return null;
           }
           const brotherNodeState = brothersNodesStack.pop();
@@ -40797,17 +40953,31 @@ var require_find_my_way = __commonJS({
         }
         if (currentNode.isRegex) {
           const matchedParameters = currentNode.regex.exec(param);
-          if (matchedParameters === null) continue;
+          if (matchedParameters === null) {
+            node = null;
+            continue;
+          }
+          let regexMaxParamLengthExceeded = false;
           for (let i = 1; i < matchedParameters.length; i++) {
             const matchedParam = matchedParameters[i];
             if (matchedParam.length > maxParamLength) {
-              return null;
+              regexMaxParamLengthExceeded = true;
+              break;
             }
-            params.push(matchedParam);
+          }
+          if (regexMaxParamLengthExceeded) {
+            maxParamLengthExceeded = true;
+            node = null;
+            continue;
+          }
+          for (let i = 1; i < matchedParameters.length; i++) {
+            params.push(matchedParameters[i]);
           }
         } else {
           if (param.length > maxParamLength) {
-            return null;
+            maxParamLengthExceeded = true;
+            node = null;
+            continue;
           }
           params.push(param);
         }
@@ -40836,6 +41006,17 @@ var require_find_my_way = __commonJS({
       const onBadUrl = this.onBadUrl;
       return {
         handler: (req, res, ctx) => onBadUrl(path, req, res),
+        params: {},
+        store: null
+      };
+    };
+    Router.prototype._onMaxParamLength = function(path) {
+      if (this.onMaxParamLength === null) {
+        return null;
+      }
+      const onMaxParamLength = this.onMaxParamLength;
+      return {
+        handler: (req, res, ctx) => onMaxParamLength(path, req, res),
         params: {},
         store: null
       };
@@ -45692,11 +45873,50 @@ ${body}`);
 var require_package2 = __commonJS({
   "node_modules/dotenv/package.json"(exports, module) {
     module.exports = {
-      name: "dotenv",
-      version: "16.6.1",
+      _from: "dotenv@16.6.1",
+      _id: "dotenv@16.6.1",
+      _inBundle: false,
+      _integrity: "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==",
+      _location: "/dotenv",
+      _phantomChildren: {},
+      _requested: {
+        type: "version",
+        registry: true,
+        raw: "dotenv@16.6.1",
+        name: "dotenv",
+        escapedName: "dotenv",
+        rawSpec: "16.6.1",
+        saveSpec: null,
+        fetchSpec: "16.6.1"
+      },
+      _requiredBy: [
+        "/@elkatech/config"
+      ],
+      _resolved: "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz",
+      _shasum: "773f0e69527a8315c7285d5ee73c4459d20a8020",
+      _spec: "dotenv@16.6.1",
+      _where: "/Users/klsterfx/Desktop/elkatech-launchpad/packages/config",
+      browser: {
+        fs: false
+      },
+      bugs: {
+        url: "https://github.com/motdotla/dotenv/issues"
+      },
+      bundleDependencies: false,
+      deprecated: false,
       description: "Loads environment variables from .env file",
-      main: "lib/main.js",
-      types: "lib/main.d.ts",
+      devDependencies: {
+        "@types/node": "^18.11.3",
+        decache: "^4.6.2",
+        sinon: "^14.0.1",
+        standard: "^17.0.0",
+        "standard-version": "^9.5.0",
+        tap: "^19.2.0",
+        typescript: "^4.8.4"
+      },
+      engines: {
+        node: ">=12"
+      },
       exports: {
         ".": {
           types: "./lib/main.d.ts",
@@ -45711,21 +45931,8 @@ var require_package2 = __commonJS({
         "./lib/cli-options.js": "./lib/cli-options.js",
         "./package.json": "./package.json"
       },
-      scripts: {
-        "dts-check": "tsc --project tests/types/tsconfig.json",
-        lint: "standard",
-        pretest: "npm run lint && npm run dts-check",
-        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
-        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov",
-        prerelease: "npm test",
-        release: "standard-version"
-      },
-      repository: {
-        type: "git",
-        url: "git://github.com/motdotla/dotenv.git"
-      },
-      homepage: "https://github.com/motdotla/dotenv#readme",
       funding: "https://dotenvx.com",
+      homepage: "https://github.com/motdotla/dotenv#readme",
       keywords: [
         "dotenv",
         "env",
@@ -45735,23 +45942,33 @@ var require_package2 = __commonJS({
         "config",
         "settings"
       ],
-      readmeFilename: "README.md",
       license: "BSD-2-Clause",
-      devDependencies: {
-        "@types/node": "^18.11.3",
-        decache: "^4.6.2",
-        sinon: "^14.0.1",
-        standard: "^17.0.0",
-        "standard-version": "^9.5.0",
-        tap: "^19.2.0",
-        typescript: "^4.8.4"
+      main: "lib/main.js",
+      name: "dotenv",
+      repository: {
+        type: "git",
+        url: "git://github.com/motdotla/dotenv.git"
       },
-      engines: {
-        node: ">=12"
+      scripts: {
+        "dts-check": "tsc --project tests/types/tsconfig.json",
+        lint: "standard",
+        prerelease: "npm test",
+        pretest: "npm run lint && npm run dts-check",
+        release: "standard-version",
+        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
+        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov"
       },
-      browser: {
-        fs: false
-      }
+      types: "lib/main.d.ts",
+      version: "16.6.1",
+      warnings: [
+        {
+          code: "ENOTSUP",
+          required: {
+            node: ">=12"
+          },
+          pkgid: "dotenv@16.6.1"
+        }
+      ]
     };
   }
 });
@@ -62249,12 +62466,19 @@ var catalogCategorySchema = external_exports.object({
   intro: external_exports.string(),
   products: external_exports.array(catalogProductSchema)
 });
+var approvalStatusSchema = external_exports.enum([
+  "pending_approval",
+  "approved",
+  "rejected",
+  "suspended"
+]);
 var authUserSchema = external_exports.object({
   id: external_exports.string(),
   email: external_exports.string().email(),
   displayName: external_exports.string(),
   role: roleSchema,
   emailVerified: external_exports.boolean(),
+  approvalStatus: approvalStatusSchema,
   createdAt: external_exports.string()
 });
 var productSnapshotSchema = external_exports.object({
@@ -62347,6 +62571,36 @@ var oauthFindOrCreateInputSchema = external_exports.object({
   displayName: external_exports.string().min(1),
   inviteToken: external_exports.string().optional()
 });
+var firebaseSessionInputSchema = external_exports.object({
+  idToken: external_exports.string().min(20)
+});
+var firebaseSessionRequestSchema = external_exports.object({
+  firebaseUid: external_exports.string().min(1),
+  email: external_exports.string().email(),
+  emailVerified: external_exports.boolean(),
+  displayName: external_exports.string().min(1),
+  provider: external_exports.enum(["password", "google.com", "other"]).default("other"),
+  pictureUrl: external_exports.string().url().optional()
+});
+var approvalActionInputSchema = external_exports.object({
+  reason: external_exports.string().max(500).optional()
+});
+var serviceHeartbeatSchema = external_exports.object({
+  service: external_exports.string(),
+  status: external_exports.enum(["healthy", "degraded", "down"]),
+  latencyMs: external_exports.number().nullable(),
+  checkedAt: external_exports.string(),
+  details: external_exports.object({
+    version: external_exports.string().optional(),
+    environment: external_exports.string().optional(),
+    message: external_exports.string().optional()
+  }).optional()
+});
+var adminApprovalErrorCodeSchema = external_exports.enum([
+  "USER_PENDING_APPROVAL",
+  "USER_REJECTED",
+  "USER_SUSPENDED"
+]);
 var domainEventTypeSchema = external_exports.enum([
   "user.registered",
   "user.email_verified",
@@ -64525,7 +64779,10 @@ var envSchema = external_exports.object({
   BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: external_exports.string().optional(),
-  GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional()
+  GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional(),
+  FIREBASE_PROJECT_ID: external_exports.string().optional(),
+  FIREBASE_CLIENT_EMAIL: external_exports.string().optional(),
+  FIREBASE_PRIVATE_KEY: external_exports.string().optional()
 });
 var cachedEnv = null;
 function getEnv() {
@@ -64572,8 +64829,34 @@ function mapUser(row) {
     displayName: row.display_name,
     role: row.role,
     emailVerified: row.email_verified,
+    approvalStatus: row.approval_status ?? "approved",
     createdAt: new Date(row.created_at).toISOString()
   };
+}
+async function findUserById(userId) {
+  const rows = await sql`
+    select * from auth.users where id = ${userId} limit 1
+  `;
+  return rows[0] ?? null;
+}
+async function createSessionForUser(user, request) {
+  const sessionToken = generateToken();
+  const csrfToken = generateToken(16);
+  await sql`
+    insert into auth.sessions (
+      id, token_hash, csrf_token, user_id, user_agent, ip_address, expires_at
+    )
+    values (
+      ${randomUUID()},
+      ${hashToken(sessionToken)},
+      ${csrfToken},
+      ${user.id},
+      ${request.headers["user-agent"] ?? null},
+      ${request.ip ?? null},
+      now() + ${sql`${env.SESSION_TTL_HOURS} * interval '1 hour'`}
+    )
+  `;
+  return { sessionToken, csrfToken };
 }
 async function emitOutbox(aggregateType, aggregateId, eventType, payload) {
   await sql`
@@ -64623,7 +64906,11 @@ async function ensureOauthIdentitiesTable() {
   }
   return oauthIdentitiesTableReady;
 }
-app.get("/health", async () => ({ ok: true, service: "auth" }));
+app.get("/health", async () => ({
+  ok: true,
+  service: "auth",
+  environment: env.NODE_ENV
+}));
 app.post("/signup", async (request, reply) => {
   const input = signUpInputSchema.parse(request.body);
   const passwordHash = await bcryptjs_default.hash(input.password, 12);
@@ -64646,7 +64933,7 @@ app.post("/signup", async (request, reply) => {
     }
     const userId2 = invite.user_id ?? randomUUID();
     await sql`
-      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at)
       values (
         ${userId2},
         ${input.email.toLowerCase()},
@@ -64654,7 +64941,9 @@ app.post("/signup", async (request, reply) => {
         ${invite.role},
         ${passwordHash},
         ${false},
-        ${"active"}
+        ${"active"},
+        ${"approved"},
+        now()
       )
       on conflict (id)
       do update set
@@ -64663,6 +64952,8 @@ app.post("/signup", async (request, reply) => {
         role = excluded.role,
         password_hash = excluded.password_hash,
         status = excluded.status,
+        approval_status = 'approved',
+        approved_at = coalesce(auth.users.approved_at, now()),
         updated_at = now()
     `;
     await sql`
@@ -64694,7 +64985,7 @@ app.post("/signup", async (request, reply) => {
   }
   const userId = randomUUID();
   await sql`
-    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status)
     values (
       ${userId},
       ${input.email.toLowerCase()},
@@ -64702,7 +64993,8 @@ app.post("/signup", async (request, reply) => {
       ${"customer"},
       ${passwordHash},
       ${false},
-      ${"active"}
+      ${"active"},
+      ${"pending_approval"}
     )
   `;
   const verifyToken = await createVerificationToken(userId, input.email.toLowerCase());
@@ -64715,7 +65007,7 @@ app.post("/signup", async (request, reply) => {
     verifyUrl: `${env.APP_BASE_URL}/verify-email?token=${verifyToken}`
   });
   return reply.code(201).send({
-    message: "Account created. Please verify your email before creating requests."
+    message: "Account created. Please verify your email; an administrator will activate your account."
   });
 });
 app.post("/login", async (request, reply) => {
@@ -64956,14 +65248,16 @@ app.post("/internal/invite", async (request, reply) => {
   `;
   const userId = existingUsers[0]?.id ?? randomUUID();
   await sql`
-    insert into auth.users (id, email, display_name, role, status)
-    values (${userId}, ${email}, ${input.displayName}, ${input.role}, ${"invited"})
+    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at)
+    values (${userId}, ${email}, ${input.displayName}, ${input.role}, ${"invited"}, ${"approved"}, now())
     on conflict (id)
     do update set
       email = excluded.email,
       display_name = excluded.display_name,
       role = excluded.role,
       status = excluded.status,
+      approval_status = 'approved',
+      approved_at = coalesce(auth.users.approved_at, now()),
       updated_at = now()
   `;
   const inviteToken = generateToken();
@@ -65061,8 +65355,11 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
       } else {
         userId = randomUUID();
       }
+      const approvalStatus = role === "customer" ? "pending_approval" : "approved";
       await sql`
-        insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+        insert into auth.users (
+          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at
+        )
         values (
           ${userId},
           ${email},
@@ -65070,7 +65367,9 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           ${role},
           ${null},
           ${true},
-          ${"active"}
+          ${"active"},
+          ${approvalStatus},
+          ${approvalStatus === "approved" ? sql`now()` : sql`null`}
         )
         on conflict (id)
         do update set
@@ -65118,6 +65417,196 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
       user: mapUser(user)
     })
   );
+});
+app.post("/internal/firebase/session", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const input = firebaseSessionRequestSchema.parse(request.body);
+  const email = input.email.toLowerCase();
+  const firebaseUid = input.firebaseUid;
+  let existing = null;
+  const byUid = await sql`
+    select * from auth.users where firebase_uid = ${firebaseUid} limit 1
+  `;
+  if (byUid[0]) {
+    existing = byUid[0];
+  } else {
+    const byEmail = await sql`
+      select * from auth.users where lower(email) = ${email} limit 1
+    `;
+    if (byEmail[0]) {
+      existing = byEmail[0];
+      await sql`
+        update auth.users
+        set firebase_uid = ${firebaseUid}, updated_at = now()
+        where id = ${existing.id} and firebase_uid is null
+      `;
+    }
+  }
+  let user;
+  if (!existing) {
+    const userId = randomUUID();
+    await sql`
+      insert into auth.users (
+        id, email, display_name, role, password_hash, email_verified,
+        status, approval_status, firebase_uid
+      )
+      values (
+        ${userId},
+        ${email},
+        ${input.displayName || email.split("@")[0]},
+        ${"customer"},
+        ${null},
+        ${input.emailVerified},
+        ${"active"},
+        ${"pending_approval"},
+        ${firebaseUid}
+      )
+    `;
+    await emitOutbox("user", userId, "user.registered", {
+      userId,
+      email,
+      displayName: input.displayName,
+      role: "customer",
+      invitation: false,
+      provider: input.provider
+    });
+    const created = await findUserById(userId);
+    if (!created) {
+      return reply.code(500).send({ message: "Failed to create user record." });
+    }
+    user = created;
+  } else {
+    if (input.emailVerified && !existing.email_verified) {
+      await sql`
+        update auth.users
+        set email_verified = true, updated_at = now()
+        where id = ${existing.id}
+      `;
+      existing.email_verified = true;
+    }
+    user = existing;
+  }
+  const { sessionToken, csrfToken } = await createSessionForUser(user, request);
+  return reply.send(
+    sessionResponseSchema.parse({
+      sessionToken,
+      csrfToken,
+      user: mapUser(user)
+    })
+  );
+});
+var approvalParamsSchema = external_exports.object({ id: external_exports.string().uuid() });
+async function setApprovalStatus(userId, status, actorId) {
+  switch (status) {
+    case "approved":
+      await sql`
+        update auth.users
+        set approval_status = 'approved',
+            approved_at = now(),
+            approved_by = ${actorId},
+            rejected_at = null,
+            rejected_by = null,
+            suspended_at = null,
+            suspended_by = null,
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+    case "rejected":
+      await sql`
+        update auth.users
+        set approval_status = 'rejected',
+            rejected_at = now(),
+            rejected_by = ${actorId},
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+    case "suspended":
+      await sql`
+        update auth.users
+        set approval_status = 'suspended',
+            suspended_at = now(),
+            suspended_by = ${actorId},
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+    case "pending_approval":
+      await sql`
+        update auth.users
+        set approval_status = 'pending_approval',
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+  }
+}
+function actorIdFrom(request) {
+  const value = request.headers["x-user-id"];
+  if (typeof value === "string" && value.length > 0) return value;
+  return null;
+}
+async function handleApprovalAction(request, reply, status) {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = approvalParamsSchema.parse(request.params);
+  approvalActionInputSchema.parse(request.body ?? {});
+  const user = await findUserById(params.id);
+  if (!user) {
+    return reply.code(404).send({ message: "User not found." });
+  }
+  await setApprovalStatus(user.id, status, actorIdFrom(request));
+  const updated = await findUserById(user.id);
+  if (!updated) {
+    return reply.code(500).send({ message: "User record disappeared." });
+  }
+  await emitOutbox("user", user.id, "user.approval_changed", {
+    userId: user.id,
+    email: user.email,
+    approvalStatus: status
+  });
+  return reply.send({ user: mapUser(updated) });
+}
+app.post(
+  "/internal/users/:id/approve",
+  async (request, reply) => handleApprovalAction(request, reply, "approved")
+);
+app.post(
+  "/internal/users/:id/reject",
+  async (request, reply) => handleApprovalAction(request, reply, "rejected")
+);
+app.post(
+  "/internal/users/:id/suspend",
+  async (request, reply) => handleApprovalAction(request, reply, "suspended")
+);
+app.post(
+  "/internal/users/:id/reactivate",
+  async (request, reply) => handleApprovalAction(request, reply, "approved")
+);
+app.get("/internal/users/summary", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const [rows] = await sql`
+    select
+      count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+      count(*) filter (where approval_status = 'approved')         as approved,
+      count(*) filter (where approval_status = 'rejected')         as rejected,
+      count(*) filter (where approval_status = 'suspended')        as suspended,
+      count(*)                                                     as total
+    from auth.users
+  `;
+  return {
+    pendingApproval: Number(rows.pending_approval ?? 0),
+    approved: Number(rows.approved ?? 0),
+    rejected: Number(rows.rejected ?? 0),
+    suspended: Number(rows.suspended ?? 0),
+    total: Number(rows.total ?? 0)
+  };
 });
 var port = Number(new URL(env.AUTH_SERVICE_URL).port || "4001");
 if (!process.env.VERCEL) {

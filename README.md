@@ -22,6 +22,9 @@ This repository contains:
 - Protected customer portal for creating and tracking service requests.
 - Engineer queue and admin user-invitation views.
 - Cookie-based sessions, CSRF protection, RBAC checks, and email notifications.
+- Firebase Authentication (email/password and Google) bridged to existing cookie sessions.
+- Admin approval workflow: new customer accounts land in `pending_approval` and cannot create service requests until an admin approves them.
+- Admin dashboard with approval counts, request load, and live service heartbeats.
 
 ## Tech Stack
 
@@ -156,7 +159,8 @@ flowchart TD
 | `/app/requests/new` | Create service request | Authenticated users |
 | `/app/requests/:requestId` | Request detail, messages, history | Authenticated users with request access |
 | `/app/queue` | Open/assigned service queue | `engineer`, `admin` |
-| `/app/users` | User list and staff invitations | `admin` |
+| `/app/admin` | Admin dashboard: approvals, requests, heartbeats | `admin` |
+| `/app/users` | User list, approvals, and staff invitations | `admin` |
 
 ## API / Data Layer
 
@@ -166,27 +170,34 @@ The frontend calls `/api/*` through `apps/web/src/lib/api.ts`. Mutating requests
 
 | Method | Endpoint | Purpose | Request schema / notes | Auth |
 | --- | --- | --- | --- | --- |
-| `POST` | `/api/auth/signup` | Create customer account or accept invite | `signUpInputSchema` | Public |
-| `POST` | `/api/auth/login` | Create session and cookies | `loginInputSchema` | Public |
+| `POST` | `/api/auth/signup` | Create customer account or accept invite (legacy + invite path) | `signUpInputSchema` | Public |
+| `POST` | `/api/auth/login` | Create session and cookies (legacy path) | `loginInputSchema` | Public |
 | `POST` | `/api/auth/logout` | End session | Session cookie if present | Public |
-| `GET` | `/api/auth/me` | Resolve current session | Returns `{ user }` | Public |
-| `POST` | `/api/auth/forgot-password` | Request reset email | `forgotPasswordInputSchema` | Public |
-| `POST` | `/api/auth/reset-password` | Complete reset | `resetPasswordInputSchema` | Public |
-| `POST` | `/api/auth/verify-email` | Verify email token | `verifyEmailInputSchema` | Public |
-| `GET` | `/api/auth/google/start` | Start Google OAuth flow | `?returnTo=&inviteToken=` | Public |
-| `GET` | `/api/auth/google/callback` | Google OAuth callback | Redirects after auth | Public |
+| `GET` | `/api/auth/me` | Resolve current session | Returns `{ user }` (includes `approvalStatus`) | Public |
+| `POST` | `/api/auth/forgot-password` | Request reset email (legacy) | `forgotPasswordInputSchema` | Public |
+| `POST` | `/api/auth/reset-password` | Complete reset (legacy) | `resetPasswordInputSchema` | Public |
+| `POST` | `/api/auth/verify-email` | Verify email token (legacy) | `verifyEmailInputSchema` | Public |
+| `POST` | `/api/auth/firebase/session` | Verify a Firebase ID token and create the local session | `{ idToken }` | Public |
+| `GET` | `/api/auth/google/start` | Start legacy server-side Google OAuth flow | `?returnTo=&inviteToken=` | Public |
+| `GET` | `/api/auth/google/callback` | Legacy Google OAuth callback | Redirects after auth | Public |
 | `GET` | `/api/catalog/categories` | List catalog categories | Read-only | Public through gateway |
 | `GET` | `/api/catalog/products` | List products, optional `?category=` filter | Read-only | Public through gateway |
 | `GET` | `/api/catalog/products/:productId` | Read one product | Read-only | Public through gateway |
-| `POST` | `/api/requests` | Create service request | `createServiceRequestInputSchema` | Authenticated, verified email |
+| `POST` | `/api/requests` | Create service request | `createServiceRequestInputSchema` | Authenticated, verified email, approval status `approved` |
 | `GET` | `/api/requests` | List visible requests; optional `?scope=queue` | Role-aware response | Authenticated |
 | `GET` | `/api/requests/:requestId` | Read one request with messages/history | Role-aware visibility | Authenticated |
 | `POST` | `/api/requests/:requestId/messages` | Add message or internal note | `createRequestMessageInputSchema` | Authenticated |
 | `POST` | `/api/requests/:requestId/claim` | Claim a request | Engineer/admin only | Authenticated |
 | `POST` | `/api/requests/:requestId/assign` | Assign an engineer | `{ engineerId }` | Admin only |
 | `POST` | `/api/requests/:requestId/status` | Change status | `updateRequestStatusInputSchema` | Engineer/admin only |
-| `GET` | `/api/admin/users` | List users | Internal auth read | Admin only |
+| `GET` | `/api/admin/users` | List users (includes `approvalStatus`) | Internal auth read | Admin only |
+| `GET` | `/api/admin/users/summary` | Approval-status counts for the dashboard | Internal auth read | Admin only |
 | `POST` | `/api/admin/users/invite` | Invite engineer/admin | `inviteUserInputSchema` | Admin only |
+| `POST` | `/api/admin/users/:userId/approve` | Approve a pending customer | `approvalActionInputSchema` | Admin only |
+| `POST` | `/api/admin/users/:userId/reject` | Reject a pending customer | `approvalActionInputSchema` | Admin only |
+| `POST` | `/api/admin/users/:userId/suspend` | Suspend an approved customer | `approvalActionInputSchema` | Admin only |
+| `POST` | `/api/admin/users/:userId/reactivate` | Reactivate a suspended/rejected customer | `approvalActionInputSchema` | Admin only |
+| `GET` | `/api/admin/health` | Service heartbeat snapshot for the admin dashboard | Read-only | Admin only |
 
 ### Internal service boundaries
 
@@ -243,6 +254,15 @@ All non-health internal endpoints expect `x-internal-token`.
 | `GOOGLE_OAUTH_CLIENT_ID` | No | Google OAuth client ID | empty |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | No | Google OAuth client secret | empty |
 | `GOOGLE_OAUTH_REDIRECT_URI` | No | Google OAuth callback URL | `http://127.0.0.1:4000/api/auth/google/callback` |
+| `FIREBASE_PROJECT_ID` | No | Firebase Admin: project ID | empty |
+| `FIREBASE_CLIENT_EMAIL` | No | Firebase Admin: service-account client email | empty |
+| `FIREBASE_PRIVATE_KEY` | No | Firebase Admin: service-account private key (`\n` escapes allowed) | empty |
+| `VITE_FIREBASE_API_KEY` | No (web only) | Firebase web client API key | empty |
+| `VITE_FIREBASE_AUTH_DOMAIN` | No (web only) | Firebase web client auth domain | empty |
+| `VITE_FIREBASE_PROJECT_ID` | No (web only) | Firebase web client project ID | empty |
+| `VITE_FIREBASE_APP_ID` | No (web only) | Firebase web client app ID | empty |
+| `VITE_FIREBASE_STORAGE_BUCKET` | No (web only) | Firebase web client storage bucket | empty |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | No (web only) | Firebase web client messaging sender ID | empty |
 | `VERCEL` | Platform-provided | Enables Vercel runtime behavior | `1` on Vercel |
 | `VERCEL_URL` | Platform-provided | Preview/runtime URL input | provided by Vercel |
 | `VERCEL_PROJECT_PRODUCTION_URL` | Platform-provided | Preferred production URL input | provided by Vercel |
@@ -595,6 +615,106 @@ Recommended prefixes:
 - `enhance/` for iterative improvements
 - `feature/` for new user-facing functionality
 - `docs/` for documentation-only work
+
+## Firebase Authentication Setup
+
+Firebase Authentication is the chosen identity provider for new email/password and
+Google sign-ups. The platform keeps its existing cookie session + CSRF + RBAC
+model: the frontend signs in with Firebase, obtains a Firebase ID token, and
+exchanges it for a server-side session through `POST /api/auth/firebase/session`.
+The backend verifies the ID token with the Firebase Admin SDK before creating
+or syncing the local user record.
+
+Admin approval is independent of email verification. Firebase confirms the
+user's identity and email; an ElkaTech admin then approves the account before
+the user can create service requests.
+
+### Firebase Console
+
+1. Create or open a Firebase project at https://console.firebase.google.com.
+2. Enable **Email/Password** and **Google** sign-in providers under **Authentication → Sign-in method**.
+3. Register a **Web app** under **Project settings**. Copy the web config keys
+   (apiKey, authDomain, projectId, appId, storageBucket, messagingSenderId).
+4. Under **Project settings → Service accounts**, generate a new private key.
+   That JSON download contains `project_id`, `client_email`, and `private_key`.
+
+### Backend environment variables
+
+Set these in `.env` locally and in your hosting dashboard (e.g. Vercel) for
+production:
+
+```
+FIREBASE_PROJECT_ID=<project-id>
+FIREBASE_CLIENT_EMAIL=<service-account-email>
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+Notes:
+
+- `FIREBASE_PRIVATE_KEY` may contain escaped newlines (`\n`). The platform
+  converts them back to real newlines at load time, so you can store the key on
+  a single line.
+- Never commit the service-account JSON or the private key. They are excluded
+  by `.gitignore` (`*.service-account.json`, `firebase-service-account*.json`).
+- Never log the private key, ID tokens, session cookies, or CSRF tokens.
+
+### Frontend environment variables (Vite)
+
+```
+VITE_FIREBASE_API_KEY=<web-api-key>
+VITE_FIREBASE_AUTH_DOMAIN=<project-id>.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=<project-id>
+VITE_FIREBASE_APP_ID=<web-app-id>
+VITE_FIREBASE_STORAGE_BUCKET=<project-id>.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=<sender-id>
+```
+
+These are public web-client identifiers and are safe to bundle into the
+frontend. They are *not* secrets — only the Firebase Admin SDK private key is.
+
+### Login + signup behavior
+
+- **Signup with email/password**: the frontend calls Firebase
+  `createUserWithEmailAndPassword`, then `sendEmailVerification`, then exchanges
+  the resulting ID token via `POST /api/auth/firebase/session`. A local user
+  record is created with role `customer` and approval status `pending_approval`.
+- **Login with email/password**: Firebase `signInWithEmailAndPassword` → ID
+  token → session bridge. Pending users can sign in and see the portal, but
+  the polished pending-approval card replaces the new-request form.
+- **Google login/signup**: Firebase `signInWithPopup` with the Google provider,
+  same session bridge. Same approval rules.
+- **Password reset**: when Firebase is configured the frontend uses
+  `sendPasswordResetEmail`; otherwise the legacy backend reset flow is used.
+- **Email verification**: Firebase handles verification emails for new
+  Firebase-issued accounts. The legacy `/verify-email` route still works for
+  any legacy-tokened users.
+
+### Admin approval workflow
+
+| State              | Set when                                                       | Effect                                            |
+| ------------------ | -------------------------------------------------------------- | ------------------------------------------------- |
+| `pending_approval` | New public customer signup                                     | Cannot create service requests                    |
+| `approved`         | Admin approves user (or staff invite, or existing legacy user) | Full customer access                              |
+| `rejected`         | Admin rejects user                                             | Cannot create service requests                    |
+| `suspended`        | Admin suspends user                                            | Cannot create service requests                    |
+
+- Existing users predating this workflow are kept `approved` by the migration.
+- Approval status is enforced on the gateway (`POST /api/requests`) and surfaced
+  in the frontend via a polished approval state card on `/app/requests/new` and
+  a banner on `/app/requests`.
+- The approval-state error codes returned by the gateway are:
+  `USER_PENDING_APPROVAL`, `USER_REJECTED`, `USER_SUSPENDED`.
+
+### Heartbeat / admin health dashboard
+
+- Each service exposes `GET /health` returning `{ ok, service, environment }`.
+- The gateway exposes `GET /api/admin/health` which probes every internal
+  service and returns a per-service `healthy | degraded | down` status plus a
+  latency measurement.
+- The admin dashboard at `/app/admin` shows live heartbeats, approval counts,
+  service-request load, and recent signups. It refreshes on a 60-second cadence
+  by default. There is no AWS CloudWatch dependency — the dashboard is sourced
+  entirely from internal services.
 
 ## Google OAuth Setup
 

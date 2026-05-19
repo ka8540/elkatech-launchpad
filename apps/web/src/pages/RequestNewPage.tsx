@@ -3,7 +3,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import type { CatalogProduct, RequestPriority } from "@elkatech/contracts";
-import { apiRequest } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
+import { useSession } from "@/hooks/use-session";
+import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,9 +15,12 @@ const RequestNewPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedProductId = searchParams.get("product") ?? "";
+  const { data: session } = useSession();
+  const blocked = isCustomerActionBlocked(session?.user);
   const { data: products = [] } = useQuery({
     queryKey: ["catalog", "products"],
     queryFn: () => apiRequest<CatalogProduct[]>("/api/catalog/products"),
+    enabled: !blocked,
   });
 
   const [form, setForm] = useState({
@@ -49,10 +54,27 @@ const RequestNewPage = () => {
       toast.success("Service request created.");
       navigate(`/app/requests/${id}`);
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      // Treat approval-state errors as a redirect to the polished state card.
+      if (error instanceof ApiError && error.status === 403) {
+        toast.error(error.message);
+        return;
+      }
+      const message = error instanceof Error ? error.message : "Unable to submit request.";
+      toast.error(message);
     },
   });
+
+  if (blocked && session?.user) {
+    const status = session.user.approvalStatus;
+    if (status !== "approved") {
+      return (
+        <div className="space-y-6">
+          <ApprovalStateCard status={status} />
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="space-y-6">

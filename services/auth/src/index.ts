@@ -3,7 +3,10 @@ import bcrypt from "bcryptjs";
 import Fastify from "fastify";
 import { z } from "zod";
 import {
+  approvalActionInputSchema,
+  approvalStatusSchema,
   createServiceRequestInputSchema,
+  firebaseSessionRequestSchema,
   forgotPasswordInputSchema,
   inviteUserInputSchema,
   loginInputSchema,
@@ -14,7 +17,13 @@ import {
   signUpInputSchema,
   verifyEmailInputSchema,
 } from "@elkatech/contracts";
-import { generateToken, getDb, getEnv, hashToken } from "@elkatech/config";
+import {
+  generateToken,
+  getDb,
+  getEnv,
+  hashToken,
+  verifyFirebaseIdTokenForRequest,
+} from "@elkatech/config";
 
 const app = Fastify({ logger: true });
 const sql = getDb();
@@ -28,6 +37,8 @@ type UserRow = {
   email_verified: boolean;
   password_hash: string | null;
   status: "active" | "invited";
+  approval_status: z.infer<typeof approvalStatusSchema>;
+  firebase_uid: string | null;
   created_at: string;
 };
 
@@ -38,8 +49,39 @@ function mapUser(row: UserRow) {
     displayName: row.display_name,
     role: row.role,
     emailVerified: row.email_verified,
+    approvalStatus: row.approval_status ?? "approved",
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+async function findUserById(userId: string): Promise<UserRow | null> {
+  const rows = await sql<UserRow[]>`
+    select * from auth.users where id = ${userId} limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+async function createSessionForUser(
+  user: UserRow,
+  request: { headers: Record<string, unknown>; ip: string | undefined },
+) {
+  const sessionToken = generateToken();
+  const csrfToken = generateToken(16);
+  await sql`
+    insert into auth.sessions (
+      id, token_hash, csrf_token, user_id, user_agent, ip_address, expires_at
+    )
+    values (
+      ${randomUUID()},
+      ${hashToken(sessionToken)},
+      ${csrfToken},
+      ${user.id},
+      ${(request.headers["user-agent"] as string | undefined) ?? null},
+      ${request.ip ?? null},
+      now() + ${sql`${env.SESSION_TTL_HOURS} * interval '1 hour'`}
+    )
+  `;
+  return { sessionToken, csrfToken };
 }
 
 async function emitOutbox(
@@ -101,7 +143,11 @@ async function ensureOauthIdentitiesTable() {
   return oauthIdentitiesTableReady;
 }
 
-app.get("/health", async () => ({ ok: true, service: "auth" }));
+app.get("/health", async () => ({
+  ok: true,
+  service: "auth",
+  environment: env.NODE_ENV,
+}));
 
 app.post("/signup", async (request, reply) => {
   const input = signUpInputSchema.parse(request.body);
@@ -133,8 +179,9 @@ app.post("/signup", async (request, reply) => {
     }
 
     const userId = invite.user_id ?? randomUUID();
+    // Invited staff users are pre-approved by definition (an admin invited them).
     await sql`
-      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at)
       values (
         ${userId},
         ${input.email.toLowerCase()},
@@ -142,7 +189,9 @@ app.post("/signup", async (request, reply) => {
         ${invite.role},
         ${passwordHash},
         ${false},
-        ${"active"}
+        ${"active"},
+        ${"approved"},
+        now()
       )
       on conflict (id)
       do update set
@@ -151,6 +200,8 @@ app.post("/signup", async (request, reply) => {
         role = excluded.role,
         password_hash = excluded.password_hash,
         status = excluded.status,
+        approval_status = 'approved',
+        approved_at = coalesce(auth.users.approved_at, now()),
         updated_at = now()
     `;
 
@@ -187,8 +238,10 @@ app.post("/signup", async (request, reply) => {
   }
 
   const userId = randomUUID();
+  // Public customer signups land in pending_approval and stay there
+  // until an admin approves the account.
   await sql`
-    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status)
     values (
       ${userId},
       ${input.email.toLowerCase()},
@@ -196,7 +249,8 @@ app.post("/signup", async (request, reply) => {
       ${"customer"},
       ${passwordHash},
       ${false},
-      ${"active"}
+      ${"active"},
+      ${"pending_approval"}
     )
   `;
 
@@ -211,7 +265,7 @@ app.post("/signup", async (request, reply) => {
   });
 
   return reply.code(201).send({
-    message: "Account created. Please verify your email before creating requests.",
+    message: "Account created. Please verify your email; an administrator will activate your account.",
   });
 });
 
@@ -508,15 +562,18 @@ app.post("/internal/invite", async (request, reply) => {
   `;
 
   const userId = existingUsers[0]?.id ?? randomUUID();
+  // Staff invites from an admin land approved.
   await sql`
-    insert into auth.users (id, email, display_name, role, status)
-    values (${userId}, ${email}, ${input.displayName}, ${input.role}, ${"invited"})
+    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at)
+    values (${userId}, ${email}, ${input.displayName}, ${input.role}, ${"invited"}, ${"approved"}, now())
     on conflict (id)
     do update set
       email = excluded.email,
       display_name = excluded.display_name,
       role = excluded.role,
       status = excluded.status,
+      approval_status = 'approved',
+      approved_at = coalesce(auth.users.approved_at, now()),
       updated_at = now()
   `;
 
@@ -642,9 +699,13 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
         userId = randomUUID();
       }
 
-      // Create new user
+      // Invited users (role !== customer) are pre-approved by an admin.
+      // Self-service Google sign-ups become customers and land in pending_approval.
+      const approvalStatus = role === "customer" ? "pending_approval" : "approved";
       await sql`
-        insert into auth.users (id, email, display_name, role, password_hash, email_verified, status)
+        insert into auth.users (
+          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at
+        )
         values (
           ${userId},
           ${email},
@@ -652,7 +713,9 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           ${role},
           ${null},
           ${true},
-          ${'active'}
+          ${'active'},
+          ${approvalStatus},
+          ${approvalStatus === 'approved' ? sql`now()` : sql`null`}
         )
         on conflict (id)
         do update set
@@ -709,6 +772,242 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
       user: mapUser(user),
     }),
   );
+});
+
+// ─── Firebase ID-token session bridge ──────────────────────────────────────
+app.post("/internal/firebase/session", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const input = firebaseSessionRequestSchema.parse(request.body);
+  const email = input.email.toLowerCase();
+  const firebaseUid = input.firebaseUid;
+
+  // 1. Try to find an existing local user by firebase_uid first, then by email.
+  let existing: UserRow | null = null;
+
+  const byUid = await sql<UserRow[]>`
+    select * from auth.users where firebase_uid = ${firebaseUid} limit 1
+  `;
+  if (byUid[0]) {
+    existing = byUid[0];
+  } else {
+    const byEmail = await sql<UserRow[]>`
+      select * from auth.users where lower(email) = ${email} limit 1
+    `;
+    if (byEmail[0]) {
+      existing = byEmail[0];
+      // Backfill the firebase_uid on an existing user (first time they
+      // sign in through Firebase).
+      await sql`
+        update auth.users
+        set firebase_uid = ${firebaseUid}, updated_at = now()
+        where id = ${existing.id} and firebase_uid is null
+      `;
+    }
+  }
+
+  let user: UserRow;
+
+  if (!existing) {
+    // 2. No local user yet — create one as a customer pending approval.
+    const userId = randomUUID();
+    await sql`
+      insert into auth.users (
+        id, email, display_name, role, password_hash, email_verified,
+        status, approval_status, firebase_uid
+      )
+      values (
+        ${userId},
+        ${email},
+        ${input.displayName || email.split("@")[0]},
+        ${"customer"},
+        ${null},
+        ${input.emailVerified},
+        ${"active"},
+        ${"pending_approval"},
+        ${firebaseUid}
+      )
+    `;
+
+    await emitOutbox("user", userId, "user.registered", {
+      userId,
+      email,
+      displayName: input.displayName,
+      role: "customer",
+      invitation: false,
+      provider: input.provider,
+    });
+
+    const created = await findUserById(userId);
+    if (!created) {
+      return reply.code(500).send({ message: "Failed to create user record." });
+    }
+    user = created;
+  } else {
+    // 3. Existing user — only flip email_verified up. Approval status,
+    // role, and any other moderator state must NOT be overwritten here.
+    if (input.emailVerified && !existing.email_verified) {
+      await sql`
+        update auth.users
+        set email_verified = true, updated_at = now()
+        where id = ${existing.id}
+      `;
+      existing.email_verified = true;
+    }
+    user = existing;
+  }
+
+  // 4. Always create a session, even for pending users — they need to be able
+  //    to log in and see the "your account is pending approval" screen.
+  const { sessionToken, csrfToken } = await createSessionForUser(user, request);
+
+  return reply.send(
+    sessionResponseSchema.parse({
+      sessionToken,
+      csrfToken,
+      user: mapUser(user),
+    }),
+  );
+});
+
+// ─── Admin approval actions ────────────────────────────────────────────────
+const approvalParamsSchema = z.object({ id: z.string().uuid() });
+
+async function setApprovalStatus(
+  userId: string,
+  status: z.infer<typeof approvalStatusSchema>,
+  actorId: string | null,
+) {
+  switch (status) {
+    case "approved":
+      await sql`
+        update auth.users
+        set approval_status = 'approved',
+            approved_at = now(),
+            approved_by = ${actorId},
+            rejected_at = null,
+            rejected_by = null,
+            suspended_at = null,
+            suspended_by = null,
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+    case "rejected":
+      await sql`
+        update auth.users
+        set approval_status = 'rejected',
+            rejected_at = now(),
+            rejected_by = ${actorId},
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+    case "suspended":
+      await sql`
+        update auth.users
+        set approval_status = 'suspended',
+            suspended_at = now(),
+            suspended_by = ${actorId},
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+    case "pending_approval":
+      await sql`
+        update auth.users
+        set approval_status = 'pending_approval',
+            updated_at = now()
+        where id = ${userId}
+      `;
+      break;
+  }
+}
+
+function actorIdFrom(request: any): string | null {
+  const value = request.headers["x-user-id"];
+  if (typeof value === "string" && value.length > 0) return value;
+  return null;
+}
+
+async function handleApprovalAction(
+  request: any,
+  reply: any,
+  status: z.infer<typeof approvalStatusSchema>,
+) {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const params = approvalParamsSchema.parse(request.params);
+  approvalActionInputSchema.parse(request.body ?? {});
+
+  const user = await findUserById(params.id);
+  if (!user) {
+    return reply.code(404).send({ message: "User not found." });
+  }
+
+  await setApprovalStatus(user.id, status, actorIdFrom(request));
+  const updated = await findUserById(user.id);
+  if (!updated) {
+    return reply.code(500).send({ message: "User record disappeared." });
+  }
+
+  await emitOutbox("user", user.id, "user.approval_changed", {
+    userId: user.id,
+    email: user.email,
+    approvalStatus: status,
+  });
+
+  return reply.send({ user: mapUser(updated) });
+}
+
+app.post("/internal/users/:id/approve", async (request, reply) =>
+  handleApprovalAction(request, reply, "approved"),
+);
+app.post("/internal/users/:id/reject", async (request, reply) =>
+  handleApprovalAction(request, reply, "rejected"),
+);
+app.post("/internal/users/:id/suspend", async (request, reply) =>
+  handleApprovalAction(request, reply, "suspended"),
+);
+app.post("/internal/users/:id/reactivate", async (request, reply) =>
+  handleApprovalAction(request, reply, "approved"),
+);
+
+// Health: counts for admin dashboard.
+app.get("/internal/users/summary", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const [rows] = await sql<
+    Array<{
+      pending_approval: string;
+      approved: string;
+      rejected: string;
+      suspended: string;
+      total: string;
+    }>
+  >`
+    select
+      count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+      count(*) filter (where approval_status = 'approved')         as approved,
+      count(*) filter (where approval_status = 'rejected')         as rejected,
+      count(*) filter (where approval_status = 'suspended')        as suspended,
+      count(*)                                                     as total
+    from auth.users
+  `;
+
+  return {
+    pendingApproval: Number(rows.pending_approval ?? 0),
+    approved: Number(rows.approved ?? 0),
+    rejected: Number(rows.rejected ?? 0),
+    suspended: Number(rows.suspended ?? 0),
+    total: Number(rows.total ?? 0),
+  };
 });
 
 const port = Number(new URL(env.AUTH_SERVICE_URL).port || "4001");

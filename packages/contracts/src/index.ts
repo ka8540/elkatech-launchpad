@@ -46,12 +46,21 @@ export const catalogCategorySchema = z.object({
 });
 export type CatalogCategory = z.infer<typeof catalogCategorySchema>;
 
+export const approvalStatusSchema = z.enum([
+  "pending_approval",
+  "approved",
+  "rejected",
+  "suspended",
+]);
+export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
+
 export const authUserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   displayName: z.string(),
   role: roleSchema,
   emailVerified: z.boolean(),
+  approvalStatus: approvalStatusSchema,
   createdAt: z.string(),
 });
 export type AuthUser = z.infer<typeof authUserSchema>;
@@ -163,6 +172,45 @@ export const oauthFindOrCreateInputSchema = z.object({
   displayName: z.string().min(1),
   inviteToken: z.string().optional(),
 });
+
+export const firebaseSessionInputSchema = z.object({
+  idToken: z.string().min(20),
+});
+
+export const firebaseSessionRequestSchema = z.object({
+  firebaseUid: z.string().min(1),
+  email: z.string().email(),
+  emailVerified: z.boolean(),
+  displayName: z.string().min(1),
+  provider: z.enum(["password", "google.com", "other"]).default("other"),
+  pictureUrl: z.string().url().optional(),
+});
+
+export const approvalActionInputSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+
+export const serviceHeartbeatSchema = z.object({
+  service: z.string(),
+  status: z.enum(["healthy", "degraded", "down"]),
+  latencyMs: z.number().nullable(),
+  checkedAt: z.string(),
+  details: z
+    .object({
+      version: z.string().optional(),
+      environment: z.string().optional(),
+      message: z.string().optional(),
+    })
+    .optional(),
+});
+export type ServiceHeartbeat = z.infer<typeof serviceHeartbeatSchema>;
+
+export const adminApprovalErrorCodeSchema = z.enum([
+  "USER_PENDING_APPROVAL",
+  "USER_REJECTED",
+  "USER_SUSPENDED",
+]);
+export type AdminApprovalErrorCode = z.infer<typeof adminApprovalErrorCodeSchema>;
 
 export const catalogSeedData = [
   {

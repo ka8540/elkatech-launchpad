@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import AuthPageShell from "@/components/AuthPageShell";
 import { apiRequest } from "@/lib/api";
+import { firebaseSendPasswordReset, isFirebaseConfigured } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -11,16 +12,22 @@ const ForgotPasswordPage = () => {
   const [email, setEmail] = useState("");
 
   const mutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ message: string }>("/api/auth/forgot-password", {
+    mutationFn: async () => {
+      if (isFirebaseConfigured()) {
+        await firebaseSendPasswordReset(email);
+        return { message: "If that email exists, a password reset link has been sent." };
+      }
+      return apiRequest<{ message: string }>("/api/auth/forgot-password", {
         method: "POST",
         body: JSON.stringify({ email }),
-      }),
+      });
+    },
     onSuccess: ({ message }) => {
       toast.success(message);
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: () => {
+      // Same message whether or not the email exists, to avoid account enumeration.
+      toast.success("If that email exists, a password reset link has been sent.");
     },
   });
 

@@ -177,7 +177,11 @@ async function poll() {
   await processOutbox("service_desk", "outbox", "service-desk");
 }
 
-app.get("/health", async () => ({ ok: true, service: "notification" }));
+app.get("/health", async () => ({
+  ok: true,
+  service: "notification",
+  environment: env.NODE_ENV,
+}));
 
 setInterval(() => {
   void poll().catch((error) => {

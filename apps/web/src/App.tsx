@@ -26,6 +26,7 @@ import RequestNewPage from "@/pages/RequestNewPage";
 import RequestDetailPage from "@/pages/RequestDetailPage";
 import QueuePage from "@/pages/QueuePage";
 import UsersPage from "@/pages/UsersPage";
+import AdminDashboardPage from "@/pages/AdminDashboardPage";
 
 const queryClient = new QueryClient();
 
@@ -71,6 +72,14 @@ const App = () => {
                 element={
                   <ProtectedRoute roles={["engineer", "admin"]}>
                     <QueuePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin"
+                element={
+                  <ProtectedRoute roles={["admin"]}>
+                    <AdminDashboardPage />
                   </ProtectedRoute>
                 }
               />

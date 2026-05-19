@@ -4,8 +4,10 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import {
+  approvalActionInputSchema,
   createRequestMessageInputSchema,
   createServiceRequestInputSchema,
+  firebaseSessionInputSchema,
   forgotPasswordInputSchema,
   inviteUserInputSchema,
   loginInputSchema,
@@ -15,7 +17,13 @@ import {
   updateRequestStatusInputSchema,
   verifyEmailInputSchema,
 } from "@elkatech/contracts";
-import { fetchJson, getEnv, internalHeaders } from "@elkatech/config";
+import {
+  fetchJson,
+  getEnv,
+  internalHeaders,
+  verifyFirebaseIdTokenForRequest,
+} from "@elkatech/config";
+import { evaluateApprovalGate } from "./approval";
 
 const env = getEnv();
 const app = Fastify({ logger: true });
@@ -33,6 +41,7 @@ type SessionUser = {
   displayName: string;
   role: "customer" | "engineer" | "admin";
   emailVerified: boolean;
+  approvalStatus: "pending_approval" | "approved" | "rejected" | "suspended";
   createdAt: string;
 };
 
@@ -126,7 +135,11 @@ function userHeaders(user: SessionUser) {
   });
 }
 
-app.get("/health", async () => ({ ok: true, service: "gateway" }));
+app.get("/health", async () => ({
+  ok: true,
+  service: "gateway",
+  environment: env.NODE_ENV,
+}));
 
 app.post("/api/auth/signup", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
   const input = signUpInputSchema.parse(request.body);
@@ -221,6 +234,52 @@ app.post("/api/auth/verify-email", async (request) => {
     body: JSON.stringify(input),
   });
 });
+
+// ─── Firebase Auth bridge ──────────────────────────────────────────────────
+// Verifies a Firebase ID token, asks the auth service to create or link a
+// local user, and returns an existing-pattern cookie session.
+app.post(
+  "/api/auth/firebase/session",
+  { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const input = firebaseSessionInputSchema.parse(request.body);
+    const decoded = await verifyFirebaseIdTokenForRequest(input.idToken);
+
+    if (!decoded || !decoded.uid || !decoded.email) {
+      return reply.code(401).send({ message: "Invalid Firebase credential." });
+    }
+
+    const providerId =
+      typeof (decoded as { firebase?: { sign_in_provider?: string } }).firebase?.sign_in_provider ===
+        "string"
+        ? (decoded as { firebase: { sign_in_provider: string } }).firebase.sign_in_provider
+        : "other";
+    const provider =
+      providerId === "password" || providerId === "google.com" ? providerId : "other";
+
+    const session = await fetchJson<{
+      sessionToken: string;
+      csrfToken: string;
+      user: SessionUser;
+    }>(`${env.AUTH_SERVICE_URL}/internal/firebase/session`, {
+      method: "POST",
+      headers: internalHeaders(),
+      body: JSON.stringify({
+        firebaseUid: decoded.uid,
+        email: decoded.email,
+        emailVerified: Boolean(decoded.email_verified),
+        displayName:
+          (decoded.name as string | undefined) ||
+          (decoded.email as string).split("@")[0],
+        provider,
+        pictureUrl: (decoded.picture as string | undefined) || undefined,
+      }),
+    });
+
+    setSessionCookies(reply, session);
+    return { user: session.user };
+  },
+);
 
 // ─── Google OAuth ───────────────────────────────────────────────────────────
 
@@ -405,12 +464,23 @@ app.get("/api/catalog/products/:productId", async (request) => {
   });
 });
 
+function assertApproved(reply: any, user: SessionUser) {
+  const result = evaluateApprovalGate(user);
+  if (result.ok) return true;
+  reply.code(403).send({ code: result.code, message: result.message });
+  return false;
+}
+
 app.post("/api/requests", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
+  if (!assertApproved(reply, session.user)) return;
   if (!session.user.emailVerified) {
-    return reply.code(403).send({ message: "Verify your email before creating requests." });
+    return reply.code(403).send({
+      code: "EMAIL_NOT_VERIFIED",
+      message: "Verify your email before creating requests.",
+    });
   }
 
   const input = createServiceRequestInputSchema.parse(request.body);
@@ -518,6 +588,135 @@ app.post("/api/admin/users/invite", async (request, reply) => {
       "x-user-role": session.user.role,
     }),
     body: JSON.stringify(input),
+  });
+});
+
+// ─── Admin: approval workflow ──────────────────────────────────────────────
+const approvalUserParams = z.object({ userId: z.string().uuid() });
+
+async function forwardApprovalAction(
+  request: any,
+  reply: any,
+  action: "approve" | "reject" | "suspend" | "reactivate",
+) {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+
+  const { userId } = approvalUserParams.parse(request.params);
+  const body = approvalActionInputSchema.parse(request.body ?? {});
+
+  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/${action}`, {
+    method: "POST",
+    headers: internalHeaders({ "x-user-id": session.user.id }),
+    body: JSON.stringify(body),
+  });
+}
+
+app.post("/api/admin/users/:userId/approve", (request, reply) =>
+  forwardApprovalAction(request, reply, "approve"),
+);
+app.post("/api/admin/users/:userId/reject", (request, reply) =>
+  forwardApprovalAction(request, reply, "reject"),
+);
+app.post("/api/admin/users/:userId/suspend", (request, reply) =>
+  forwardApprovalAction(request, reply, "suspend"),
+);
+app.post("/api/admin/users/:userId/reactivate", (request, reply) =>
+  forwardApprovalAction(request, reply, "reactivate"),
+);
+
+// ─── Admin: heartbeat / health dashboard ───────────────────────────────────
+type HealthRecord = {
+  service: string;
+  status: "healthy" | "degraded" | "down";
+  latencyMs: number | null;
+  checkedAt: string;
+  details?: { version?: string; environment?: string; message?: string };
+};
+
+async function probeService(name: string, url: string): Promise<HealthRecord> {
+  const checkedAt = new Date().toISOString();
+  const started = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    let response: Response;
+    try {
+      response = await fetch(`${url}/health`, {
+        method: "GET",
+        signal: controller.signal,
+        headers: internalHeaders(),
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    const latencyMs = Date.now() - started;
+    if (!response.ok) {
+      return {
+        service: name,
+        status: "degraded",
+        latencyMs,
+        checkedAt,
+        details: { message: `HTTP ${response.status}` },
+      };
+    }
+    let environment: string | undefined;
+    try {
+      const body = (await response.json()) as { service?: string; environment?: string };
+      environment = body?.environment;
+    } catch {
+      environment = undefined;
+    }
+    const status: HealthRecord["status"] = latencyMs > 1500 ? "degraded" : "healthy";
+    return {
+      service: name,
+      status,
+      latencyMs,
+      checkedAt,
+      details: { environment },
+    };
+  } catch (error) {
+    return {
+      service: name,
+      status: "down",
+      latencyMs: null,
+      checkedAt,
+      details: { message: error instanceof Error ? error.message : "unreachable" },
+    };
+  }
+}
+
+app.get("/api/admin/health", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+
+  const targets: Array<{ name: string; url: string }> = [
+    { name: "auth", url: env.AUTH_SERVICE_URL },
+    { name: "catalog", url: env.CATALOG_SERVICE_URL },
+    { name: "service-desk", url: env.SERVICE_DESK_URL },
+    { name: "notification", url: env.NOTIFICATION_SERVICE_URL },
+  ];
+
+  const services = await Promise.all(targets.map(({ name, url }) => probeService(name, url)));
+  // Gateway itself is always reported as healthy when this handler runs.
+  services.unshift({
+    service: "gateway",
+    status: "healthy",
+    latencyMs: 0,
+    checkedAt: new Date().toISOString(),
+    details: { environment: env.NODE_ENV },
+  });
+
+  return { services };
+});
+
+// ─── Admin: dashboard summary ──────────────────────────────────────────────
+app.get("/api/admin/users/summary", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/summary`, {
+    headers: internalHeaders(),
   });
 });
 

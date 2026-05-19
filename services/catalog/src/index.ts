@@ -17,7 +17,11 @@ app.addHook("onRequest", async (request, reply) => {
   }
 });
 
-app.get("/health", async () => ({ ok: true, service: "catalog" }));
+app.get("/health", async () => ({
+  ok: true,
+  service: "catalog",
+  environment: env.NODE_ENV,
+}));
 
 app.get("/categories", async () => {
   const redis = getRedis();

@@ -1,6 +1,11 @@
 # Environment files (NEVER commit these)
 .env
 .env.*
+!.env.example
+
+# Firebase service account secrets (NEVER commit these)
+*.service-account.json
+firebase-service-account*.json
 
 # Logs
 logs

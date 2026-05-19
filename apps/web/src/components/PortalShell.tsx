@@ -1,7 +1,8 @@
-import { LogOut, ShieldCheck, Ticket, UserPlus, Wrench } from "lucide-react";
+import { Gauge, LogOut, ShieldCheck, Ticket, UserPlus, Wrench } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useNavigate } from "react-router-dom";
 import { apiRequest } from "@/lib/api";
+import { firebaseSignOut } from "@/lib/firebase";
 import { useSession } from "@/hooks/use-session";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NavLink } from "@/components/NavLink";
@@ -13,7 +14,15 @@ const PortalShell = () => {
   const { data } = useSession();
 
   const logoutMutation = useMutation({
-    mutationFn: () => apiRequest("/api/auth/logout", { method: "POST" }),
+    mutationFn: async () => {
+      await apiRequest("/api/auth/logout", { method: "POST" });
+      // Also clear any Firebase Auth state if it was used to sign in.
+      try {
+        await firebaseSignOut();
+      } catch {
+        // ignored — server session is gone, that's what matters.
+      }
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       navigate("/login");
@@ -72,14 +81,24 @@ const PortalShell = () => {
               )}
 
               {user?.role === "admin" && (
-                <NavLink
-                  to="/app/users"
-                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  activeClassName="bg-muted text-foreground"
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Users
-                </NavLink>
+                <>
+                  <NavLink
+                    to="/app/admin"
+                    className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    activeClassName="bg-muted text-foreground"
+                  >
+                    <Gauge className="h-4 w-4" />
+                    Admin
+                  </NavLink>
+                  <NavLink
+                    to="/app/users"
+                    className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    activeClassName="bg-muted text-foreground"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Users
+                  </NavLink>
+                </>
               )}
             </nav>
 
