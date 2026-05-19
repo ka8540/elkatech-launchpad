@@ -74118,7 +74118,7 @@ if (!process.env.VERCEL) {
   const { config } = await Promise.resolve().then(() => __toESM(require_main(), 1));
   config();
 }
-var envSchema = external_exports.object({
+var baseEnvSchema = external_exports.object({
   NODE_ENV: external_exports.enum(["development", "test", "production"]).default("development"),
   POSTGRES_URL: external_exports.string().optional(),
   KV_URL: external_exports.string().optional(),
@@ -74134,16 +74134,6 @@ var envSchema = external_exports.object({
   SESSION_COOKIE_NAME: external_exports.string().default("elkatech_session"),
   CSRF_COOKIE_NAME: external_exports.string().default("elkatech_csrf"),
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
-  SMTP_HOST: external_exports.string().default("127.0.0.1"),
-  SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
-  // String, not coerced boolean: z.coerce.boolean()("false") is truthy.
-  SMTP_SECURE: external_exports.string().default("false").transform((value) => value === "true" || value === "1"),
-  // Optional so local SMTP servers without auth still work.
-  SMTP_USER: external_exports.string().optional(),
-  // Resend API key. Supplied only via the environment — never committed.
-  SMTP_PASS: external_exports.string().optional(),
-  // Not .email(): a display-name sender ("Name <addr>") is valid for SMTP.
-  SMTP_FROM: external_exports.string().min(1).default("ElkaTech Support <ka8540@g.rit.edu>"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
@@ -74151,18 +74141,21 @@ var envSchema = external_exports.object({
   GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional()
 });
 var cachedEnv = null;
+function withVercelUrls(env2) {
+  if (process.env.VERCEL === "1" && process.env.VERCEL_URL) {
+    const publicUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL}`;
+    env2.APP_BASE_URL = publicUrl;
+    env2.GATEWAY_URL = `${publicUrl}/api`;
+    env2.AUTH_SERVICE_URL = `${publicUrl}/api/internal-auth`;
+    env2.CATALOG_SERVICE_URL = `${publicUrl}/api/internal-catalog`;
+    env2.SERVICE_DESK_URL = `${publicUrl}/api/internal-service-desk`;
+    env2.NOTIFICATION_SERVICE_URL = `${publicUrl}/api/internal-notification`;
+  }
+  return env2;
+}
 function getEnv() {
   if (!cachedEnv) {
-    cachedEnv = envSchema.parse(process.env);
-    if (process.env.VERCEL === "1" && process.env.VERCEL_URL) {
-      const publicUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL}`;
-      cachedEnv.APP_BASE_URL = publicUrl;
-      cachedEnv.GATEWAY_URL = `${publicUrl}/api`;
-      cachedEnv.AUTH_SERVICE_URL = `${publicUrl}/api/internal-auth`;
-      cachedEnv.CATALOG_SERVICE_URL = `${publicUrl}/api/internal-catalog`;
-      cachedEnv.SERVICE_DESK_URL = `${publicUrl}/api/internal-service-desk`;
-      cachedEnv.NOTIFICATION_SERVICE_URL = `${publicUrl}/api/internal-notification`;
-    }
+    cachedEnv = withVercelUrls(baseEnvSchema.parse(process.env));
   }
   return cachedEnv;
 }
@@ -74183,6 +74176,27 @@ function getDb() {
 
 // packages/config/src/redis.ts
 var import_ioredis = __toESM(require_built3(), 1);
+
+// packages/config/src/notification-env.ts
+var notificationEnvSchema = baseEnvSchema.extend({
+  SMTP_HOST: external_exports.string().default("127.0.0.1"),
+  SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
+  // String, not coerced boolean: z.coerce.boolean()("false") is truthy.
+  SMTP_SECURE: external_exports.string().default("false").transform((value) => value === "true" || value === "1"),
+  // Optional so local SMTP servers without auth still work.
+  SMTP_USER: external_exports.string().optional(),
+  // Resend API key. Supplied only via the environment -- never committed.
+  SMTP_PASS: external_exports.string().optional(),
+  // Not .email(): a display-name sender ("Name <addr>") is valid for SMTP.
+  SMTP_FROM: external_exports.string().min(1).default("ElkaTech Support <ka8540@g.rit.edu>")
+});
+var cachedNotificationEnv = null;
+function getNotificationEnv() {
+  if (!cachedNotificationEnv) {
+    cachedNotificationEnv = withVercelUrls(notificationEnvSchema.parse(process.env));
+  }
+  return cachedNotificationEnv;
+}
 
 // services/notification/src/emails.ts
 function buildEmails(eventType, payload, adminEmail) {
@@ -74291,7 +74305,7 @@ ${payload.body}`
 // services/notification/src/index.ts
 var app = (0, import_fastify.default)({ logger: true });
 var sql = getDb();
-var env = getEnv();
+var env = getNotificationEnv();
 var transporter = import_nodemailer.default.createTransport({
   host: env.SMTP_HOST,
   port: env.SMTP_PORT,

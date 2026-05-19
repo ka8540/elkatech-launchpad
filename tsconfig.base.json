@@ -13,7 +13,8 @@
     "baseUrl": ".",
     "paths": {
       "@elkatech/contracts": ["packages/contracts/src/index.ts"],
-      "@elkatech/config": ["packages/config/src/index.ts"]
+      "@elkatech/config": ["packages/config/src/index.ts"],
+      "@elkatech/config/notification-env": ["packages/config/src/notification-env.ts"]
     }
   }
 }

@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import nodemailer from "nodemailer";
-import { getDb, getEnv } from "@elkatech/config";
+import { getDb } from "@elkatech/config";
+import { getNotificationEnv } from "@elkatech/config/notification-env";
 import { buildEmails } from "./emails";
 
 const app = Fastify({ logger: true });
 const sql = getDb();
-const env = getEnv();
+const env = getNotificationEnv();
 
 // SMTP transport. With Resend: host smtp.resend.com, port 587, user "resend",
 // pass = Resend API key (from env only). Auth is omitted when no credentials
