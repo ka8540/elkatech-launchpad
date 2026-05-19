@@ -25,11 +25,47 @@ const transporter = nodemailer.createTransport({
     : {}),
 });
 
+let notificationTablesReady: Promise<void> | null = null;
+
+async function ensureNotificationTables() {
+  if (!notificationTablesReady) {
+    notificationTablesReady = (async () => {
+      await sql`create schema if not exists notification`;
+      await sql`
+        create table if not exists notification.deliveries (
+          id uuid primary key,
+          event_id uuid not null,
+          event_type text not null,
+          recipient_email text not null,
+          subject text not null,
+          status text not null default 'sent' check (status in ('sent', 'failed')),
+          attempts integer not null default 1,
+          last_error text,
+          sent_at timestamptz,
+          created_at timestamptz not null default now()
+        )
+      `;
+      await sql`alter table notification.deliveries drop constraint if exists deliveries_event_id_key`;
+      await sql`
+        create unique index if not exists deliveries_event_recipient_idx
+        on notification.deliveries (event_id, recipient_email)
+      `;
+    })().catch((error) => {
+      notificationTablesReady = null;
+      throw error;
+    });
+  }
+
+  return notificationTablesReady;
+}
+
 async function processOutbox(
   schemaName: "auth" | "service_desk",
   tableName: "outbox",
   serviceName: "auth" | "service-desk",
 ) {
+  await ensureNotificationTables();
+
   const rows = await sql<any[]>`
     select *
     from ${sql(schemaName)}.${sql(tableName)}
