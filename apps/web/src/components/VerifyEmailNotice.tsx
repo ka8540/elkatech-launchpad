@@ -44,16 +44,8 @@ const VerifyEmailNotice = ({
             <p className="mt-1 text-sm leading-6 text-amber-800/80 dark:text-amber-50/75">
               We sent a verification link to{" "}
               <span className="font-medium">{email}</span>. Open it to unlock service
-              request creation. Running locally? Check the Mailpit inbox at{" "}
-              <a
-                href="http://127.0.0.1:8025"
-                target="_blank"
-                rel="noreferrer"
-                className="font-medium underline underline-offset-2"
-              >
-                127.0.0.1:8025
-              </a>
-              .
+              request creation. If it hasn’t arrived, check your spam folder or resend
+              it below.
             </p>
           </div>
         </div>

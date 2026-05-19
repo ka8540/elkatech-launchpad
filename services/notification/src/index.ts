@@ -8,10 +8,16 @@ const app = Fastify({ logger: true });
 const sql = getDb();
 const env = getEnv();
 
+// SMTP transport. With Resend: host smtp.resend.com, port 587, user "resend",
+// pass = Resend API key (from env only). Auth is omitted when no credentials
+// are configured so a local auth-less SMTP server still works.
 const transporter = nodemailer.createTransport({
   host: env.SMTP_HOST,
   port: env.SMTP_PORT,
-  secure: false,
+  secure: env.SMTP_SECURE,
+  ...(env.SMTP_USER && env.SMTP_PASS
+    ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASS } }
+    : {}),
 });
 
 async function processOutbox(

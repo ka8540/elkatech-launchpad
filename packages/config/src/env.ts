@@ -24,7 +24,17 @@ const envSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(720),
   SMTP_HOST: z.string().default("127.0.0.1"),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
-  SMTP_FROM: z.string().email().default("no-reply@elkatech.local"),
+  // String, not coerced boolean: z.coerce.boolean()("false") is truthy.
+  SMTP_SECURE: z
+    .string()
+    .default("false")
+    .transform((value) => value === "true" || value === "1"),
+  // Optional so local SMTP servers without auth still work.
+  SMTP_USER: z.string().optional(),
+  // Resend API key. Supplied only via the environment — never committed.
+  SMTP_PASS: z.string().optional(),
+  // Not .email(): a display-name sender ("Name <addr>") is valid for SMTP.
+  SMTP_FROM: z.string().min(1).default("ElkaTech Support <ka8540@g.rit.edu>"),
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),

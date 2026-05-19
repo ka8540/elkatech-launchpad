@@ -235,9 +235,12 @@ All non-health internal endpoints expect `x-internal-token`.
 | `SESSION_COOKIE_NAME` | No | Session cookie name | `elkatech_session` |
 | `CSRF_COOKIE_NAME` | No | CSRF cookie name | `elkatech_csrf` |
 | `SESSION_TTL_HOURS` | No | Session lifetime | `168` in `.env.example` |
-| `SMTP_HOST` | No | SMTP host | `127.0.0.1` |
-| `SMTP_PORT` | No | SMTP port | `1025` |
-| `SMTP_FROM` | No | Sender address | `no-reply@elkatech.local` |
+| `SMTP_HOST` | No | SMTP host | `smtp.resend.com` |
+| `SMTP_PORT` | No | SMTP port | `587` |
+| `SMTP_SECURE` | No | Use a TLS-on-connect socket (`true`/`false`) | `false` (STARTTLS on 587) |
+| `SMTP_USER` | No | SMTP username (`resend` for Resend) | empty |
+| `SMTP_PASS` | No | SMTP password — the Resend API key; env only, never committed | empty |
+| `SMTP_FROM` | No | Sender address | `ElkaTech Support <ka8540@g.rit.edu>` |
 | `BOOTSTRAP_ADMIN_EMAIL` | No | Initial admin email and notification fallback | `admin@elkatech.local` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | Initial admin password | `ChangeMe123!` |
 | `GOOGLE_OAUTH_CLIENT_ID` | No | Google OAuth client ID | empty |
@@ -326,29 +329,38 @@ npm run build -w @elkatech/web
 npm run preview -w @elkatech/web
 ```
 
+## Email delivery (Resend SMTP)
+
+- Resend SMTP is used for all application emails (verification, password reset, invitations, and service request notifications).
+- `SMTP_PASS` is the Resend API key. It is read only from the environment and must never be committed.
+- The sender is currently configured as `ElkaTech Support <ka8540@g.rit.edu>`.
+- For production, prefer a verified domain sender such as `support@elkatech.in`.
+
+SMTP is configured entirely through environment variables — see `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, and `SMTP_SECURE` in `.env.example`. The notification service reads `SMTP_FROM` from the environment and never hardcodes a sender address.
+
 ## Email verification local testing
 
 New email/password signups must verify their email before they can create service requests. To exercise the full flow locally:
 
-1. Start infrastructure (PostgreSQL + Mailpit):
+1. Start infrastructure and apply migrations:
 
    ```sh
    npm run dev:infra
+   npm run db:migrate
    ```
 
-2. Apply migrations and start all services:
+2. Configure SMTP in `.env` (copy the Resend values from `.env.example`) and start all services:
 
    ```sh
-   npm run db:migrate
    npm run dev
    ```
 
 3. Sign up at `http://127.0.0.1:8080/signup` with a unique email.
-4. Open Mailpit at `http://127.0.0.1:8025` and open the “Verify your Elkatech account” email.
+4. Open the inbox of that email address and open the “Verify your Elkatech account” message.
 5. Click the verification link — it points at `http://127.0.0.1:8080/verify-email?token=<token>`.
 6. Confirm the verify page shows success, then sign in. `GET /api/auth/me` now returns the user with `emailVerified: true`, and service request creation is unlocked.
 
-The notification service polls the `auth.outbox` table every few seconds and sends mail through SMTP/Mailpit. If an email is missing, check its logs for `notification emails sent` or `notification email delivery failed`. Signed-in users can also request a fresh link with the “Resend verification email” button shown in the portal.
+The notification service polls the `auth.outbox` table every few seconds and sends mail through Resend SMTP. If an email is missing, check its logs for `notification emails sent` or `notification email delivery failed`. Signed-in users can also request a fresh link with the “Resend verification email” button shown in the portal.
 
 ## Build and Type Checking
 
