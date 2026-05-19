@@ -74136,7 +74136,14 @@ var envSchema = external_exports.object({
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
-  SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
+  // String, not coerced boolean: z.coerce.boolean()("false") is truthy.
+  SMTP_SECURE: external_exports.string().default("false").transform((value) => value === "true" || value === "1"),
+  // Optional so local SMTP servers without auth still work.
+  SMTP_USER: external_exports.string().optional(),
+  // Resend API key. Supplied only via the environment — never committed.
+  SMTP_PASS: external_exports.string().optional(),
+  // Not .email(): a display-name sender ("Name <addr>") is valid for SMTP.
+  SMTP_FROM: external_exports.string().min(1).default("ElkaTech Support <ka8540@g.rit.edu>"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
@@ -74177,16 +74184,8 @@ function getDb() {
 // packages/config/src/redis.ts
 var import_ioredis = __toESM(require_built3(), 1);
 
-// services/notification/src/index.ts
-var app = (0, import_fastify.default)({ logger: true });
-var sql = getDb();
-var env = getEnv();
-var transporter = import_nodemailer.default.createTransport({
-  host: env.SMTP_HOST,
-  port: env.SMTP_PORT,
-  secure: false
-});
-function buildEmails(eventType, payload) {
+// services/notification/src/emails.ts
+function buildEmails(eventType, payload, adminEmail) {
   switch (eventType) {
     case "user.registered":
       if (payload.invitation) {
@@ -74230,7 +74229,7 @@ ${payload.resetUrl}
     case "request.created":
       return [
         {
-          to: env.BOOTSTRAP_ADMIN_EMAIL,
+          to: adminEmail,
           subject: `New service request ${payload.requestNumber}`,
           text: `A new service request has been created by ${payload.customerName} for ${payload.productName}.
 
@@ -74278,7 +74277,7 @@ ${payload.body}`
       }];
     case "request.customer_message_posted":
       return [{
-        to: env.BOOTSTRAP_ADMIN_EMAIL,
+        to: adminEmail,
         subject: `Customer replied on request ${payload.requestNumber}`,
         text: `Customer update on request ${payload.requestNumber}:
 
@@ -74288,6 +74287,17 @@ ${payload.body}`
       return [];
   }
 }
+
+// services/notification/src/index.ts
+var app = (0, import_fastify.default)({ logger: true });
+var sql = getDb();
+var env = getEnv();
+var transporter = import_nodemailer.default.createTransport({
+  host: env.SMTP_HOST,
+  port: env.SMTP_PORT,
+  secure: env.SMTP_SECURE,
+  ...env.SMTP_USER && env.SMTP_PASS ? { auth: { user: env.SMTP_USER, pass: env.SMTP_PASS } } : {}
+});
 async function processOutbox(schemaName, tableName, serviceName) {
   const rows = await sql`
     select *
@@ -74297,7 +74307,7 @@ async function processOutbox(schemaName, tableName, serviceName) {
     limit 20
   `;
   for (const row of rows) {
-    const emails = buildEmails(row.event_type, row.payload);
+    const emails = buildEmails(row.event_type, row.payload, env.BOOTSTRAP_ADMIN_EMAIL);
     try {
       for (const email of emails) {
         await transporter.sendMail({
@@ -74331,36 +74341,65 @@ async function processOutbox(schemaName, tableName, serviceName) {
               ${"sent"},
               now()
             )
+            on conflict (event_id, recipient_email)
+            do update set
+              status = 'sent',
+              subject = excluded.subject,
+              sent_at = now(),
+              last_error = null
           `;
         }
       });
+      if (emails.length > 0) {
+        app.log.info(
+          {
+            service: serviceName,
+            eventType: row.event_type,
+            eventId: row.id,
+            recipients: emails.map((email) => email.to)
+          },
+          "notification emails sent"
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email error";
-      await sql`
-        insert into notification.deliveries (
-          id,
-          event_id,
-          event_type,
-          recipient_email,
-          subject,
-          status,
-          last_error
-        )
-        values (
-          ${randomUUID()},
-          ${row.id},
-          ${row.event_type},
-          ${emails[0]?.to ?? env.BOOTSTRAP_ADMIN_EMAIL},
-          ${emails[0]?.subject ?? `${serviceName} event`},
-          ${"failed"},
-          ${message}
-        )
-        on conflict (event_id)
-        do update set
-          status = excluded.status,
-          attempts = notification.deliveries.attempts + 1,
-          last_error = excluded.last_error
-      `;
+      app.log.error(
+        {
+          service: serviceName,
+          eventType: row.event_type,
+          eventId: row.id,
+          error: message
+        },
+        "notification email delivery failed"
+      );
+      const failedTargets = emails.length > 0 ? emails : [{ to: env.BOOTSTRAP_ADMIN_EMAIL, subject: `${serviceName} event ${row.event_type}` }];
+      for (const target of failedTargets) {
+        await sql`
+          insert into notification.deliveries (
+            id,
+            event_id,
+            event_type,
+            recipient_email,
+            subject,
+            status,
+            last_error
+          )
+          values (
+            ${randomUUID()},
+            ${row.id},
+            ${row.event_type},
+            ${target.to},
+            ${target.subject},
+            ${"failed"},
+            ${message}
+          )
+          on conflict (event_id, recipient_email)
+          do update set
+            status = 'failed',
+            attempts = notification.deliveries.attempts + 1,
+            last_error = excluded.last_error
+        `;
+      }
     }
   }
 }
@@ -74369,6 +74408,9 @@ async function poll() {
   await processOutbox("service_desk", "outbox", "service-desk");
 }
 app.get("/health", async () => ({ ok: true, service: "notification" }));
+void poll().catch((error) => {
+  app.log.error(error);
+});
 setInterval(() => {
   void poll().catch((error) => {
     app.log.error(error);

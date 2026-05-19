@@ -62638,7 +62638,14 @@ var envSchema = external_exports.object({
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
-  SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
+  // String, not coerced boolean: z.coerce.boolean()("false") is truthy.
+  SMTP_SECURE: external_exports.string().default("false").transform((value) => value === "true" || value === "1"),
+  // Optional so local SMTP servers without auth still work.
+  SMTP_USER: external_exports.string().optional(),
+  // Resend API key. Supplied only via the environment — never committed.
+  SMTP_PASS: external_exports.string().optional(),
+  // Not .email(): a display-name sender ("Name <addr>") is valid for SMTP.
+  SMTP_FROM: external_exports.string().min(1).default("ElkaTech Support <ka8540@g.rit.edu>"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),

@@ -64520,7 +64520,14 @@ var envSchema = external_exports.object({
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
-  SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
+  // String, not coerced boolean: z.coerce.boolean()("false") is truthy.
+  SMTP_SECURE: external_exports.string().default("false").transform((value) => value === "true" || value === "1"),
+  // Optional so local SMTP servers without auth still work.
+  SMTP_USER: external_exports.string().optional(),
+  // Resend API key. Supplied only via the environment — never committed.
+  SMTP_PASS: external_exports.string().optional(),
+  // Not .email(): a display-name sender ("Name <addr>") is valid for SMTP.
+  SMTP_FROM: external_exports.string().min(1).default("ElkaTech Support <ka8540@g.rit.edu>"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
@@ -64871,6 +64878,32 @@ app.post("/verify-email", async (request, reply) => {
     email: token.email
   });
   return { message: "Email verified successfully." };
+});
+app.post("/resend-verification", async (request) => {
+  const schema = external_exports.object({ email: external_exports.string().email() });
+  const input = schema.parse(request.body);
+  const userRows = await sql`
+    select *
+    from auth.users
+    where lower(email) = ${input.email.toLowerCase()}
+    limit 1
+  `;
+  const user = userRows[0];
+  if (user && !user.email_verified) {
+    const verifyToken = await createVerificationToken(user.id, user.email);
+    await emitOutbox("user", user.id, "user.registered", {
+      userId: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      role: user.role,
+      invitation: false,
+      verifyUrl: `${env.APP_BASE_URL}/verify-email?token=${verifyToken}`
+    });
+    request.log.info({ userId: user.id }, "queued verification email resend");
+  }
+  return {
+    message: "If that account still needs verification, a new email is on its way."
+  };
 });
 app.post("/internal/session/resolve", async (request, reply) => {
   if (!ensureInternal(request)) {
