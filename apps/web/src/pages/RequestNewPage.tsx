@@ -27,15 +27,25 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+/* ─── Shared input class strings ────────────────────────────────────────────── */
 const inputClassName =
-  "h-12 min-w-0 rounded-2xl border-white/10 bg-[#050b14]/80 px-4 text-white shadow-inner shadow-black/10 placeholder:text-slate-500 transition-colors focus-visible:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/15 focus-visible:ring-offset-0";
+  "h-12 min-w-0 rounded-2xl px-4 shadow-inner shadow-black/5 placeholder:text-slate-400 transition-colors " +
+  "border-slate-200 bg-white text-slate-950 focus-visible:border-blue-400 focus-visible:ring-2 focus-visible:ring-blue-500/15 focus-visible:ring-offset-0 " +
+  "dark:border-white/10 dark:bg-[#050b14]/80 dark:text-white dark:placeholder:text-slate-500 dark:focus-visible:border-blue-400/60 dark:shadow-black/10";
 
 const selectTriggerClassName =
-  "h-12 min-w-0 rounded-2xl border-white/10 bg-[#050b14]/80 px-4 text-white shadow-inner shadow-black/10 transition-colors focus:border-blue-400/60 focus:ring-2 focus:ring-blue-500/15 focus:ring-offset-0 data-[placeholder]:text-slate-500 [&>span]:truncate";
+  "h-12 min-w-0 rounded-2xl px-4 shadow-inner shadow-black/5 transition-colors " +
+  "border-slate-200 bg-white text-slate-950 data-[placeholder]:text-slate-400 " +
+  "dark:border-white/10 dark:bg-[#050b14]/80 dark:text-white dark:data-[placeholder]:text-slate-500 " +
+  "focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 focus:ring-offset-0 " +
+  "dark:focus:border-blue-400/60 dark:shadow-black/10 [&>span]:truncate";
 
 const selectContentClassName =
-  "rounded-2xl border-white/10 bg-[#07111f] text-slate-100 shadow-2xl shadow-black/40";
+  "rounded-2xl border shadow-2xl " +
+  "border-slate-200 bg-white text-slate-900 shadow-black/10 " +
+  "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-100 dark:shadow-black/40";
 
+/* ─── Form config ───────────────────────────────────────────────────────────── */
 const priorityOptions: Array<{ value: RequestPriority; label: string }> = [
   { value: "low", label: "Low" },
   { value: "normal", label: "Normal" },
@@ -51,6 +61,7 @@ function formatCategorySlug(slug: string) {
     .join(" ");
 }
 
+/* ─── Field wrapper ─────────────────────────────────────────────────────────── */
 function Field({
   label,
   required,
@@ -66,16 +77,17 @@ function Field({
 }) {
   return (
     <div className={cn("min-w-0 space-y-2.5", className)}>
-      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-200">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
         {label}
-        {required && <span className="text-blue-300" aria-hidden="true">*</span>}
+        {required && <span className="text-blue-500 dark:text-blue-300" aria-hidden="true">*</span>}
       </label>
       {children}
-      {helper && <p className="text-xs leading-relaxed text-slate-500">{helper}</p>}
+      {helper && <p className="text-xs leading-relaxed text-slate-400 dark:text-slate-500">{helper}</p>}
     </div>
   );
 }
 
+/* ─── Form section block ─────────────────────────────────────────────────────── */
 function FormSection({
   icon: Icon,
   title,
@@ -88,15 +100,21 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 border-t border-white/10 px-5 py-7 sm:px-7 lg:px-8">
+    <section className={cn(
+      "min-w-0 border-t px-5 py-7 sm:px-7 lg:px-8",
+      "border-slate-200 dark:border-white/10",
+    )}>
       <div className="mb-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 text-blue-300">
+          <div className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
+            "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
+          )}>
             <Icon className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-display text-xl font-semibold text-white">{title}</h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">{description}</p>
+            <h3 className="font-display text-xl font-semibold text-slate-900 dark:text-white">{title}</h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
           </div>
         </div>
       </div>
@@ -105,6 +123,7 @@ function FormSection({
   );
 }
 
+/* ─── Guidance panel (sidebar) ───────────────────────────────────────────────── */
 function GuidancePanel({
   icon: Icon,
   title,
@@ -120,26 +139,29 @@ function GuidancePanel({
 }) {
   const accentClass =
     accent === "emerald"
-      ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300"
-      : "border-blue-400/20 bg-blue-500/10 text-blue-300";
+      ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300"
+      : "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300";
 
   return (
-    <aside className="min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-[#0b1626]/70 shadow-[0_24px_80px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+    <aside className={cn(
+      "min-w-0 overflow-hidden rounded-3xl border shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl",
+      "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/70 dark:shadow-[0_24px_80px_rgba(0,0,0,0.18)]",
+    )}>
       <div className="relative p-5 sm:p-6">
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-blue-500/5 blur-3xl dark:bg-blue-500/10" />
         <div className="relative flex min-w-0 items-start gap-3">
           <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border", accentClass)}>
             <Icon className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-display text-lg font-semibold text-white">{title}</h3>
-            {description && <p className="mt-1 text-sm leading-6 text-slate-400">{description}</p>}
+            <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>
+            {description && <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>}
           </div>
         </div>
         <ul className="relative mt-5 space-y-3">
           {items.map((item) => (
-            <li key={item} className="flex min-w-0 gap-3 text-sm leading-6 text-slate-300">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" />
+            <li key={item} className="flex min-w-0 gap-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-300" />
               <span>{item}</span>
             </li>
           ))}
@@ -149,6 +171,7 @@ function GuidancePanel({
   );
 }
 
+/* ─── Page ───────────────────────────────────────────────────────────────────── */
 const RequestNewPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -197,53 +220,75 @@ const RequestNewPage = () => {
 
   return (
     <div className="mx-auto max-w-7xl min-w-0 space-y-8 overflow-x-hidden">
-      <header className="relative min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-[#0b1626]/80 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)] backdrop-blur-xl sm:p-8">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%),radial-gradient(circle_at_92%_20%,rgba(16,185,129,0.12),transparent_30%)]" />
+      {/* ── Page header ──────────────────────────────────────────────────────── */}
+      <header className={cn(
+        "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
+        "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
+      )}>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%),radial-gradient(circle_at_92%_20%,rgba(16,185,129,0.05),transparent_30%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%),radial-gradient(circle_at_92%_20%,rgba(16,185,129,0.12),transparent_30%)]" />
         <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0 max-w-3xl">
             <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 text-blue-300 shadow-glow">
+              <div className={cn(
+                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
+                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
+              )}>
                 <Wrench className="h-5 w-5" />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-300">Create Request</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
             </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-white sm:text-4xl">
+            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white sm:text-4xl">
               Request service support
             </h1>
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-400 sm:text-base">
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400 sm:text-base">
               Tell us what machine needs attention and what problem you are facing. Our team will use this information
               to triage your request.
             </p>
           </div>
-          <div className="w-fit max-w-full rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-medium text-slate-300">
+          <div className={cn(
+            "w-fit max-w-full rounded-full border px-4 py-2 text-sm font-medium",
+            "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300",
+          )}>
             Support team review
           </div>
         </div>
       </header>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(320px,1fr)]">
+        {/* ── Form card ──────────────────────────────────────────────────────── */}
         <form
-          className="min-w-0 overflow-hidden rounded-3xl border border-white/10 bg-[#0b1626]/85 shadow-[0_24px_80px_rgba(0,0,0,0.25)] backdrop-blur-xl"
+          className={cn(
+            "min-w-0 overflow-hidden rounded-3xl border shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur-xl",
+            "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/85 dark:shadow-[0_24px_80px_rgba(0,0,0,0.25)]",
+          )}
           onSubmit={(event) => {
             event.preventDefault();
             mutation.mutate();
           }}
         >
+          {/* Form header */}
           <div className="flex min-w-0 flex-col gap-4 px-5 py-6 sm:px-7 lg:flex-row lg:items-start lg:justify-between lg:px-8">
             <div className="min-w-0">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+              <div className={cn(
+                "mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
+                "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300",
+              )}>
                 <ClipboardCheck className="h-3.5 w-3.5" />
                 Required details
               </div>
-              <h2 className="font-display text-2xl font-semibold text-white">Service details</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              <h2 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">Service details</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
                 Choose the affected product and describe the issue clearly.
               </p>
             </div>
             <Button
               asChild
               variant="outline"
-              className="h-10 w-fit rounded-full border-white/10 bg-white/[0.03] px-4 text-slate-300 hover:bg-white/[0.07] hover:text-white"
+              className={cn(
+                "h-10 w-fit rounded-full px-4",
+                "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
+              )}
             >
               <Link to="/app/requests">
                 <ArrowLeft className="h-4 w-4" />
@@ -252,37 +297,49 @@ const RequestNewPage = () => {
             </Button>
           </div>
 
+          {/* Error banner */}
           {mutation.isError && (
-            <div className="mx-5 mb-2 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4 text-sm text-rose-100 sm:mx-7 lg:mx-8">
+            <div className={cn(
+              "mx-5 mb-2 rounded-2xl border p-4 text-sm sm:mx-7 lg:mx-8",
+              "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-100",
+            )}>
               <div className="flex gap-3">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-300" />
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500 dark:text-rose-300" />
                 <div>
                   <p className="font-semibold">We couldn't create the request.</p>
-                  <p className="mt-1 text-rose-100/75">Please check the details and try again.</p>
+                  <p className="mt-1 text-rose-600/75 dark:text-rose-100/75">Please check the details and try again.</p>
                 </div>
               </div>
             </div>
           )}
 
+          {/* Section: Machine information */}
           <FormSection
             icon={PackageCheck}
             title="Machine information"
             description="Select the product and provide any machine identifiers that can help us locate the issue faster."
           >
             {productsQuery.isError && (
-              <div className="mb-5 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-50">
+              <div className={cn(
+                "mb-5 rounded-2xl border p-4 text-sm",
+                "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-50",
+              )}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex gap-3">
-                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-200" />
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 dark:text-amber-200" />
                     <div>
                       <p className="font-semibold">Unable to load products</p>
-                      <p className="mt-1 text-amber-50/70">Try again before selecting the affected machine.</p>
+                      <p className="mt-1 text-amber-700/70 dark:text-amber-50/70">Try again before selecting the affected machine.</p>
                     </div>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-10 rounded-xl border-amber-200/20 bg-amber-200/10 text-amber-50 hover:bg-amber-200/15 hover:text-white"
+                    className={cn(
+                      "h-10 rounded-xl",
+                      "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200",
+                      "dark:border-amber-200/20 dark:bg-amber-200/10 dark:text-amber-50 dark:hover:bg-amber-200/15 dark:hover:text-white",
+                    )}
                     onClick={() => productsQuery.refetch()}
                     disabled={productsQuery.isFetching}
                   >
@@ -323,18 +380,24 @@ const RequestNewPage = () => {
               </Field>
 
               {selectedProduct && (
-                <div className="min-w-0 rounded-2xl border border-blue-400/15 bg-blue-500/[0.08] p-4 md:col-span-2">
+                <div className={cn(
+                  "min-w-0 rounded-2xl border p-4 md:col-span-2",
+                  "border-blue-200 bg-blue-50 dark:border-blue-400/15 dark:bg-blue-500/[0.08]",
+                )}>
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-blue-300/20 bg-blue-300/10 text-blue-200">
+                      <div className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
+                        "border-blue-200 bg-blue-100 text-blue-600 dark:border-blue-300/20 dark:bg-blue-300/10 dark:text-blue-200",
+                      )}>
                         <PackageCheck className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-200">
                           Selected product
                         </p>
-                        <p className="mt-1 break-words font-medium text-white">{selectedProduct.name}</p>
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 break-words font-medium text-slate-900 dark:text-white">{selectedProduct.name}</p>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                           Category: {formatCategorySlug(selectedProduct.categorySlug)}
                         </p>
                       </div>
@@ -364,6 +427,7 @@ const RequestNewPage = () => {
             </div>
           </FormSection>
 
+          {/* Section: Issue information */}
           <FormSection
             icon={Sparkles}
             title="Issue information"
@@ -411,6 +475,7 @@ const RequestNewPage = () => {
             </div>
           </FormSection>
 
+          {/* Section: Contact details */}
           <FormSection
             icon={Phone}
             title="Contact details"
@@ -429,16 +494,24 @@ const RequestNewPage = () => {
             </div>
           </FormSection>
 
-          <div className="flex min-w-0 flex-col gap-4 border-t border-white/10 bg-[#07111f]/70 px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8">
-            <div className="flex items-start gap-3 text-sm text-slate-400">
-              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+          {/* Form footer / submit */}
+          <div className={cn(
+            "flex min-w-0 flex-col gap-4 border-t px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8",
+            "border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-[#07111f]/70",
+          )}>
+            <div className="flex items-start gap-3 text-sm text-slate-500 dark:text-slate-400">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500 dark:text-emerald-300" />
               <span>Your request will be saved to the service portal.</span>
             </div>
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
               <Button
                 asChild
                 variant="outline"
-                className="h-12 rounded-2xl border-white/10 bg-white/[0.03] px-5 text-slate-300 hover:bg-white/[0.07] hover:text-white"
+                className={cn(
+                  "h-12 rounded-2xl px-5",
+                  "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                  "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
+                )}
               >
                 <Link to="/app/requests">Cancel</Link>
               </Button>
@@ -465,6 +538,7 @@ const RequestNewPage = () => {
           </div>
         </form>
 
+        {/* ── Guidance sidebar ────────────────────────────────────────────────── */}
         <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
           <GuidancePanel
             icon={ClipboardCheck}
@@ -498,9 +572,12 @@ const RequestNewPage = () => {
               "Return to the portal to track updates",
             ]}
           />
-          <div className="rounded-3xl border border-white/10 bg-[#07111f]/75 p-5 text-sm leading-6 text-slate-400">
-            <div className="mb-3 flex items-center gap-2 font-medium text-slate-200">
-              <HelpCircle className="h-4 w-4 text-blue-300" />
+          <div className={cn(
+            "rounded-3xl border p-5 text-sm leading-6",
+            "border-slate-200 bg-white text-slate-500 dark:border-white/10 dark:bg-[#07111f]/75 dark:text-slate-400",
+          )}>
+            <div className="mb-3 flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
+              <HelpCircle className="h-4 w-4 text-blue-500 dark:text-blue-300" />
               Request quality check
             </div>
             A concise subject, accurate product, and clear troubleshooting notes help the team understand the issue
