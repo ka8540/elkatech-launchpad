@@ -1,1 +1,2 @@
-services/
+# API bundles are rebuilt during Vercel builds, so service source files must be available.
+services/*/migrations/
