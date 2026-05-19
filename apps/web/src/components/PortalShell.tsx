@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -78,49 +79,129 @@ function ElkaTechMark({ size = 32 }: { size?: number }) {
   );
 }
 
-/* ── Inline theme cycle button (no dropdown, avoids popover z-index issues) */
-function ThemeCycleButton({
+/* ── Theme selector with selectable Light / Dark / System dropdown ───────── */
+const THEME_OPTIONS = [
+  { value: "light" as const, icon: Sun, label: "Light" },
+  { value: "dark" as const, icon: Moon, label: "Dark" },
+  { value: "system" as const, icon: SunMoon, label: "System" },
+];
+
+function ThemeSelector({
   compact = false,
   showLabel = false,
+  menuSide = "right",
 }: {
   compact?: boolean;
   showLabel?: boolean;
+  menuSide?: "right" | "bottom";
 }) {
   const { theme, setTheme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-  const options = [
-    { value: "light" as const, icon: Sun, label: "Light" },
-    { value: "dark" as const, icon: Moon, label: "Dark" },
-    { value: "system" as const, icon: SunMoon, label: "System" },
-  ];
+  const current =
+    THEME_OPTIONS.find((o) => o.value === theme) ?? THEME_OPTIONS[2];
+  const CurrentIcon = current.icon;
 
-  const current = options.find((o) => o.value === theme) ?? options[2];
-  const Icon = current.icon;
-
-  const cycle = () => {
-    const idx = options.findIndex((o) => o.value === theme);
-    setTheme(options[(idx + 1) % options.length].value);
-  };
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   return (
-    <button
-      onClick={cycle}
-      title={`Theme: ${current.label} — click to cycle`}
-      aria-label={`Current theme: ${current.label}. Click to cycle.`}
-      className={cn(
-        "flex items-center gap-2 rounded-xl border transition-all duration-150",
-        "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-        "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-        compact
-          ? "h-8 w-8 justify-center px-0"
-          : "h-9 w-full justify-start px-3 py-2",
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={compact ? `Theme: ${current.label}` : undefined}
+        aria-label={compact ? `Theme: ${current.label}` : undefined}
+        className={cn(
+          "flex items-center rounded-xl border transition-all duration-150",
+          "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+          "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+          compact
+            ? "h-8 w-8 justify-center px-0"
+            : "h-9 w-full justify-between gap-2 px-3 py-2",
+        )}
+      >
+        <span className="flex items-center gap-2">
+          <CurrentIcon className="h-[15px] w-[15px] shrink-0" />
+          {showLabel && (
+            <span className="text-[13px] font-medium">Theme</span>
+          )}
+        </span>
+        {showLabel && (
+          <span className="flex items-center gap-1.5 text-[12px] font-medium text-slate-400 dark:text-slate-500">
+            {current.label}
+            <ChevronRight
+              className={cn(
+                "h-3.5 w-3.5 transition-transform",
+                open && "rotate-90",
+              )}
+            />
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          aria-label="Select theme"
+          className={cn(
+            "absolute z-[60] w-44 overflow-hidden rounded-2xl border p-1.5",
+            "bg-white text-slate-900 border-slate-200 shadow-lg",
+            "dark:bg-[#07111f] dark:text-white dark:border-white/10 dark:shadow-[0_18px_50px_rgba(0,0,0,0.35)]",
+            compact && menuSide === "right" && "bottom-0 left-full ml-3",
+            compact && menuSide === "bottom" && "right-0 top-full mt-2",
+            !compact && "bottom-full left-0 right-0 mb-2 w-auto",
+          )}
+        >
+          {THEME_OPTIONS.map((opt) => {
+            const OptIcon = opt.icon;
+            const active = theme === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => {
+                  setTheme(opt.value);
+                  setOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-medium transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+                  active
+                    ? "bg-blue-50 text-blue-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                    : "hover:bg-slate-100 dark:hover:bg-white/[0.08]",
+                )}
+              >
+                <OptIcon className="h-[15px] w-[15px] shrink-0" />
+                <span className="flex-1 text-left">{opt.label}</span>
+                {active && <Check className="h-4 w-4 shrink-0" />}
+              </button>
+            );
+          })}
+        </div>
       )}
-    >
-      <Icon className="h-[15px] w-[15px] shrink-0" />
-      {showLabel && (
-        <span className="text-[13px] font-medium">{current.label}</span>
-      )}
-    </button>
+    </div>
   );
 }
 
@@ -223,74 +304,84 @@ const PortalShell = () => {
   const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
     <div className="flex h-full flex-col">
 
-      {/* ── Header: brand left, collapse right ────────────────────────────── */}
-      <div
-        className={cn(
-          "flex items-center border-b px-5 py-5",
-          "border-slate-200 dark:border-white/10",
-          collapsed && !isMobile ? "justify-center px-3 py-4" : "justify-between gap-4",
-        )}
-      >
-        {/* Brand block */}
-        <Link
-          to="/"
-          title="Back to homepage"
-          className={cn(
-            "flex items-center gap-2.5 transition-opacity hover:opacity-80",
-            "text-slate-950 dark:text-white",
-            collapsed && !isMobile && "justify-center",
-          )}
-        >
-          <span className="shrink-0">
-            <ElkaTechMark size={collapsed && !isMobile ? 28 : 32} />
-          </span>
-          {(!collapsed || isMobile) && (
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {collapsed && !isMobile ? (
+        /* Collapsed: expand button on top, logo centered below */
+        <div className="flex flex-col items-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
+          <button
+            onClick={() => setCollapsed(false)}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg border transition-all",
+              "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+              "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+            )}
+            aria-label="Expand sidebar"
+            aria-expanded={false}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <Link
+            to="/"
+            title="Back to homepage"
+            aria-label="ElkaTech"
+            className="mt-6 flex items-center justify-center text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
+          >
+            <ElkaTechMark size={42} />
+          </Link>
+        </div>
+      ) : (
+        /* Expanded / mobile: control row on top, brand block below */
+        <div className="border-b border-slate-200 px-5 py-5 dark:border-white/10">
+          <div className="flex justify-end">
+            {isMobile ? (
+              <button
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all",
+                  "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+                  "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+                )}
+                aria-label="Close menu"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                onClick={() => setCollapsed(true)}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all",
+                  "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+                  "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+                )}
+                aria-label="Collapse sidebar"
+                aria-expanded
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <Link
+            to="/"
+            title="Back to homepage"
+            className="mt-4 flex items-center gap-3 text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
+          >
+            <span className="shrink-0">
+              <ElkaTechMark size={38} />
+            </span>
             <div className="min-w-0 leading-tight">
-              <p className="font-display text-[15px] font-bold leading-none text-slate-950 dark:text-white">
+              <p className="font-display text-base font-bold leading-none text-slate-950 dark:text-white">
                 ElkaTech
               </p>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+              <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
                 Service Platform
               </p>
             </div>
-          )}
-        </Link>
-
-        {/* Collapse toggle – desktop only */}
-        {!isMobile && (
-          <button
-            onClick={() => setCollapsed((v) => !v)}
-            className={cn(
-              "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-all",
-              "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-              "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-              collapsed && "mt-0",
-            )}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronLeft className="h-3.5 w-3.5" />
-            )}
-          </button>
-        )}
-
-        {/* Close button – mobile only */}
-        {isMobile && (
-          <button
-            onClick={() => setMobileOpen(false)}
-            className={cn(
-              "flex h-7 w-7 items-center justify-center rounded-lg border transition-all",
-              "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-              "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-            )}
-            aria-label="Close menu"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
+          </Link>
+        </div>
+      )}
 
       {/* ── Nav items ─────────────────────────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Portal navigation">
@@ -317,13 +408,13 @@ const PortalShell = () => {
           "px-3 pb-3",
           collapsed && !isMobile ? "space-y-1.5" : "space-y-1",
         )}>
-          {/* Theme cycle */}
+          {/* Theme selector */}
           {collapsed && !isMobile ? (
             <div className="flex justify-center">
-              <ThemeCycleButton compact />
+              <ThemeSelector compact />
             </div>
           ) : (
-            <ThemeCycleButton showLabel />
+            <ThemeSelector showLabel />
           )}
 
           {/* Back to website */}
@@ -513,7 +604,7 @@ const PortalShell = () => {
           </Link>
 
           <div className="ml-auto flex items-center gap-2">
-            <ThemeCycleButton compact />
+            <ThemeSelector compact menuSide="bottom" />
             <button
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
