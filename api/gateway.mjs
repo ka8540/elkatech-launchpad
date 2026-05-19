@@ -63616,16 +63616,44 @@ await app.register(import_rate_limit.default, {
   max: 10,
   timeWindow: "1 minute"
 });
+function requestHost(request) {
+  const host = request.headers.host;
+  return Array.isArray(host) ? host[0] : host;
+}
+function serviceBaseUrl(request, configuredUrl) {
+  const host = requestHost(request);
+  if (process.env.VERCEL === "1" && host) {
+    return `https://${host}${new URL(configuredUrl).pathname}`;
+  }
+  return configuredUrl;
+}
+function authServiceUrl(request) {
+  return serviceBaseUrl(request, env.AUTH_SERVICE_URL);
+}
+function catalogServiceUrl(request) {
+  return serviceBaseUrl(request, env.CATALOG_SERVICE_URL);
+}
+function serviceDeskUrl(request) {
+  return serviceBaseUrl(request, env.SERVICE_DESK_URL);
+}
+function requestInternalHeaders(request, extra = {}) {
+  const headers = internalHeaders(extra);
+  const cookie2 = request.headers.cookie;
+  if (cookie2) {
+    headers.cookie = Array.isArray(cookie2) ? cookie2.join("; ") : cookie2;
+  }
+  return headers;
+}
 function getSessionCookie(request) {
   return request.cookies[env.SESSION_COOKIE_NAME];
 }
 function getCsrfCookie(request) {
   return request.cookies[env.CSRF_COOKIE_NAME];
 }
-async function resolveSession(sessionToken) {
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/session/resolve`, {
+async function resolveSession(request, sessionToken) {
+  return fetchJson(`${authServiceUrl(request)}/internal/session/resolve`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify({ sessionToken })
   });
 }
@@ -63657,7 +63685,7 @@ async function requireSession(request, reply, allowedRoles) {
     return null;
   }
   try {
-    const session = await resolveSession(sessionToken);
+    const session = await resolveSession(request, sessionToken);
     if (allowedRoles && !allowedRoles.includes(session.user.role)) {
       reply.code(403).send({ message: "Forbidden" });
       return null;
@@ -63678,8 +63706,8 @@ function assertCsrf(request, reply) {
   }
   return true;
 }
-function userHeaders(user) {
-  return internalHeaders({
+function userHeaders(request, user) {
+  return requestInternalHeaders(request, {
     "x-user-id": user.id,
     "x-user-email": user.email,
     "x-user-role": user.role,
@@ -63689,18 +63717,18 @@ function userHeaders(user) {
 app.get("/health", async () => ({ ok: true, service: "gateway" }));
 app.post("/api/auth/signup", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
   const input = signUpInputSchema.parse(request.body);
-  const response = await fetchJson(`${env.AUTH_SERVICE_URL}/signup`, {
+  const response = await fetchJson(`${authServiceUrl(request)}/signup`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
   return reply.code(201).send(response);
 });
 app.post("/api/auth/login", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
   const input = loginInputSchema.parse(request.body);
-  const response = await fetchJson(`${env.AUTH_SERVICE_URL}/login`, {
+  const response = await fetchJson(`${authServiceUrl(request)}/login`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
   setSessionCookies(reply, response);
@@ -63711,9 +63739,9 @@ app.post("/api/auth/login", { config: { rateLimit: { max: 10, timeWindow: "1 min
 app.post("/api/auth/logout", async (request, reply) => {
   const sessionToken = getSessionCookie(request);
   if (sessionToken) {
-    await fetchJson(`${env.AUTH_SERVICE_URL}/logout`, {
+    await fetchJson(`${authServiceUrl(request)}/logout`, {
       method: "POST",
-      headers: internalHeaders(),
+      headers: requestInternalHeaders(request),
       body: JSON.stringify({ sessionToken })
     });
   }
@@ -63727,7 +63755,7 @@ app.get("/api/auth/me", async (request, reply) => {
     return { user: null };
   }
   try {
-    const session = await resolveSession(sessionToken);
+    const session = await resolveSession(request, sessionToken);
     reply.setCookie(env.CSRF_COOKIE_NAME, session.csrfToken, {
       httpOnly: false,
       sameSite: "lax",
@@ -63743,33 +63771,33 @@ app.get("/api/auth/me", async (request, reply) => {
 });
 app.post("/api/auth/forgot-password", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = forgotPasswordInputSchema.parse(request.body);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/forgot-password`, {
+  return fetchJson(`${authServiceUrl(request)}/forgot-password`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
 });
 app.post("/api/auth/reset-password", async (request) => {
   const input = resetPasswordInputSchema.parse(request.body);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/reset-password`, {
+  return fetchJson(`${authServiceUrl(request)}/reset-password`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
 });
 app.post("/api/auth/verify-email", async (request) => {
   const input = verifyEmailInputSchema.parse(request.body);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/verify-email`, {
+  return fetchJson(`${authServiceUrl(request)}/verify-email`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
 });
 app.post("/api/auth/resend-verification", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = external_exports.object({ email: external_exports.string().email() }).parse(request.body);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/resend-verification`, {
+  return fetchJson(`${authServiceUrl(request)}/resend-verification`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input)
   });
 });
@@ -63872,9 +63900,9 @@ app.get("/api/auth/google/callback", async (request, reply) => {
     if (!emailVerified) {
       return reply.redirect(`${appBase}/login?error=google_email_unverified`);
     }
-    const oauthResult = await fetchJson(`${env.AUTH_SERVICE_URL}/internal/oauth/find-or-create`, {
+    const oauthResult = await fetchJson(`${authServiceUrl(request)}/internal/oauth/find-or-create`, {
       method: "POST",
-      headers: internalHeaders(),
+      headers: requestInternalHeaders(request),
       body: JSON.stringify({
         provider: "google",
         providerUserId: idToken.sub,
@@ -63891,21 +63919,21 @@ app.get("/api/auth/google/callback", async (request, reply) => {
     return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
   }
 });
-app.get("/api/catalog/categories", async () => {
-  return fetchJson(`${env.CATALOG_SERVICE_URL}/categories`, {
-    headers: internalHeaders()
+app.get("/api/catalog/categories", async (request) => {
+  return fetchJson(`${catalogServiceUrl(request)}/categories`, {
+    headers: requestInternalHeaders(request)
   });
 });
 app.get("/api/catalog/products", async (request) => {
   const queryString = request.url.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
-  return fetchJson(`${env.CATALOG_SERVICE_URL}/products${queryString}`, {
-    headers: internalHeaders()
+  return fetchJson(`${catalogServiceUrl(request)}/products${queryString}`, {
+    headers: requestInternalHeaders(request)
   });
 });
 app.get("/api/catalog/products/:productId", async (request) => {
   const params = external_exports.object({ productId: external_exports.string() }).parse(request.params);
-  return fetchJson(`${env.CATALOG_SERVICE_URL}/products/${params.productId}`, {
-    headers: internalHeaders()
+  return fetchJson(`${catalogServiceUrl(request)}/products/${params.productId}`, {
+    headers: requestInternalHeaders(request)
   });
 });
 app.post("/api/requests", async (request, reply) => {
@@ -63916,9 +63944,9 @@ app.post("/api/requests", async (request, reply) => {
     return reply.code(403).send({ message: "Verify your email before creating requests." });
   }
   const input = createServiceRequestInputSchema.parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
 });
@@ -63926,16 +63954,16 @@ app.get("/api/requests", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
   if (!session) return;
   const queryString = request.url.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests${queryString}`, {
-    headers: userHeaders(session.user)
+  return fetchJson(`${serviceDeskUrl(request)}/requests${queryString}`, {
+    headers: userHeaders(request, session.user)
   });
 });
 app.get("/api/requests/:requestId", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
   if (!session) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
-    headers: userHeaders(session.user)
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}`, {
+    headers: userHeaders(request, session.user)
   });
 });
 app.post("/api/requests/:requestId/messages", async (request, reply) => {
@@ -63944,9 +63972,9 @@ app.post("/api/requests/:requestId/messages", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = createRequestMessageInputSchema.parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/messages`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/messages`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
 });
@@ -63955,9 +63983,9 @@ app.post("/api/requests/:requestId/claim", async (request, reply) => {
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/claim`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/claim`, {
     method: "POST",
-    headers: userHeaders(session.user)
+    headers: userHeaders(request, session.user)
   });
 });
 app.post("/api/requests/:requestId/assign", async (request, reply) => {
@@ -63966,9 +63994,9 @@ app.post("/api/requests/:requestId/assign", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = external_exports.object({ engineerId: external_exports.string().uuid() }).parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/assign`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/assign`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
 });
@@ -63978,17 +64006,17 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/status`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input)
   });
 });
 app.get("/api/admin/users", async (request, reply) => {
   const session = await requireSession(request, reply, ["admin"]);
   if (!session) return;
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users`, {
-    headers: internalHeaders()
+  return fetchJson(`${authServiceUrl(request)}/internal/users`, {
+    headers: requestInternalHeaders(request)
   });
 });
 app.post("/api/admin/users/invite", async (request, reply) => {
@@ -63996,9 +64024,9 @@ app.post("/api/admin/users/invite", async (request, reply) => {
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const input = inviteUserInputSchema.parse(request.body);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/invite`, {
+  return fetchJson(`${authServiceUrl(request)}/internal/invite`, {
     method: "POST",
-    headers: internalHeaders({
+    headers: requestInternalHeaders(request, {
       "x-user-id": session.user.id,
       "x-user-role": session.user.role
     }),

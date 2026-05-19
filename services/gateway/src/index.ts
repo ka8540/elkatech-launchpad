@@ -36,6 +36,48 @@ type SessionUser = {
   createdAt: string;
 };
 
+function requestHost(request: { headers: Record<string, string | string[] | undefined> }) {
+  const host = request.headers.host;
+  return Array.isArray(host) ? host[0] : host;
+}
+
+function serviceBaseUrl(
+  request: { headers: Record<string, string | string[] | undefined> },
+  configuredUrl: string,
+) {
+  const host = requestHost(request);
+  if (process.env.VERCEL === "1" && host) {
+    return `https://${host}${new URL(configuredUrl).pathname}`;
+  }
+
+  return configuredUrl;
+}
+
+function authServiceUrl(request: { headers: Record<string, string | string[] | undefined> }) {
+  return serviceBaseUrl(request, env.AUTH_SERVICE_URL);
+}
+
+function catalogServiceUrl(request: { headers: Record<string, string | string[] | undefined> }) {
+  return serviceBaseUrl(request, env.CATALOG_SERVICE_URL);
+}
+
+function serviceDeskUrl(request: { headers: Record<string, string | string[] | undefined> }) {
+  return serviceBaseUrl(request, env.SERVICE_DESK_URL);
+}
+
+function requestInternalHeaders(
+  request: { headers: Record<string, string | string[] | undefined> },
+  extra: Record<string, string> = {},
+) {
+  const headers: Record<string, string> = internalHeaders(extra);
+  const cookie = request.headers.cookie;
+  if (cookie) {
+    headers.cookie = Array.isArray(cookie) ? cookie.join("; ") : cookie;
+  }
+
+  return headers;
+}
+
 function getSessionCookie(request: { cookies: Record<string, string | undefined> }) {
   return request.cookies[env.SESSION_COOKIE_NAME];
 }
@@ -44,14 +86,14 @@ function getCsrfCookie(request: { cookies: Record<string, string | undefined> })
   return request.cookies[env.CSRF_COOKIE_NAME];
 }
 
-async function resolveSession(sessionToken: string) {
+async function resolveSession(request: any, sessionToken: string) {
   return fetchJson<{
     user: SessionUser;
     csrfToken: string;
     sessionId: string;
-  }>(`${env.AUTH_SERVICE_URL}/internal/session/resolve`, {
+  }>(`${authServiceUrl(request)}/internal/session/resolve`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify({ sessionToken }),
   });
 }
@@ -91,7 +133,7 @@ async function requireSession(request: any, reply: any, allowedRoles?: Array<z.i
   }
 
   try {
-    const session = await resolveSession(sessionToken);
+    const session = await resolveSession(request, sessionToken);
     if (allowedRoles && !allowedRoles.includes(session.user.role)) {
       reply.code(403).send({ message: "Forbidden" });
       return null;
@@ -117,8 +159,8 @@ function assertCsrf(request: any, reply: any) {
   return true;
 }
 
-function userHeaders(user: SessionUser) {
-  return internalHeaders({
+function userHeaders(request: any, user: SessionUser) {
+  return requestInternalHeaders(request, {
     "x-user-id": user.id,
     "x-user-email": user.email,
     "x-user-role": user.role,
@@ -130,9 +172,9 @@ app.get("/health", async () => ({ ok: true, service: "gateway" }));
 
 app.post("/api/auth/signup", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
   const input = signUpInputSchema.parse(request.body);
-  const response = await fetchJson<{ message: string }>(`${env.AUTH_SERVICE_URL}/signup`, {
+  const response = await fetchJson<{ message: string }>(`${authServiceUrl(request)}/signup`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
 
@@ -145,9 +187,9 @@ app.post("/api/auth/login", { config: { rateLimit: { max: 10, timeWindow: "1 min
     sessionToken: string;
     csrfToken: string;
     user: SessionUser;
-  }>(`${env.AUTH_SERVICE_URL}/login`, {
+  }>(`${authServiceUrl(request)}/login`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
 
@@ -161,9 +203,9 @@ app.post("/api/auth/logout", async (request, reply) => {
   const sessionToken = getSessionCookie(request);
 
   if (sessionToken) {
-    await fetchJson(`${env.AUTH_SERVICE_URL}/logout`, {
+    await fetchJson(`${authServiceUrl(request)}/logout`, {
       method: "POST",
-      headers: internalHeaders(),
+      headers: requestInternalHeaders(request),
       body: JSON.stringify({ sessionToken }),
     });
   }
@@ -180,7 +222,7 @@ app.get("/api/auth/me", async (request, reply) => {
   }
 
   try {
-    const session = await resolveSession(sessionToken);
+    const session = await resolveSession(request, sessionToken);
     reply.setCookie(env.CSRF_COOKIE_NAME, session.csrfToken, {
       httpOnly: false,
       sameSite: "lax",
@@ -197,36 +239,36 @@ app.get("/api/auth/me", async (request, reply) => {
 
 app.post("/api/auth/forgot-password", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = forgotPasswordInputSchema.parse(request.body);
-  return fetchJson<{ message: string }>(`${env.AUTH_SERVICE_URL}/forgot-password`, {
+  return fetchJson<{ message: string }>(`${authServiceUrl(request)}/forgot-password`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
 });
 
 app.post("/api/auth/reset-password", async (request) => {
   const input = resetPasswordInputSchema.parse(request.body);
-  return fetchJson<{ message: string }>(`${env.AUTH_SERVICE_URL}/reset-password`, {
+  return fetchJson<{ message: string }>(`${authServiceUrl(request)}/reset-password`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
 });
 
 app.post("/api/auth/verify-email", async (request) => {
   const input = verifyEmailInputSchema.parse(request.body);
-  return fetchJson<{ message: string }>(`${env.AUTH_SERVICE_URL}/verify-email`, {
+  return fetchJson<{ message: string }>(`${authServiceUrl(request)}/verify-email`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
 });
 
 app.post("/api/auth/resend-verification", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request) => {
   const input = z.object({ email: z.string().email() }).parse(request.body);
-  return fetchJson<{ message: string }>(`${env.AUTH_SERVICE_URL}/resend-verification`, {
+  return fetchJson<{ message: string }>(`${authServiceUrl(request)}/resend-verification`, {
     method: "POST",
-    headers: internalHeaders(),
+    headers: requestInternalHeaders(request),
     body: JSON.stringify(input),
   });
 });
@@ -370,9 +412,9 @@ app.get("/api/auth/google/callback", async (request, reply) => {
       sessionToken: string;
       csrfToken: string;
       user: SessionUser;
-    }>(`${env.AUTH_SERVICE_URL}/internal/oauth/find-or-create`, {
+    }>(`${authServiceUrl(request)}/internal/oauth/find-or-create`, {
       method: "POST",
-      headers: internalHeaders(),
+      headers: requestInternalHeaders(request),
       body: JSON.stringify({
         provider: "google",
         providerUserId: idToken.sub,
@@ -394,23 +436,23 @@ app.get("/api/auth/google/callback", async (request, reply) => {
   }
 });
 
-app.get("/api/catalog/categories", async () => {
-  return fetchJson(`${env.CATALOG_SERVICE_URL}/categories`, {
-    headers: internalHeaders(),
+app.get("/api/catalog/categories", async (request) => {
+  return fetchJson(`${catalogServiceUrl(request)}/categories`, {
+    headers: requestInternalHeaders(request),
   });
 });
 
 app.get("/api/catalog/products", async (request) => {
   const queryString = request.url.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
-  return fetchJson(`${env.CATALOG_SERVICE_URL}/products${queryString}`, {
-    headers: internalHeaders(),
+  return fetchJson(`${catalogServiceUrl(request)}/products${queryString}`, {
+    headers: requestInternalHeaders(request),
   });
 });
 
 app.get("/api/catalog/products/:productId", async (request) => {
   const params = z.object({ productId: z.string() }).parse(request.params);
-  return fetchJson(`${env.CATALOG_SERVICE_URL}/products/${params.productId}`, {
-    headers: internalHeaders(),
+  return fetchJson(`${catalogServiceUrl(request)}/products/${params.productId}`, {
+    headers: requestInternalHeaders(request),
   });
 });
 
@@ -423,9 +465,9 @@ app.post("/api/requests", async (request, reply) => {
   }
 
   const input = createServiceRequestInputSchema.parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
 });
@@ -435,8 +477,8 @@ app.get("/api/requests", async (request, reply) => {
   if (!session) return;
 
   const queryString = request.url.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests${queryString}`, {
-    headers: userHeaders(session.user),
+  return fetchJson(`${serviceDeskUrl(request)}/requests${queryString}`, {
+    headers: userHeaders(request, session.user),
   });
 });
 
@@ -445,8 +487,8 @@ app.get("/api/requests/:requestId", async (request, reply) => {
   if (!session) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
-    headers: userHeaders(session.user),
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}`, {
+    headers: userHeaders(request, session.user),
   });
 });
 
@@ -458,9 +500,9 @@ app.post("/api/requests/:requestId/messages", async (request, reply) => {
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = createRequestMessageInputSchema.parse(request.body);
 
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/messages`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/messages`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
 });
@@ -471,9 +513,9 @@ app.post("/api/requests/:requestId/claim", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/claim`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/claim`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
   });
 });
 
@@ -484,9 +526,9 @@ app.post("/api/requests/:requestId/assign", async (request, reply) => {
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = z.object({ engineerId: z.string().uuid() }).parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/assign`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/assign`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
 });
@@ -498,9 +540,9 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+  return fetchJson(`${serviceDeskUrl(request)}/requests/${params.requestId}/status`, {
     method: "POST",
-    headers: userHeaders(session.user),
+    headers: userHeaders(request, session.user),
     body: JSON.stringify(input),
   });
 });
@@ -509,8 +551,8 @@ app.get("/api/admin/users", async (request, reply) => {
   const session = await requireSession(request, reply, ["admin"]);
   if (!session) return;
 
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users`, {
-    headers: internalHeaders(),
+  return fetchJson(`${authServiceUrl(request)}/internal/users`, {
+    headers: requestInternalHeaders(request),
   });
 });
 
@@ -520,9 +562,9 @@ app.post("/api/admin/users/invite", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
 
   const input = inviteUserInputSchema.parse(request.body);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/invite`, {
+  return fetchJson(`${authServiceUrl(request)}/internal/invite`, {
     method: "POST",
-    headers: internalHeaders({
+    headers: requestInternalHeaders(request, {
       "x-user-id": session.user.id,
       "x-user-role": session.user.role,
     }),
