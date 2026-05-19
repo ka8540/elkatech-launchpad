@@ -240,7 +240,7 @@ All non-health internal endpoints expect `x-internal-token`.
 | `SMTP_SECURE` | No | Use a TLS-on-connect socket (`true`/`false`) | `false` (STARTTLS on 587) |
 | `SMTP_USER` | No | SMTP username (`resend` for Resend) | empty |
 | `SMTP_PASS` | No | SMTP password — the Resend API key; env only, never committed | empty |
-| `SMTP_FROM` | No | Sender address | `ElkaTech Support <ka8540@g.rit.edu>` |
+| `SMTP_FROM` | No | Sender address; SMTP display-name format is supported | `ElkaTech Support <ka8540@g.rit.edu>` |
 | `BOOTSTRAP_ADMIN_EMAIL` | No | Initial admin email and notification fallback | `admin@elkatech.local` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | No | Initial admin password | `ChangeMe123!` |
 | `GOOGLE_OAUTH_CLIENT_ID` | No | Google OAuth client ID | empty |
@@ -333,7 +333,7 @@ npm run preview -w @elkatech/web
 
 - Resend SMTP is used for all application emails (verification, password reset, invitations, and service request notifications).
 - `SMTP_PASS` is the Resend API key. It is read only from the environment and must never be committed.
-- The sender is currently configured as `ElkaTech Support <ka8540@g.rit.edu>`.
+- The sender can be configured as a bare email address or SMTP display-name format, such as `ElkaTech Support <ka8540@g.rit.edu>`.
 - For production, prefer a verified domain sender such as `support@elkatech.in`.
 
 SMTP is configured entirely through environment variables — see `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, and `SMTP_SECURE` in `.env.example`. The notification service reads `SMTP_FROM` from the environment and never hardcodes a sender address.
