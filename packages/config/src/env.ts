@@ -1,7 +1,27 @@
-// Only load dotenv when running locally — on Vercel, env vars come from the dashboard
+// Only load dotenv when running locally — on Vercel, env vars come from the dashboard.
+// Each service starts from its own cwd (services/<name>) so dotenv's default
+// "load .env from cwd" misses the workspace-root .env. Walk up the directory
+// tree until we find one, so all services share the same env file.
 if (!process.env.VERCEL) {
   const { config } = await import("dotenv");
-  config();
+  const { existsSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+
+  const startDir = dirname(fileURLToPath(import.meta.url));
+  let cursor = startDir;
+  let envPath: string | undefined;
+  for (let i = 0; i < 8; i++) {
+    const candidate = resolve(cursor, ".env");
+    if (existsSync(candidate)) {
+      envPath = candidate;
+      break;
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  config(envPath ? { path: envPath } : undefined);
 }
 import { z } from "zod";
 

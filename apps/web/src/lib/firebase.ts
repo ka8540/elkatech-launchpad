@@ -30,6 +30,17 @@ function readEnv(): FirebaseEnv | null {
   const appId = env.VITE_FIREBASE_APP_ID;
 
   if (!apiKey || !authDomain || !projectId || !appId) {
+    if (typeof window !== "undefined" && env.DEV) {
+      // Dev-only: surface which Firebase vars are missing so the user can
+      // quickly tell whether their .env / envDir wiring is working.
+      // eslint-disable-next-line no-console
+      console.warn("[firebase] not configured — missing:", {
+        VITE_FIREBASE_API_KEY: !!apiKey,
+        VITE_FIREBASE_AUTH_DOMAIN: !!authDomain,
+        VITE_FIREBASE_PROJECT_ID: !!projectId,
+        VITE_FIREBASE_APP_ID: !!appId,
+      });
+    }
     return null;
   }
 

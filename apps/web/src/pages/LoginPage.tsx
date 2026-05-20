@@ -38,6 +38,11 @@ function describeFirebaseError(error: unknown): string {
   return "Sign-in failed. Please try again.";
 }
 
+function isLegacyFallbackError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /auth\/(user-not-found|invalid-credential|wrong-password|invalid-login-credentials)/i.test(message);
+}
+
 function landingPathForUser(user: AuthUser, next: string): string {
   if (next) return next;
   if (user.role === "customer") return "/app/requests";
@@ -73,18 +78,33 @@ const LoginPage = () => {
     return result.user;
   }
 
+  async function legacyLogin(): Promise<AuthUser> {
+    const result = await apiRequest<{ user: AuthUser }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(form),
+    });
+    return result.user;
+  }
+
   const loginMutation = useMutation({
     mutationFn: async () => {
       if (firebaseReady) {
-        const credential = await firebaseSignInEmail(form.email, form.password);
-        const idToken = await getFirebaseIdToken(credential.user);
-        return exchangeFirebaseToken(idToken);
+        try {
+          const credential = await firebaseSignInEmail(form.email, form.password);
+          const idToken = await getFirebaseIdToken(credential.user);
+          return await exchangeFirebaseToken(idToken);
+        } catch (firebaseError) {
+          // Existing legacy accounts (bootstrap admin, pre-migration users)
+          // live only in our Postgres with a bcrypt password and don't exist
+          // in Firebase. Fall back to the legacy /api/auth/login path so
+          // those accounts keep working.
+          if (isLegacyFallbackError(firebaseError)) {
+            return await legacyLogin();
+          }
+          throw firebaseError;
+        }
       }
-      const result = await apiRequest<{ user: AuthUser }>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
-      return result.user;
+      return legacyLogin();
     },
     onSuccess: async (user) => {
       await queryClient.invalidateQueries({ queryKey: ["session"] });

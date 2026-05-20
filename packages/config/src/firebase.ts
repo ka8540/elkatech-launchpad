@@ -52,10 +52,25 @@ export function isFirebaseAdminConfigured(): boolean {
 
 export async function verifyFirebaseIdToken(idToken: string): Promise<AdminDecodedIdToken | null> {
   const auth = await getFirebaseAdminAuth();
-  if (!auth) return null;
+  if (!auth) {
+    if (process.env.NODE_ENV !== "production") {
+      // Dev-only diagnostic so the user can tell admin SDK isn't initialized.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[firebase-admin] verifyIdToken skipped — Admin SDK not configured. " +
+          "Check FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY.",
+      );
+    }
+    return null;
+  }
   try {
     return await auth.verifyIdToken(idToken);
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      const message = error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line no-console
+      console.warn("[firebase-admin] verifyIdToken failed:", message);
+    }
     return null;
   }
 }

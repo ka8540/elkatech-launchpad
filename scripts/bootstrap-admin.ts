@@ -1,11 +1,49 @@
 import { randomUUID } from "node:crypto";
-import argon2 from "argon2";
-import { closeDb, getDb, getEnv } from "@elkatech/config";
+import bcrypt from "bcryptjs";
+import { closeDb, getDb, getEnv, getFirebaseAdminAuth } from "@elkatech/config";
+
+async function provisionFirebaseAdmin(email: string, password: string): Promise<string | null> {
+  const adminAuth = await getFirebaseAdminAuth();
+  if (!adminAuth) {
+    console.log("Firebase Admin SDK not configured — skipping Firebase admin provisioning.");
+    return null;
+  }
+
+  try {
+    const existing = await adminAuth.getUserByEmail(email);
+    await adminAuth.updateUser(existing.uid, {
+      password,
+      emailVerified: true,
+      displayName: "Platform Admin",
+    });
+    console.log(`Updated Firebase user ${existing.uid} for ${email}`);
+    return existing.uid;
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "auth/user-not-found") {
+      const created = await adminAuth.createUser({
+        email,
+        password,
+        emailVerified: true,
+        displayName: "Platform Admin",
+      });
+      console.log(`Created Firebase user ${created.uid} for ${email}`);
+      return created.uid;
+    }
+    throw error;
+  }
+}
 
 async function main() {
   const sql = getDb();
   const env = getEnv();
-  const passwordHash = await argon2.hash(env.BOOTSTRAP_ADMIN_PASSWORD);
+  // Must use bcrypt to match the verification in services/auth/src/index.ts.
+  const passwordHash = await bcrypt.hash(env.BOOTSTRAP_ADMIN_PASSWORD, 12);
+
+  const firebaseUid = await provisionFirebaseAdmin(
+    env.BOOTSTRAP_ADMIN_EMAIL,
+    env.BOOTSTRAP_ADMIN_PASSWORD,
+  );
 
   await sql`
     insert into auth.users (
@@ -15,7 +53,10 @@ async function main() {
       role,
       password_hash,
       email_verified,
-      status
+      status,
+      approval_status,
+      approved_at,
+      firebase_uid
     )
     values (
       ${randomUUID()},
@@ -24,7 +65,10 @@ async function main() {
       ${"admin"},
       ${passwordHash},
       ${true},
-      ${"active"}
+      ${"active"},
+      ${"approved"},
+      now(),
+      ${firebaseUid}
     )
     on conflict (email)
     do update set
@@ -33,6 +77,9 @@ async function main() {
       password_hash = excluded.password_hash,
       email_verified = excluded.email_verified,
       status = excluded.status,
+      approval_status = 'approved',
+      approved_at = coalesce(auth.users.approved_at, now()),
+      firebase_uid = coalesce(auth.users.firebase_uid, excluded.firebase_uid),
       updated_at = now()
   `;
 
