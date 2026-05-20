@@ -317,33 +317,44 @@ const PortalShell = () => {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       {collapsed && !isMobile ? (
-        /* Collapsed: logo only; expand button overlays on header hover. */
-        <div className="group relative flex flex-col items-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
-          <Link
-            to="/app/requests"
-            title="ElkaTech"
-            aria-label="ElkaTech"
-            className="flex items-center justify-center text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
-          >
-            <ElkaTechMark size={42} />
-          </Link>
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            className={cn(
-              "absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm",
-              "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
-              "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-              "transition-opacity duration-200",
-              "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-              "focus:opacity-100 focus:pointer-events-auto",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-            )}
-            aria-label="Expand sidebar"
-            aria-expanded={false}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+        /* Collapsed: logo by default, expand button swaps in on hover.
+           The two share the same 44×44 box so nothing shifts when toggling. */
+        <div className="group flex items-center justify-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
+          <div className="relative h-11 w-11">
+            {/* Logo — visible by default, fades out when the user hovers. */}
+            <Link
+              to="/app/requests"
+              title="ElkaTech"
+              aria-label="ElkaTech"
+              className={cn(
+                "absolute inset-0 flex items-center justify-center text-slate-950 dark:text-white",
+                "transition-opacity duration-200",
+                "opacity-100 group-hover:opacity-0 group-focus-within:opacity-0",
+                "pointer-events-auto group-hover:pointer-events-none group-focus-within:pointer-events-none",
+              )}
+            >
+              <ElkaTechMark size={42} />
+            </Link>
+
+            {/* Expand button — appears on hover; same footprint as the logo. */}
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              className={cn(
+                "absolute inset-0 flex items-center justify-center rounded-xl border shadow-sm",
+                "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                "dark:border-white/10 dark:bg-[#0b1626] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white",
+                "transition-opacity duration-200",
+                "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+                "focus:opacity-100 focus:pointer-events-auto",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+              )}
+              aria-label="Expand sidebar"
+              aria-expanded={false}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       ) : (
         /* Expanded / mobile: brand block; collapse button overlays on hover. */
