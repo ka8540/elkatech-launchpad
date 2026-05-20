@@ -60674,6 +60674,12 @@ var approvalStatusSchema = external_exports.enum([
   "rejected",
   "suspended"
 ]);
+var accountOriginSchema = external_exports.enum([
+  "self_signup",
+  "admin_invite",
+  "firebase_google",
+  "legacy"
+]);
 var authUserSchema = external_exports.object({
   id: external_exports.string(),
   email: external_exports.string().email(),
@@ -60681,6 +60687,7 @@ var authUserSchema = external_exports.object({
   role: roleSchema,
   emailVerified: external_exports.boolean(),
   approvalStatus: approvalStatusSchema,
+  accountOrigin: accountOriginSchema.default("self_signup"),
   createdAt: external_exports.string()
 });
 var productSnapshotSchema = external_exports.object({

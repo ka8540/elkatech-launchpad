@@ -641,6 +641,17 @@ app.post("/api/admin/users/:userId/role", async (request: any, reply: any) => {
   });
 });
 
+app.delete("/api/admin/users/:userId", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { userId } = approvalUserParams.parse(request.params);
+  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
+    method: "DELETE",
+    headers: internalHeaders({ "x-user-id": session.user.id }),
+  });
+});
+
 // ─── Admin: heartbeat / health dashboard ───────────────────────────────────
 type HealthRecord = {
   service: string;

@@ -29,6 +29,8 @@ const app = Fastify({ logger: true });
 const sql = getDb();
 const env = getEnv();
 
+type AccountOrigin = "self_signup" | "admin_invite" | "firebase_google" | "legacy";
+
 type UserRow = {
   id: string;
   email: string;
@@ -39,6 +41,7 @@ type UserRow = {
   status: "active" | "invited";
   approval_status: z.infer<typeof approvalStatusSchema>;
   firebase_uid: string | null;
+  account_origin: AccountOrigin | null;
   created_at: string;
 };
 
@@ -50,6 +53,7 @@ function mapUser(row: UserRow) {
     role: row.role,
     emailVerified: row.email_verified,
     approvalStatus: row.approval_status ?? "approved",
+    accountOrigin: (row.account_origin ?? "self_signup") as AccountOrigin,
     createdAt: new Date(row.created_at).toISOString(),
   };
 }
@@ -181,7 +185,7 @@ app.post("/signup", async (request, reply) => {
     const userId = invite.user_id ?? randomUUID();
     // Invited staff users are pre-approved by definition (an admin invited them).
     await sql`
-      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at)
+      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin)
       values (
         ${userId},
         ${input.email.toLowerCase()},
@@ -191,7 +195,8 @@ app.post("/signup", async (request, reply) => {
         ${false},
         ${"active"},
         ${"approved"},
-        now()
+        now(),
+        ${"admin_invite"}
       )
       on conflict (id)
       do update set
@@ -202,6 +207,7 @@ app.post("/signup", async (request, reply) => {
         status = excluded.status,
         approval_status = 'approved',
         approved_at = coalesce(auth.users.approved_at, now()),
+        account_origin = 'admin_invite',
         updated_at = now()
     `;
 
@@ -241,7 +247,7 @@ app.post("/signup", async (request, reply) => {
   // Public customer signups land in pending_approval and stay there
   // until an admin approves the account.
   await sql`
-    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status)
+    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, account_origin)
     values (
       ${userId},
       ${input.email.toLowerCase()},
@@ -250,7 +256,8 @@ app.post("/signup", async (request, reply) => {
       ${passwordHash},
       ${false},
       ${"active"},
-      ${"pending_approval"}
+      ${"pending_approval"},
+      ${"self_signup"}
     )
   `;
 
@@ -562,10 +569,20 @@ app.post("/internal/invite", async (request, reply) => {
   `;
 
   const userId = existingUsers[0]?.id ?? randomUUID();
-  // Staff invites from an admin land approved.
+  // Staff invites from an admin land approved and are marked admin_invite
+  // so role management is allowed on the resulting account.
   await sql`
-    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at)
-    values (${userId}, ${email}, ${input.displayName}, ${input.role}, ${"invited"}, ${"approved"}, now())
+    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at, account_origin)
+    values (
+      ${userId},
+      ${email},
+      ${input.displayName},
+      ${input.role},
+      ${"invited"},
+      ${"approved"},
+      now(),
+      ${"admin_invite"}
+    )
     on conflict (id)
     do update set
       email = excluded.email,
@@ -574,6 +591,7 @@ app.post("/internal/invite", async (request, reply) => {
       status = excluded.status,
       approval_status = 'approved',
       approved_at = coalesce(auth.users.approved_at, now()),
+      account_origin = 'admin_invite',
       updated_at = now()
   `;
 
@@ -702,9 +720,10 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
       // Invited users (role !== customer) are pre-approved by an admin.
       // Self-service Google sign-ups become customers and land in pending_approval.
       const approvalStatus = role === "customer" ? "pending_approval" : "approved";
+      const accountOrigin = role === "customer" ? "firebase_google" : "admin_invite";
       await sql`
         insert into auth.users (
-          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at
+          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin
         )
         values (
           ${userId},
@@ -715,7 +734,8 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           ${true},
           ${'active'},
           ${approvalStatus},
-          ${approvalStatus === 'approved' ? sql`now()` : sql`null`}
+          ${approvalStatus === 'approved' ? sql`now()` : sql`null`},
+          ${accountOrigin}
         )
         on conflict (id)
         do update set
@@ -813,10 +833,12 @@ app.post("/internal/firebase/session", async (request, reply) => {
   if (!existing) {
     // 2. No local user yet — create one as a customer pending approval.
     const userId = randomUUID();
+    const accountOrigin: AccountOrigin =
+      input.provider === "google.com" ? "firebase_google" : "self_signup";
     await sql`
       insert into auth.users (
         id, email, display_name, role, password_hash, email_verified,
-        status, approval_status, firebase_uid
+        status, approval_status, firebase_uid, account_origin
       )
       values (
         ${userId},
@@ -827,7 +849,8 @@ app.post("/internal/firebase/session", async (request, reply) => {
         ${input.emailVerified},
         ${"active"},
         ${"pending_approval"},
-        ${firebaseUid}
+        ${firebaseUid},
+        ${accountOrigin}
       )
     `;
 
@@ -1082,6 +1105,20 @@ app.post("/internal/users/:id/role", async (request, reply) => {
     }
   }
 
+  // Staff-only role moves (anything that grants engineer or admin) require
+  // the target to be a staff-managed account. Self-signup customers can be
+  // approved, suspended, or removed, but not promoted.
+  const grantingStaffRole = input.role === "engineer" || input.role === "admin";
+  const origin = (user.account_origin ?? "self_signup") as AccountOrigin;
+  const isStaffManaged = origin === "admin_invite" || origin === "legacy";
+  if (grantingStaffRole && !isStaffManaged && user.role === "customer") {
+    return reply.code(400).send({
+      code: "USER_NOT_STAFF_MANAGED",
+      message:
+        "Only staff-invited accounts can be promoted. Invite this user through Manage staff access first.",
+    });
+  }
+
   await sql`
     update auth.users
     set role = ${input.role}, updated_at = now()
@@ -1092,6 +1129,55 @@ app.post("/internal/users/:id/role", async (request, reply) => {
     return reply.code(500).send({ message: "User record disappeared." });
   }
   return reply.send({ user: mapUser(updated) });
+});
+
+// Soft-remove. Hard-deleting a user breaks audit history on service
+// requests, so this just suspends the account, kills their sessions, and
+// records the actor. Effectively a stronger Suspend with admin intent.
+app.delete("/internal/users/:id", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = approvalParamsSchema.parse(request.params);
+  const user = await findUserById(params.id);
+  if (!user) return reply.code(404).send({ message: "User not found." });
+
+  const actor = actorIdFrom(request);
+  if (actor && actor === user.id) {
+    return reply.code(400).send({
+      code: "CANNOT_MODIFY_SELF",
+      message: "You cannot remove your own account.",
+    });
+  }
+  if (isSystemAdminEmail(user.email)) {
+    return reply.code(400).send({
+      code: "CANNOT_MODIFY_SYSTEM_ADMIN",
+      message: "The primary administrator account is protected.",
+    });
+  }
+  if (user.role === "admin") {
+    const admins = await countAdmins();
+    if (admins <= 1) {
+      return reply.code(400).send({
+        code: "CANNOT_REMOVE_LAST_ADMIN",
+        message: "At least one administrator must remain.",
+      });
+    }
+  }
+
+  await sql.begin(async (tx) => {
+    await tx`
+      update auth.users
+      set approval_status = 'suspended',
+          suspended_at = now(),
+          suspended_by = ${actor},
+          updated_at = now()
+      where id = ${user.id}
+    `;
+    await tx`delete from auth.sessions where user_id = ${user.id}`;
+  });
+  const updated = await findUserById(user.id);
+  return reply.send({ user: updated ? mapUser(updated) : null });
 });
 
 // Health: counts for admin dashboard.

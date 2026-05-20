@@ -260,14 +260,38 @@ function SidebarNavItem({
   );
 }
 
+/* ── Persisted sidebar collapsed state ───────────────────────────────────── */
+const SIDEBAR_COLLAPSED_KEY = "elkatech-portal-sidebar-collapsed";
+
+function readInitialCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 /* ── Main PortalShell ────────────────────────────────────────────────────── */
 const PortalShell = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data } = useSession();
-  const [collapsed, setCollapsed] = useState(false);
+  // Initialise from localStorage synchronously so the first paint already
+  // reflects the user's last choice — no expand-then-collapse flicker on
+  // refresh.
+  const [collapsed, setCollapsedState] = useState<boolean>(() => readInitialCollapsed());
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+
+  const setCollapsed = (next: boolean) => {
+    setCollapsedState(next);
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "true" : "false");
+    } catch {
+      // localStorage may be disabled (private mode, etc.); ignore.
+    }
+  };
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -317,48 +341,28 @@ const PortalShell = () => {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       {collapsed && !isMobile ? (
-        /* Collapsed: logo by default, expand button swaps in on hover.
-           The two share the same 44×44 box so nothing shifts when toggling. */
-        <div className="group flex items-center justify-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
-          <div className="relative h-11 w-11">
-            {/* Logo — visible by default, fades out when the user hovers. */}
-            <Link
-              to="/app/requests"
-              title="ElkaTech"
-              aria-label="ElkaTech"
-              className={cn(
-                "absolute inset-0 flex items-center justify-center text-slate-950 dark:text-white",
-                "transition-opacity duration-200",
-                "opacity-100 group-hover:opacity-0 group-focus-within:opacity-0",
-                "pointer-events-auto group-hover:pointer-events-none group-focus-within:pointer-events-none",
-              )}
-            >
-              <ElkaTechMark size={42} />
-            </Link>
-
-            {/* Expand button — appears on hover; same footprint as the logo. */}
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              className={cn(
-                "absolute inset-0 flex items-center justify-center rounded-xl border shadow-sm",
-                "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                "dark:border-white/10 dark:bg-[#0b1626] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white",
-                "transition-opacity duration-200",
-                "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-                "focus:opacity-100 focus:pointer-events-auto",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-              )}
-              aria-label="Expand sidebar"
-              aria-expanded={false}
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
+        /* Collapsed: the expand button takes the logo's slot. No logo, no
+           hover-only behaviour. Same 44px height as the expanded brand mark
+           so the header doesn't jump when toggling. */
+        <div className="flex items-center justify-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            className={cn(
+              "flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm transition-colors",
+              "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+              "dark:border-white/10 dark:bg-[#0b1626] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+            )}
+            aria-label="Expand sidebar"
+            aria-expanded={false}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
         </div>
       ) : (
-        /* Expanded / mobile: brand block; collapse button overlays on hover. */
-        <div className="group relative border-b border-slate-200 px-5 py-5 dark:border-white/10">
+        /* Expanded / mobile: brand block plus an always-visible toggle button. */
+        <div className="relative border-b border-slate-200 px-5 py-5 dark:border-white/10">
           <Link
             to="/app/requests"
             title="ElkaTech"
@@ -382,7 +386,7 @@ const PortalShell = () => {
               type="button"
               onClick={() => setMobileOpen(false)}
               className={cn(
-                "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm",
+                "absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-colors",
                 "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
                 "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
@@ -396,12 +400,9 @@ const PortalShell = () => {
               type="button"
               onClick={() => setCollapsed(true)}
               className={cn(
-                "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm",
+                "absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-colors",
                 "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
                 "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-                "transition-opacity duration-200",
-                "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-                "focus:opacity-100 focus:pointer-events-auto",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
               )}
               aria-label="Collapse sidebar"

@@ -62399,6 +62399,12 @@ var approvalStatusSchema = external_exports.enum([
   "rejected",
   "suspended"
 ]);
+var accountOriginSchema = external_exports.enum([
+  "self_signup",
+  "admin_invite",
+  "firebase_google",
+  "legacy"
+]);
 var authUserSchema = external_exports.object({
   id: external_exports.string(),
   email: external_exports.string().email(),
@@ -62406,6 +62412,7 @@ var authUserSchema = external_exports.object({
   role: roleSchema,
   emailVerified: external_exports.boolean(),
   approvalStatus: approvalStatusSchema,
+  accountOrigin: accountOriginSchema.default("self_signup"),
   createdAt: external_exports.string()
 });
 var productSnapshotSchema = external_exports.object({
@@ -64780,6 +64787,7 @@ function mapUser(row) {
     role: row.role,
     emailVerified: row.email_verified,
     approvalStatus: row.approval_status ?? "approved",
+    accountOrigin: row.account_origin ?? "self_signup",
     createdAt: new Date(row.created_at).toISOString()
   };
 }
@@ -64883,7 +64891,7 @@ app.post("/signup", async (request, reply) => {
     }
     const userId2 = invite.user_id ?? randomUUID();
     await sql`
-      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at)
+      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin)
       values (
         ${userId2},
         ${input.email.toLowerCase()},
@@ -64893,7 +64901,8 @@ app.post("/signup", async (request, reply) => {
         ${false},
         ${"active"},
         ${"approved"},
-        now()
+        now(),
+        ${"admin_invite"}
       )
       on conflict (id)
       do update set
@@ -64904,6 +64913,7 @@ app.post("/signup", async (request, reply) => {
         status = excluded.status,
         approval_status = 'approved',
         approved_at = coalesce(auth.users.approved_at, now()),
+        account_origin = 'admin_invite',
         updated_at = now()
     `;
     await sql`
@@ -64935,7 +64945,7 @@ app.post("/signup", async (request, reply) => {
   }
   const userId = randomUUID();
   await sql`
-    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status)
+    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, account_origin)
     values (
       ${userId},
       ${input.email.toLowerCase()},
@@ -64944,7 +64954,8 @@ app.post("/signup", async (request, reply) => {
       ${passwordHash},
       ${false},
       ${"active"},
-      ${"pending_approval"}
+      ${"pending_approval"},
+      ${"self_signup"}
     )
   `;
   const verifyToken = await createVerificationToken(userId, input.email.toLowerCase());
@@ -65198,8 +65209,17 @@ app.post("/internal/invite", async (request, reply) => {
   `;
   const userId = existingUsers[0]?.id ?? randomUUID();
   await sql`
-    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at)
-    values (${userId}, ${email}, ${input.displayName}, ${input.role}, ${"invited"}, ${"approved"}, now())
+    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at, account_origin)
+    values (
+      ${userId},
+      ${email},
+      ${input.displayName},
+      ${input.role},
+      ${"invited"},
+      ${"approved"},
+      now(),
+      ${"admin_invite"}
+    )
     on conflict (id)
     do update set
       email = excluded.email,
@@ -65208,6 +65228,7 @@ app.post("/internal/invite", async (request, reply) => {
       status = excluded.status,
       approval_status = 'approved',
       approved_at = coalesce(auth.users.approved_at, now()),
+      account_origin = 'admin_invite',
       updated_at = now()
   `;
   const inviteToken = generateToken();
@@ -65306,9 +65327,10 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
         userId = randomUUID();
       }
       const approvalStatus = role === "customer" ? "pending_approval" : "approved";
+      const accountOrigin = role === "customer" ? "firebase_google" : "admin_invite";
       await sql`
         insert into auth.users (
-          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at
+          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin
         )
         values (
           ${userId},
@@ -65319,7 +65341,8 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           ${true},
           ${"active"},
           ${approvalStatus},
-          ${approvalStatus === "approved" ? sql`now()` : sql`null`}
+          ${approvalStatus === "approved" ? sql`now()` : sql`null`},
+          ${accountOrigin}
         )
         on conflict (id)
         do update set
@@ -65397,10 +65420,11 @@ app.post("/internal/firebase/session", async (request, reply) => {
   let user;
   if (!existing) {
     const userId = randomUUID();
+    const accountOrigin = input.provider === "google.com" ? "firebase_google" : "self_signup";
     await sql`
       insert into auth.users (
         id, email, display_name, role, password_hash, email_verified,
-        status, approval_status, firebase_uid
+        status, approval_status, firebase_uid, account_origin
       )
       values (
         ${userId},
@@ -65411,7 +65435,8 @@ app.post("/internal/firebase/session", async (request, reply) => {
         ${input.emailVerified},
         ${"active"},
         ${"pending_approval"},
-        ${firebaseUid}
+        ${firebaseUid},
+        ${accountOrigin}
       )
     `;
     await emitOutbox("user", userId, "user.registered", {
@@ -65628,6 +65653,15 @@ app.post("/internal/users/:id/role", async (request, reply) => {
       });
     }
   }
+  const grantingStaffRole = input.role === "engineer" || input.role === "admin";
+  const origin = user.account_origin ?? "self_signup";
+  const isStaffManaged = origin === "admin_invite" || origin === "legacy";
+  if (grantingStaffRole && !isStaffManaged && user.role === "customer") {
+    return reply.code(400).send({
+      code: "USER_NOT_STAFF_MANAGED",
+      message: "Only staff-invited accounts can be promoted. Invite this user through Manage staff access first."
+    });
+  }
   await sql`
     update auth.users
     set role = ${input.role}, updated_at = now()
@@ -65638,6 +65672,49 @@ app.post("/internal/users/:id/role", async (request, reply) => {
     return reply.code(500).send({ message: "User record disappeared." });
   }
   return reply.send({ user: mapUser(updated) });
+});
+app.delete("/internal/users/:id", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = approvalParamsSchema.parse(request.params);
+  const user = await findUserById(params.id);
+  if (!user) return reply.code(404).send({ message: "User not found." });
+  const actor = actorIdFrom(request);
+  if (actor && actor === user.id) {
+    return reply.code(400).send({
+      code: "CANNOT_MODIFY_SELF",
+      message: "You cannot remove your own account."
+    });
+  }
+  if (isSystemAdminEmail(user.email)) {
+    return reply.code(400).send({
+      code: "CANNOT_MODIFY_SYSTEM_ADMIN",
+      message: "The primary administrator account is protected."
+    });
+  }
+  if (user.role === "admin") {
+    const admins = await countAdmins();
+    if (admins <= 1) {
+      return reply.code(400).send({
+        code: "CANNOT_REMOVE_LAST_ADMIN",
+        message: "At least one administrator must remain."
+      });
+    }
+  }
+  await sql.begin(async (tx) => {
+    await tx`
+      update auth.users
+      set approval_status = 'suspended',
+          suspended_at = now(),
+          suspended_by = ${actor},
+          updated_at = now()
+      where id = ${user.id}
+    `;
+    await tx`delete from auth.sessions where user_id = ${user.id}`;
+  });
+  const updated = await findUserById(user.id);
+  return reply.send({ user: updated ? mapUser(updated) : null });
 });
 app.get("/internal/users/summary", async (request, reply) => {
   if (!ensureInternal(request)) {

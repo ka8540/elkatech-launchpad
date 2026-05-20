@@ -54,6 +54,14 @@ export const approvalStatusSchema = z.enum([
 ]);
 export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 
+export const accountOriginSchema = z.enum([
+  "self_signup",
+  "admin_invite",
+  "firebase_google",
+  "legacy",
+]);
+export type AccountOrigin = z.infer<typeof accountOriginSchema>;
+
 export const authUserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
@@ -61,6 +69,7 @@ export const authUserSchema = z.object({
   role: roleSchema,
   emailVerified: z.boolean(),
   approvalStatus: approvalStatusSchema,
+  accountOrigin: accountOriginSchema.default("self_signup"),
   createdAt: z.string(),
 });
 export type AuthUser = z.infer<typeof authUserSchema>;
