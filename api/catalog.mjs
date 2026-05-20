@@ -62964,7 +62964,10 @@ var verifyEmailInputSchema = external_exports.object({
 var inviteUserInputSchema = external_exports.object({
   email: external_exports.string().email(),
   displayName: external_exports.string().min(2),
-  role: external_exports.enum(["engineer", "admin"])
+  role: external_exports.enum(["customer", "engineer", "admin"])
+});
+var changeUserRoleInputSchema = external_exports.object({
+  role: roleSchema
 });
 var createServiceRequestInputSchema = external_exports.object({
   productId: external_exports.string(),

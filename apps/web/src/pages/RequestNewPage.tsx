@@ -635,7 +635,7 @@ const RequestNewPage = () => {
               <Button
                 type="submit"
                 size="lg"
-                className="h-12 rounded-2xl bg-gradient-to-r from-blue-500 to-emerald-400 px-6 font-semibold text-white shadow-[0_16px_36px_rgba(37,99,235,0.28)] hover:from-blue-400 hover:to-emerald-300"
+                className="h-12 rounded-2xl bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700"
                 disabled={mutation.isPending}
               >
                 {mutation.isPending ? (

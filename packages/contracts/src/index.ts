@@ -132,7 +132,11 @@ export const verifyEmailInputSchema = z.object({
 export const inviteUserInputSchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(2),
-  role: z.enum(["engineer", "admin"]),
+  role: z.enum(["customer", "engineer", "admin"]),
+});
+
+export const changeUserRoleInputSchema = z.object({
+  role: roleSchema,
 });
 
 export const createServiceRequestInputSchema = z.object({

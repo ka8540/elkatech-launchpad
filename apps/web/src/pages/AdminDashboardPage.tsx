@@ -253,7 +253,7 @@ const AdminDashboardPage = () => {
           <div className="flex w-fit shrink-0 items-center gap-2">
             <Button
               asChild
-              className="h-11 rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 px-5 font-semibold text-white shadow-[0_12px_32px_rgba(37,99,235,0.22)] hover:from-blue-400 hover:to-emerald-300"
+              className="h-11 rounded-full bg-blue-600 px-5 font-semibold text-white shadow-sm hover:bg-blue-700"
             >
               <Link to="/app/users">
                 <UserPlus className="mr-1.5 h-4 w-4" />

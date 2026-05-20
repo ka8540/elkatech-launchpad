@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  ExternalLink,
   Gauge,
   Inbox,
   LogOut,
@@ -318,14 +317,26 @@ const PortalShell = () => {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       {collapsed && !isMobile ? (
-        /* Collapsed: expand button on top, logo centered below */
-        <div className="flex flex-col items-center border-b border-slate-200 px-3 py-4 dark:border-white/10">
+        /* Collapsed: logo only; expand button overlays on header hover. */
+        <div className="group relative flex flex-col items-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
+          <Link
+            to="/app/requests"
+            title="ElkaTech"
+            aria-label="ElkaTech"
+            className="flex items-center justify-center text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
+          >
+            <ElkaTechMark size={42} />
+          </Link>
           <button
+            type="button"
             onClick={() => setCollapsed(false)}
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg border transition-all",
-              "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-              "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+              "absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm",
+              "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+              "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+              "transition-opacity duration-200",
+              "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+              "focus:opacity-100 focus:pointer-events-auto",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
             )}
             aria-label="Expand sidebar"
@@ -333,52 +344,14 @@ const PortalShell = () => {
           >
             <ChevronRight className="h-4 w-4" />
           </button>
-          <Link
-            to="/"
-            title="Back to homepage"
-            aria-label="ElkaTech"
-            className="mt-5 flex items-center justify-center text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
-          >
-            <ElkaTechMark size={42} />
-          </Link>
         </div>
       ) : (
-        /* Expanded / mobile: control row on top, brand block below */
-        <div className="border-b border-slate-200 px-5 py-5 dark:border-white/10">
-          <div className="flex justify-end">
-            {isMobile ? (
-              <button
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all",
-                  "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-                  "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-                )}
-                aria-label="Close menu"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : (
-              <button
-                onClick={() => setCollapsed(true)}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-all",
-                  "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-                  "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-                )}
-                aria-label="Collapse sidebar"
-                aria-expanded
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+        /* Expanded / mobile: brand block; collapse button overlays on hover. */
+        <div className="group relative border-b border-slate-200 px-5 py-5 dark:border-white/10">
           <Link
-            to="/"
-            title="Back to homepage"
-            className="mt-4 flex items-center gap-3 text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
+            to="/app/requests"
+            title="ElkaTech"
+            className="flex items-center gap-3 text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
           >
             <span className="shrink-0">
               <ElkaTechMark size={38} />
@@ -392,6 +365,40 @@ const PortalShell = () => {
               </p>
             </div>
           </Link>
+
+          {isMobile ? (
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm",
+                "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+                "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+              )}
+              aria-label="Close menu"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              className={cn(
+                "absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm",
+                "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
+                "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+                "transition-opacity duration-200",
+                "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+                "focus:opacity-100 focus:pointer-events-auto",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+              )}
+              aria-label="Collapse sidebar"
+              aria-expanded
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )}
 
@@ -415,48 +422,14 @@ const PortalShell = () => {
         "border-slate-200 dark:border-white/10",
       )}>
 
-        {/* ── Group A: Utility controls ─────────────────────────────────── */}
-        <div className={cn(
-          "px-3 pb-3",
-          collapsed && !isMobile ? "space-y-1.5" : "space-y-1",
-        )}>
-          {/* Theme selector */}
+        {/* ── Group A: Theme selector ───────────────────────────────────── */}
+        <div className="px-3 pb-3">
           {collapsed && !isMobile ? (
             <div className="flex justify-center">
               <ThemeSelector compact />
             </div>
           ) : (
             <ThemeSelector showLabel />
-          )}
-
-          {/* Back to website */}
-          {collapsed && !isMobile ? (
-            <div className="flex justify-center">
-              <Link
-                to="/"
-                title="View public site"
-                aria-label="View public site"
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-xl border transition-all",
-                  "border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-700",
-                  "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-                )}
-              >
-                <ExternalLink className="h-[15px] w-[15px]" />
-              </Link>
-            </div>
-          ) : (
-            <Link
-              to="/"
-              className={cn(
-                "flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium transition-all",
-                "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800",
-                "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-              )}
-            >
-              <ExternalLink className="h-[15px] w-[15px] shrink-0" />
-              <span>Back to website</span>
-            </Link>
           )}
         </div>
 

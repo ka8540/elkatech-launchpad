@@ -964,18 +964,135 @@ async function handleApprovalAction(
   return reply.send({ user: mapUser(updated) });
 }
 
+function isSystemAdminEmail(email: string): boolean {
+  return email.toLowerCase() === env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
+}
+
+async function countAdmins(): Promise<number> {
+  const [row] = await sql<Array<{ n: string }>>`
+    select count(*) as n from auth.users where role = 'admin'
+  `;
+  return Number(row?.n ?? 0);
+}
+
+async function guardAdminMutation(
+  request: any,
+  reply: any,
+  target: UserRow,
+  intent: "suspend" | "demote" | "reject",
+): Promise<boolean> {
+  const actor = actorIdFrom(request);
+  if (actor && actor === target.id) {
+    reply.code(400).send({
+      code: "CANNOT_MODIFY_SELF",
+      message: "You cannot modify your own account.",
+    });
+    return false;
+  }
+  if (isSystemAdminEmail(target.email)) {
+    reply.code(400).send({
+      code: "CANNOT_MODIFY_SYSTEM_ADMIN",
+      message: "The primary administrator account is protected.",
+    });
+    return false;
+  }
+  if (target.role === "admin") {
+    if (intent === "suspend" || intent === "reject") {
+      reply.code(400).send({
+        code: "CANNOT_SUSPEND_ADMIN",
+        message: "Administrators cannot be suspended. Remove admin privileges first.",
+      });
+      return false;
+    }
+    if (intent === "demote") {
+      const admins = await countAdmins();
+      if (admins <= 1) {
+        reply.code(400).send({
+          code: "CANNOT_REMOVE_LAST_ADMIN",
+          message: "At least one administrator must remain.",
+        });
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 app.post("/internal/users/:id/approve", async (request, reply) =>
   handleApprovalAction(request, reply, "approved"),
 );
-app.post("/internal/users/:id/reject", async (request, reply) =>
-  handleApprovalAction(request, reply, "rejected"),
-);
-app.post("/internal/users/:id/suspend", async (request, reply) =>
-  handleApprovalAction(request, reply, "suspended"),
-);
+app.post("/internal/users/:id/reject", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = approvalParamsSchema.parse(request.params);
+  const user = await findUserById(params.id);
+  if (!user) return reply.code(404).send({ message: "User not found." });
+  if (!(await guardAdminMutation(request, reply, user, "reject"))) return;
+  return handleApprovalAction(request, reply, "rejected");
+});
+app.post("/internal/users/:id/suspend", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = approvalParamsSchema.parse(request.params);
+  const user = await findUserById(params.id);
+  if (!user) return reply.code(404).send({ message: "User not found." });
+  if (!(await guardAdminMutation(request, reply, user, "suspend"))) return;
+  return handleApprovalAction(request, reply, "suspended");
+});
 app.post("/internal/users/:id/reactivate", async (request, reply) =>
   handleApprovalAction(request, reply, "approved"),
 );
+
+app.post("/internal/users/:id/role", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = approvalParamsSchema.parse(request.params);
+  const input = z.object({ role: roleSchema }).parse(request.body);
+
+  const user = await findUserById(params.id);
+  if (!user) return reply.code(404).send({ message: "User not found." });
+
+  if (user.role === input.role) {
+    return reply.send({ user: mapUser(user) });
+  }
+
+  const actor = actorIdFrom(request);
+  if (actor && actor === user.id) {
+    return reply.code(400).send({
+      code: "CANNOT_MODIFY_SELF",
+      message: "You cannot change your own role.",
+    });
+  }
+  if (isSystemAdminEmail(user.email)) {
+    return reply.code(400).send({
+      code: "CANNOT_MODIFY_SYSTEM_ADMIN",
+      message: "The primary administrator account is protected.",
+    });
+  }
+  if (user.role === "admin" && input.role !== "admin") {
+    const admins = await countAdmins();
+    if (admins <= 1) {
+      return reply.code(400).send({
+        code: "CANNOT_REMOVE_LAST_ADMIN",
+        message: "At least one administrator must remain.",
+      });
+    }
+  }
+
+  await sql`
+    update auth.users
+    set role = ${input.role}, updated_at = now()
+    where id = ${user.id}
+  `;
+  const updated = await findUserById(user.id);
+  if (!updated) {
+    return reply.code(500).send({ message: "User record disappeared." });
+  }
+  return reply.send({ user: mapUser(updated) });
+});
 
 // Health: counts for admin dashboard.
 app.get("/internal/users/summary", async (request, reply) => {

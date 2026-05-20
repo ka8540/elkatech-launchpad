@@ -223,7 +223,7 @@ function EmptyState() {
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
           <Button
             asChild
-            className="h-11 rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 px-6 font-semibold text-white shadow-[0_12px_32px_rgba(37,99,235,0.22)] hover:from-blue-400 hover:to-emerald-300"
+            className="h-11 rounded-full bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700"
           >
             <Link to="/app/requests/new">
               <Plus className="mr-1.5 h-4 w-4" />
@@ -404,7 +404,7 @@ const RequestsPage = () => {
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-11 w-fit shrink-0 rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 px-6 font-semibold text-white shadow-[0_12px_32px_rgba(37,99,235,0.22)] hover:from-blue-400 hover:to-emerald-300",
+              "h-11 w-fit shrink-0 rounded-full bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700",
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >

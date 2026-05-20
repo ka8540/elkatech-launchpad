@@ -626,6 +626,21 @@ app.post("/api/admin/users/:userId/reactivate", (request, reply) =>
   forwardApprovalAction(request, reply, "reactivate"),
 );
 
+app.post("/api/admin/users/:userId/role", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { userId } = approvalUserParams.parse(request.params);
+  const input = z
+    .object({ role: z.enum(["customer", "engineer", "admin"]) })
+    .parse(request.body);
+  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/role`, {
+    method: "POST",
+    headers: internalHeaders({ "x-user-id": session.user.id }),
+    body: JSON.stringify(input),
+  });
+});
+
 // ─── Admin: heartbeat / health dashboard ───────────────────────────────────
 type HealthRecord = {
   service: string;

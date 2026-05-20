@@ -99239,7 +99239,10 @@ var verifyEmailInputSchema = external_exports.object({
 var inviteUserInputSchema = external_exports.object({
   email: external_exports.string().email(),
   displayName: external_exports.string().min(2),
-  role: external_exports.enum(["engineer", "admin"])
+  role: external_exports.enum(["customer", "engineer", "admin"])
+});
+var changeUserRoleInputSchema = external_exports.object({
+  role: roleSchema
 });
 var createServiceRequestInputSchema = external_exports.object({
   productId: external_exports.string(),
@@ -102092,6 +102095,18 @@ app.post(
   "/api/admin/users/:userId/reactivate",
   (request, reply) => forwardApprovalAction(request, reply, "reactivate")
 );
+app.post("/api/admin/users/:userId/role", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { userId } = approvalUserParams.parse(request.params);
+  const input = external_exports.object({ role: external_exports.enum(["customer", "engineer", "admin"]) }).parse(request.body);
+  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/role`, {
+    method: "POST",
+    headers: internalHeaders({ "x-user-id": session.user.id }),
+    body: JSON.stringify(input)
+  });
+});
 async function probeService(name, url) {
   const checkedAt = (/* @__PURE__ */ new Date()).toISOString();
   const started = Date.now();
