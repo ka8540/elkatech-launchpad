@@ -5,7 +5,13 @@ import { toast } from "sonner";
 import type { AuthUser } from "@elkatech/contracts";
 import AuthPageShell from "@/components/AuthPageShell";
 import GoogleIcon from "@/components/GoogleIcon";
-import { apiRequest } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
+import {
+  firebaseSignInEmail,
+  firebaseSignInWithGoogle,
+  getFirebaseIdToken,
+  isFirebaseConfigured,
+} from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -14,6 +20,34 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   google_oauth_cancelled: "Google sign-in was cancelled.",
   google_email_unverified: "Your Google email is not verified. Please verify it with Google first.",
 };
+
+function describeFirebaseError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/auth\/wrong-password|auth\/invalid-credential|auth\/user-not-found/i.test(message)) {
+    return "Invalid email or password.";
+  }
+  if (/auth\/too-many-requests/i.test(message)) {
+    return "Too many sign-in attempts. Please wait a moment and try again.";
+  }
+  if (/auth\/popup-closed-by-user/i.test(message)) {
+    return "Google sign-in was cancelled.";
+  }
+  if (/auth\/network-request-failed/i.test(message)) {
+    return "Network error. Please check your connection and try again.";
+  }
+  return "Sign-in failed. Please try again.";
+}
+
+function isLegacyFallbackError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /auth\/(user-not-found|invalid-credential|wrong-password|invalid-login-credentials)/i.test(message);
+}
+
+function landingPathForUser(user: AuthUser, next: string): string {
+  if (next) return next;
+  if (user.role === "customer") return "/app/requests";
+  return "/app/queue";
+}
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -28,6 +62,7 @@ const LoginPage = () => {
 
   const next = searchParams.get("next") ?? location.state?.next ?? "";
   const oauthError = searchParams.get("error");
+  const firebaseReady = isFirebaseConfigured();
 
   useEffect(() => {
     if (oauthError && OAUTH_ERROR_MESSAGES[oauthError]) {
@@ -35,28 +70,89 @@ const LoginPage = () => {
     }
   }, [oauthError]);
 
+  async function exchangeFirebaseToken(idToken: string): Promise<AuthUser> {
+    const result = await apiRequest<{ user: AuthUser }>("/api/auth/firebase/session", {
+      method: "POST",
+      body: JSON.stringify({ idToken }),
+    });
+    return result.user;
+  }
+
+  async function legacyLogin(): Promise<AuthUser> {
+    const result = await apiRequest<{ user: AuthUser }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(form),
+    });
+    return result.user;
+  }
+
   const loginMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ user: AuthUser }>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify(form),
-      }),
-    onSuccess: async ({ user }) => {
+    mutationFn: async () => {
+      if (firebaseReady) {
+        try {
+          const credential = await firebaseSignInEmail(form.email, form.password);
+          const idToken = await getFirebaseIdToken(credential.user);
+          return await exchangeFirebaseToken(idToken);
+        } catch (firebaseError) {
+          // Existing legacy accounts (bootstrap admin, pre-migration users)
+          // live only in our Postgres with a bcrypt password and don't exist
+          // in Firebase. Fall back to the legacy /api/auth/login path so
+          // those accounts keep working.
+          if (isLegacyFallbackError(firebaseError)) {
+            return await legacyLogin();
+          }
+          throw firebaseError;
+        }
+      }
+      return legacyLogin();
+    },
+    onSuccess: async (user) => {
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       toast.success("Logged in successfully.");
-      navigate(next || (user.role === "customer" ? "/app/requests" : "/app/queue"));
+      navigate(landingPathForUser(user, next));
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error(describeFirebaseError(error));
     },
+  });
+
+  const googleMutation = useMutation({
+    mutationFn: async () => {
+      if (firebaseReady) {
+        const credential = await firebaseSignInWithGoogle();
+        const idToken = await getFirebaseIdToken(credential.user);
+        return exchangeFirebaseToken(idToken);
+      }
+      // Legacy Google OAuth fallback: redirect to gateway-driven flow.
+      const params = new URLSearchParams();
+      if (next) params.set("returnTo", next);
+      const qs = params.toString();
+      window.location.href = `/api/auth/google/start${qs ? `?${qs}` : ""}`;
+      return null;
+    },
+    onSuccess: async (user) => {
+      if (!user) return;
+      await queryClient.invalidateQueries({ queryKey: ["session"] });
+      toast.success("Logged in with Google.");
+      navigate(landingPathForUser(user, next));
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error(describeFirebaseError(error));
+    },
+    onSettled: () => setGoogleLoading(false),
   });
 
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
-    const params = new URLSearchParams();
-    if (next) params.set("returnTo", next);
-    const qs = params.toString();
-    window.location.href = `/api/auth/google/start${qs ? `?${qs}` : ""}`;
+    googleMutation.mutate();
   };
 
   return (
@@ -72,11 +168,11 @@ const LoginPage = () => {
           size="lg"
           className="relative w-full gap-3 rounded-xl border-border/60 bg-background text-foreground shadow-sm transition-all hover:border-accent/40 hover:bg-accent/5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-accent/50"
           onClick={handleGoogleLogin}
-          disabled={googleLoading}
+          disabled={googleLoading || googleMutation.isPending}
           aria-label="Continue with Google"
         >
           <GoogleIcon />
-          {googleLoading ? "Redirecting…" : "Continue with Google"}
+          {googleLoading ? "Connecting…" : "Continue with Google"}
         </Button>
 
         {/* Divider */}

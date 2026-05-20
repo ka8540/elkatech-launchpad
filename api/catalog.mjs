@@ -5372,7 +5372,7 @@ var require_package = __commonJS({
   "node_modules/thread-stream/package.json"(exports, module) {
     module.exports = {
       name: "thread-stream",
-      version: "4.0.0",
+      version: "4.2.0",
       description: "A streaming way to send data to a Node.js Worker Thread",
       main: "index.js",
       types: "index.d.ts",
@@ -5380,30 +5380,28 @@ var require_package = __commonJS({
         node: ">=20"
       },
       dependencies: {
-        "real-require": "^0.2.0"
+        "real-require": "^1.0.0"
       },
       devDependencies: {
-        "@types/node": "^22.0.0",
+        "@types/node": "^25.0.2",
         "@yao-pkg/pkg": "^6.0.0",
-        borp: "^0.21.0",
+        borp: "^1.0.0",
         desm: "^1.3.0",
         eslint: "^9.39.1",
         fastbench: "^1.0.1",
-        husky: "^9.0.6",
-        neostandard: "^0.12.2",
-        "pino-elasticsearch": "^8.0.0",
-        "sonic-boom": "^4.0.1",
+        neostandard: "^0.13.0",
+        "pino-elasticsearch": "^9.0.0",
+        "sonic-boom": "^5.0.0",
         "ts-node": "^10.8.0",
         typescript: "~5.7.3"
       },
       scripts: {
         build: "tsc --noEmit",
         lint: "eslint",
-        test: "npm run lint && npm run build && npm run transpile && borp --pattern 'test/*.test.{js,mjs}'",
-        "test:ci": "npm run lint && npm run transpile && borp --pattern 'test/*.test.{js,mjs}'",
-        "test:yarn": "npm run transpile && borp --pattern 'test/*.test.js'",
-        transpile: "sh ./test/ts/transpile.sh",
-        prepare: "husky install"
+        test: 'npm run lint && npm run build && npm run transpile && borp --pattern "test/*.test.{js,mjs}"',
+        "test:ci": 'npm run lint && npm run transpile && borp --pattern "test/*.test.{js,mjs}"',
+        "test:yarn": 'npm run transpile && borp --pattern "test/*.test.js"',
+        transpile: "sh ./test/ts/transpile.sh"
       },
       repository: {
         type: "git",
@@ -5467,7 +5465,13 @@ var require_wait = __commonJS({
         const remaining = max === Infinity ? WAIT_MS : Math.min(WAIT_MS, Math.max(1, max - Date.now()));
         const result = Atomics.waitAsync(state, index, expected, remaining);
         if (result.async) {
-          result.value.then(check);
+          result.value.then((res) => {
+            if (res === "ok") {
+              done(null, "ok");
+              return;
+            }
+            check();
+          });
         } else {
           setImmediate(check);
         }
@@ -5482,11 +5486,13 @@ var require_wait = __commonJS({
 var require_indexes = __commonJS({
   "node_modules/thread-stream/lib/indexes.js"(exports, module) {
     "use strict";
+    var SEQ_INDEX = 2;
     var WRITE_INDEX = 4;
     var READ_INDEX = 8;
     module.exports = {
       WRITE_INDEX,
-      READ_INDEX
+      READ_INDEX,
+      SEQ_INDEX
     };
   }
 });
@@ -5503,12 +5509,27 @@ var require_thread_stream = __commonJS({
     var { wait } = require_wait();
     var {
       WRITE_INDEX,
-      READ_INDEX
+      READ_INDEX,
+      SEQ_INDEX
     } = require_indexes();
     var buffer2 = __require("buffer");
     var assert = __require("assert");
     var kImpl = /* @__PURE__ */ Symbol("kImpl");
     var MAX_STRING = buffer2.constants.MAX_STRING_LENGTH;
+    function noop3() {
+    }
+    function updateState(stream, fn) {
+      Atomics.add(stream[kImpl].state, SEQ_INDEX, 1);
+      fn();
+      Atomics.add(stream[kImpl].state, SEQ_INDEX, 1);
+      Atomics.notify(stream[kImpl].state, SEQ_INDEX);
+    }
+    function resetIndexes(stream) {
+      updateState(stream, () => {
+        Atomics.store(stream[kImpl].state, READ_INDEX, 0);
+        Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
+      });
+    }
     var FakeWeakRef = class {
       constructor(value) {
         this._value = value;
@@ -5537,6 +5558,7 @@ var require_thread_stream = __commonJS({
       const toExecute = bundlerOverrides["thread-stream-worker"] || join(__dirname, "lib", "worker.js");
       const worker = new Worker(toExecute, {
         ...opts.workerOpts,
+        name: opts.workerOpts?.name || "thread-stream",
         trackUnmanagedFds: false,
         workerData: {
           filename: filename.indexOf("file://") === 0 ? filename : pathToFileURL(filename).href,
@@ -5564,52 +5586,37 @@ var require_thread_stream = __commonJS({
       }
     }
     function nextFlush(stream) {
-      const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
-      let leftover = stream[kImpl].data.length - writeIndex;
-      if (leftover > 0) {
-        if (stream[kImpl].buf.length === 0) {
-          stream[kImpl].flushing = false;
-          if (stream[kImpl].ending) {
-            end(stream);
-          } else if (stream[kImpl].needDrain) {
-            process.nextTick(drain, stream);
+      while (true) {
+        const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
+        const leftover = stream[kImpl].data.length - writeIndex;
+        if (leftover > 0) {
+          if (stream[kImpl].bufLen === 0) {
+            stream[kImpl].flushing = false;
+            if (stream[kImpl].ending) {
+              end(stream);
+            } else if (stream[kImpl].needDrain) {
+              process.nextTick(drain, stream);
+            }
+            return;
           }
-          return;
+          write(stream, leftover, noop3);
+          continue;
         }
-        let toWrite = stream[kImpl].buf.slice(0, leftover);
-        let toWriteBytes = Buffer.byteLength(toWrite);
-        if (toWriteBytes <= leftover) {
-          stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-          write(stream, toWrite, nextFlush.bind(null, stream));
-        } else {
-          stream.flush(() => {
+        if (leftover === 0) {
+          if (writeIndex === 0 && stream[kImpl].bufLen === 0) {
+            return;
+          }
+          waitForRead(stream, () => {
             if (stream.destroyed) {
               return;
             }
-            Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-            Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-            Atomics.notify(stream[kImpl].state, READ_INDEX);
-            while (toWriteBytes > stream[kImpl].data.length) {
-              leftover = leftover / 2;
-              toWrite = stream[kImpl].buf.slice(0, leftover);
-              toWriteBytes = Buffer.byteLength(toWrite);
-            }
-            stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-            write(stream, toWrite, nextFlush.bind(null, stream));
+            resetIndexes(stream);
+            nextFlush(stream);
           });
-        }
-      } else if (leftover === 0) {
-        if (writeIndex === 0 && stream[kImpl].buf.length === 0) {
           return;
         }
-        stream.flush(() => {
-          Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-          Atomics.notify(stream[kImpl].state, READ_INDEX);
-          nextFlush(stream);
-        });
-      } else {
         destroy(stream, new Error("overwritten"));
+        return;
       }
     }
     function onWorkerMessage(msg) {
@@ -5619,10 +5626,13 @@ var require_thread_stream = __commonJS({
         this.terminate();
         return;
       }
+      if (msg?.code == null) {
+        return;
+      }
       switch (msg.code) {
         case "READY":
           this.stream = new WeakRef2(stream);
-          stream.flush(() => {
+          waitForRead(stream, () => {
             stream[kImpl].ready = true;
             stream.emit("ready");
           });
@@ -5637,6 +5647,18 @@ var require_thread_stream = __commonJS({
             stream.emit(msg.name, msg.args);
           }
           break;
+        case "FLUSHED": {
+          if (msg.context !== "thread-stream") {
+            destroy(stream, new Error("this should not happen: " + msg.code));
+            break;
+          }
+          const cb = stream[kImpl].flushCallbacks.get(msg.id);
+          if (cb) {
+            stream[kImpl].flushCallbacks.delete(msg.id);
+            process.nextTick(cb);
+          }
+          break;
+        }
         case "WARNING":
           process.emitWarning(msg.err);
           break;
@@ -5675,13 +5697,18 @@ var require_thread_stream = __commonJS({
         this[kImpl].finished = false;
         this[kImpl].errored = null;
         this[kImpl].closed = false;
-        this[kImpl].buf = "";
+        this[kImpl].buf = [];
+        this[kImpl].bufHead = 0;
+        this[kImpl].bufLen = 0;
+        this[kImpl].flushCallbacks = /* @__PURE__ */ new Map();
+        this[kImpl].nextFlushId = 0;
         this.worker = createWorker(this, opts);
         this.on("message", (message, transferList) => {
           this.worker.postMessage(message, transferList);
         });
       }
       write(data) {
+        const dataBuf = Buffer.isBuffer(data) ? data : Buffer.from(data);
         if (this[kImpl].destroyed) {
           error(this, new Error("the worker has exited"));
           return false;
@@ -5690,7 +5717,7 @@ var require_thread_stream = __commonJS({
           error(this, new Error("the worker is ending"));
           return false;
         }
-        if (this[kImpl].flushing && this[kImpl].buf.length + data.length >= MAX_STRING) {
+        if (this[kImpl].flushing && this[kImpl].bufLen + dataBuf.length >= MAX_STRING) {
           try {
             writeSync(this);
             this[kImpl].flushing = true;
@@ -5699,7 +5726,8 @@ var require_thread_stream = __commonJS({
             return false;
           }
         }
-        this[kImpl].buf += data;
+        this[kImpl].buf.push(dataBuf);
+        this[kImpl].bufLen += dataBuf.length;
         if (this[kImpl].sync) {
           try {
             writeSync(this);
@@ -5713,7 +5741,7 @@ var require_thread_stream = __commonJS({
           this[kImpl].flushing = true;
           setImmediate(nextFlush, this);
         }
-        this[kImpl].needDrain = this[kImpl].data.length - this[kImpl].buf.length - Atomics.load(this[kImpl].state, WRITE_INDEX) <= 0;
+        this[kImpl].needDrain = this[kImpl].data.length - this[kImpl].bufLen - Atomics.load(this[kImpl].state, WRITE_INDEX) <= 0;
         return !this[kImpl].needDrain;
       }
       end() {
@@ -5724,24 +5752,13 @@ var require_thread_stream = __commonJS({
         end(this);
       }
       flush(cb) {
-        if (this[kImpl].destroyed) {
-          if (typeof cb === "function") {
-            process.nextTick(cb, new Error("the worker has exited"));
-          }
-          return;
-        }
-        const writeIndex = Atomics.load(this[kImpl].state, WRITE_INDEX);
-        wait(this[kImpl].state, READ_INDEX, writeIndex, Infinity, (err, res) => {
+        cb = typeof cb === "function" ? cb : noop3;
+        flushBuffer(this, (err) => {
           if (err) {
-            destroy(this, err);
             process.nextTick(cb, err);
             return;
           }
-          if (res === "not-equal") {
-            this.flush(cb);
-            return;
-          }
-          process.nextTick(cb);
+          requestWorkerFlush(this, cb);
         });
       }
       flushSync() {
@@ -5785,6 +5802,79 @@ var require_thread_stream = __commonJS({
         return this[kImpl].errored;
       }
     };
+    function flushBuffer(stream, cb) {
+      if (stream[kImpl].destroyed) {
+        process.nextTick(cb, new Error("the worker has exited"));
+        return;
+      }
+      if (!stream[kImpl].sync && (stream[kImpl].flushing || stream[kImpl].bufLen > 0)) {
+        setImmediate(flushBuffer, stream, cb);
+        return;
+      }
+      waitForRead(stream, cb);
+    }
+    function waitForRead(stream, cb) {
+      const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
+      wait(stream[kImpl].state, READ_INDEX, writeIndex, Infinity, (err, res) => {
+        if (err) {
+          destroy(stream, err);
+          cb(err);
+          return;
+        }
+        if (res !== "ok") {
+          waitForRead(stream, cb);
+          return;
+        }
+        cb();
+      });
+    }
+    function requestWorkerFlush(stream, cb) {
+      if (stream[kImpl].destroyed) {
+        process.nextTick(cb, new Error("the worker has exited"));
+        return;
+      }
+      if (!stream[kImpl].ready) {
+        const onReady = () => {
+          cleanup();
+          requestWorkerFlush(stream, cb);
+        };
+        const onClose = () => {
+          cleanup();
+          process.nextTick(cb, new Error("the worker has exited"));
+        };
+        const cleanup = () => {
+          stream.off("ready", onReady);
+          stream.off("close", onClose);
+        };
+        stream.once("ready", onReady);
+        stream.once("close", onClose);
+        return;
+      }
+      const id = ++stream[kImpl].nextFlushId;
+      stream[kImpl].flushCallbacks.set(id, cb);
+      try {
+        stream.worker.postMessage({
+          code: "FLUSH",
+          context: "thread-stream",
+          id
+        });
+      } catch (err) {
+        stream[kImpl].flushCallbacks.delete(id);
+        destroy(stream, err);
+        process.nextTick(cb, err);
+      }
+    }
+    function failPendingFlushCallbacks(stream, err) {
+      const callbacks = stream[kImpl].flushCallbacks;
+      if (callbacks.size === 0) {
+        return;
+      }
+      const flushErr = err || new Error("the worker has exited");
+      for (const cb of callbacks.values()) {
+        process.nextTick(cb, flushErr);
+      }
+      callbacks.clear();
+    }
     function error(stream, err) {
       setImmediate(() => {
         stream.emit("error", err);
@@ -5795,6 +5885,7 @@ var require_thread_stream = __commonJS({
         return;
       }
       stream[kImpl].destroyed = true;
+      failPendingFlushCallbacks(stream, err);
       if (err) {
         stream[kImpl].errored = err;
         error(stream, err);
@@ -5812,12 +5903,37 @@ var require_thread_stream = __commonJS({
         });
       }
     }
-    function write(stream, data, cb) {
+    function write(stream, maxBytes, cb) {
       const current = Atomics.load(stream[kImpl].state, WRITE_INDEX);
-      const length = Buffer.byteLength(data);
-      stream[kImpl].data.write(data, current);
-      Atomics.store(stream[kImpl].state, WRITE_INDEX, current + length);
-      Atomics.notify(stream[kImpl].state, WRITE_INDEX);
+      let offset = current;
+      let remaining = maxBytes;
+      while (remaining > 0 && stream[kImpl].bufLen !== 0) {
+        const head = stream[kImpl].bufHead;
+        const buf = stream[kImpl].buf[head];
+        if (buf.length <= remaining) {
+          buf.copy(stream[kImpl].data, offset);
+          offset += buf.length;
+          remaining -= buf.length;
+          stream[kImpl].bufLen -= buf.length;
+          stream[kImpl].bufHead = head + 1;
+          if (stream[kImpl].bufHead === stream[kImpl].buf.length) {
+            stream[kImpl].buf.length = 0;
+            stream[kImpl].bufHead = 0;
+          } else if (stream[kImpl].bufHead >= 1024 && stream[kImpl].bufHead * 2 >= stream[kImpl].buf.length) {
+            stream[kImpl].buf.splice(0, stream[kImpl].bufHead);
+            stream[kImpl].bufHead = 0;
+          }
+          continue;
+        }
+        buf.copy(stream[kImpl].data, offset, 0, remaining);
+        stream[kImpl].buf[head] = buf.subarray(remaining);
+        stream[kImpl].bufLen -= remaining;
+        offset += remaining;
+        remaining = 0;
+      }
+      updateState(stream, () => {
+        Atomics.store(stream[kImpl].state, WRITE_INDEX, offset);
+      });
       cb();
       return true;
     }
@@ -5829,8 +5945,9 @@ var require_thread_stream = __commonJS({
       try {
         stream.flushSync();
         let readIndex = Atomics.load(stream[kImpl].state, READ_INDEX);
-        Atomics.store(stream[kImpl].state, WRITE_INDEX, -1);
-        Atomics.notify(stream[kImpl].state, WRITE_INDEX);
+        updateState(stream, () => {
+          Atomics.store(stream[kImpl].state, WRITE_INDEX, -1);
+        });
         let spins = 0;
         while (readIndex !== -1) {
           Atomics.wait(stream[kImpl].state, READ_INDEX, readIndex, 1e3);
@@ -5861,36 +5978,17 @@ var require_thread_stream = __commonJS({
         }
       };
       stream[kImpl].flushing = false;
-      while (stream[kImpl].buf.length !== 0) {
+      while (stream[kImpl].bufLen !== 0) {
         const writeIndex = Atomics.load(stream[kImpl].state, WRITE_INDEX);
-        let leftover = stream[kImpl].data.length - writeIndex;
+        const leftover = stream[kImpl].data.length - writeIndex;
         if (leftover === 0) {
           flushSync(stream);
-          Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-          Atomics.notify(stream[kImpl].state, READ_INDEX);
+          resetIndexes(stream);
           continue;
         } else if (leftover < 0) {
           throw new Error("overwritten");
         }
-        let toWrite = stream[kImpl].buf.slice(0, leftover);
-        let toWriteBytes = Buffer.byteLength(toWrite);
-        if (toWriteBytes <= leftover) {
-          stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-          write(stream, toWrite, cb);
-        } else {
-          flushSync(stream);
-          Atomics.store(stream[kImpl].state, READ_INDEX, 0);
-          Atomics.store(stream[kImpl].state, WRITE_INDEX, 0);
-          Atomics.notify(stream[kImpl].state, READ_INDEX);
-          while (toWriteBytes > stream[kImpl].buf.length) {
-            leftover = leftover / 2;
-            toWrite = stream[kImpl].buf.slice(0, leftover);
-            toWriteBytes = Buffer.byteLength(toWrite);
-          }
-          stream[kImpl].buf = stream[kImpl].buf.slice(leftover);
-          write(stream, toWrite, cb);
-        }
+        write(stream, leftover, cb);
       }
     }
     function flushSync(stream) {
@@ -10175,12 +10273,18 @@ var require_ipaddr = __commonJS({
           loopback: [new IPv6([0, 0, 0, 0, 0, 0, 0, 1]), 128],
           uniqueLocal: [new IPv6([64512, 0, 0, 0, 0, 0, 0, 0]), 7],
           ipv4Mapped: [new IPv6([0, 0, 0, 0, 0, 65535, 0, 0]), 96],
+          // RFC3879
+          deprecatedSiteLocal: [new IPv6([65216, 0, 0, 0, 0, 0, 0, 0]), 10],
           // RFC6666
           discard: [new IPv6([256, 0, 0, 0, 0, 0, 0, 0]), 64],
           // RFC6145
           rfc6145: [new IPv6([0, 0, 0, 0, 65535, 0, 0, 0]), 96],
-          // RFC6052
-          rfc6052: [new IPv6([100, 65435, 0, 0, 0, 0, 0, 0]), 96],
+          rfc6052: [
+            // RFC6052
+            [new IPv6([100, 65435, 0, 0, 0, 0, 0, 0]), 96],
+            // RFC8215
+            [new IPv6([100, 65435, 1, 0, 0, 0, 0, 0]), 48]
+          ],
           // RFC3056
           "6to4": [new IPv6([8194, 0, 0, 0, 0, 0, 0, 0]), 16],
           // RFC6052, RFC6146
@@ -10190,17 +10294,26 @@ var require_ipaddr = __commonJS({
           // RFC7450
           amt: [new IPv6([8193, 3, 0, 0, 0, 0, 0, 0]), 32],
           as112v6: [
+            // RFC7535
             [new IPv6([8193, 4, 274, 0, 0, 0, 0, 0]), 48],
+            // RFC7534
             [new IPv6([9760, 79, 32768, 0, 0, 0, 0, 0]), 48]
           ],
-          deprecated: [new IPv6([8193, 16, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC4843
+          deprecatedOrchid: [new IPv6([8193, 16, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC7343
           orchid2: [new IPv6([8193, 32, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC9374
           droneRemoteIdProtocolEntityTags: [new IPv6([8193, 48, 0, 0, 0, 0, 0, 0]), 28],
+          // RFC9602
+          segmentRouting: [new IPv6([24320, 0, 0, 0, 0, 0, 0, 0]), 16],
           reserved: [
             // RFC3849
             [new IPv6([8193, 0, 0, 0, 0, 0, 0, 0]), 23],
             // RFC2928
-            [new IPv6([8193, 3512, 0, 0, 0, 0, 0, 0]), 32]
+            [new IPv6([8193, 3512, 0, 0, 0, 0, 0, 0]), 32],
+            // RFC9637
+            [new IPv6([16383, 0, 0, 0, 0, 0, 0, 0]), 20]
           ]
         };
         IPv6.prototype.isIPv4MappedAddress = function() {
@@ -16262,7 +16375,7 @@ var require_core = __commonJS({
       constructor(opts = {}) {
         this.schemas = {};
         this.refs = {};
-        this.formats = {};
+        this.formats = /* @__PURE__ */ Object.create(null);
         this._compilations = /* @__PURE__ */ new Set();
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
@@ -23873,7 +23986,7 @@ var require_core3 = __commonJS({
       constructor(opts = {}) {
         this.schemas = {};
         this.refs = {};
-        this.formats = {};
+        this.formats = /* @__PURE__ */ Object.create(null);
         this._compilations = /* @__PURE__ */ new Set();
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
@@ -30250,7 +30363,7 @@ var require_core5 = __commonJS({
       constructor(opts = {}) {
         this.schemas = {};
         this.refs = {};
-        this.formats = {};
+        this.formats = /* @__PURE__ */ Object.create(null);
         this._compilations = /* @__PURE__ */ new Set();
         this._loading = {};
         this._cache = /* @__PURE__ */ new Map();
@@ -34910,7 +35023,7 @@ ${contextFunctionCode}`,
       const schemaId = location.schemaId || "";
       const jsonPointer = location.jsonPointer || "";
       const fullPath = `${schemaId}#${jsonPointer}`;
-      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema)) {
+      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema) || schemaId !== "") {
         const functionName = generateFuncName(context);
         context.functionsNamesBySchema.set(schema, functionName);
         const schemaRef = getSafeSchemaRef(context, location);
@@ -34957,7 +35070,7 @@ ${contextFunctionCode}`,
       const schemaId = location.schemaId || "";
       const jsonPointer = location.jsonPointer || "";
       const fullPath = `${schemaId}#${jsonPointer}`;
-      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema)) {
+      if (context.recursivePaths.has(fullPath) || context.buildingSet.has(schema) || schemaId !== "") {
         const functionName = generateFuncName(context);
         context.functionsNamesBySchema.set(schema, functionName);
         const schemaRef = getSafeSchemaRef(context, location);
@@ -39383,9 +39496,10 @@ var require_safe_regex2 = __commonJS({
         if (starHeight > 1) return false;
         if (opts.reps > opts.limit) return false;
       }
-      if (node.options) {
-        for (i = 0, len = node.options.length; i < len; i++) {
-          ok = walk({ stack: node.options[i] }, opts, starHeight);
+      const options = node.options || node.value?.options;
+      if (options) {
+        for (i = 0, len = options.length; i < len; i++) {
+          ok = walk({ stack: options[i] }, opts, starHeight);
           if (!ok) return false;
         }
       }
@@ -39729,7 +39843,7 @@ var require_handler_storage = __commonJS({
             lines.push(`if (derivedConstraints.${constraint} !== undefined) return null`);
           }
         }
-        lines.push("return this.handlers[Math.floor(Math.log2(candidates))]");
+        lines.push("return this.handlers[31 - Math.clz32(candidates)]");
         this._getHandlerMatchingConstraints = new Function("derivedConstraints", lines.join("\n"));
       }
     };
@@ -40363,6 +40477,7 @@ var require_find_my_way = __commonJS({
       this.ignoreTrailingSlash = opts.ignoreTrailingSlash || false;
       this.ignoreDuplicateSlashes = opts.ignoreDuplicateSlashes || false;
       this.maxParamLength = opts.maxParamLength || 100;
+      this.onMaxParamLength = opts.onMaxParamLength || null;
       this.allowUnsafeRegex = opts.allowUnsafeRegex || false;
       this.constrainer = new Constrainer(opts.constraints);
       this.useSemicolonDelimiter = opts.useSemicolonDelimiter || false;
@@ -40751,6 +40866,7 @@ var require_find_my_way = __commonJS({
       const params = [];
       const pathLen = path.length;
       const brothersNodesStack = [];
+      let maxParamLengthExceeded = false;
       while (true) {
         if (pathIndex === pathLen && currentNode.isLeafNode) {
           const handle = currentNode.handlerStorage.getMatchingHandler(derivedConstraints);
@@ -40766,6 +40882,9 @@ var require_find_my_way = __commonJS({
         let node = currentNode.getNextNode(path, pathIndex, brothersNodesStack, params.length);
         if (node === null) {
           if (brothersNodesStack.length === 0) {
+            if (maxParamLengthExceeded && this.onMaxParamLength) {
+              return this._onMaxParamLength(originPath);
+            }
             return null;
           }
           const brotherNodeState = brothersNodesStack.pop();
@@ -40797,17 +40916,31 @@ var require_find_my_way = __commonJS({
         }
         if (currentNode.isRegex) {
           const matchedParameters = currentNode.regex.exec(param);
-          if (matchedParameters === null) continue;
+          if (matchedParameters === null) {
+            node = null;
+            continue;
+          }
+          let regexMaxParamLengthExceeded = false;
           for (let i = 1; i < matchedParameters.length; i++) {
             const matchedParam = matchedParameters[i];
             if (matchedParam.length > maxParamLength) {
-              return null;
+              regexMaxParamLengthExceeded = true;
+              break;
             }
-            params.push(matchedParam);
+          }
+          if (regexMaxParamLengthExceeded) {
+            maxParamLengthExceeded = true;
+            node = null;
+            continue;
+          }
+          for (let i = 1; i < matchedParameters.length; i++) {
+            params.push(matchedParameters[i]);
           }
         } else {
           if (param.length > maxParamLength) {
-            return null;
+            maxParamLengthExceeded = true;
+            node = null;
+            continue;
           }
           params.push(param);
         }
@@ -40836,6 +40969,17 @@ var require_find_my_way = __commonJS({
       const onBadUrl = this.onBadUrl;
       return {
         handler: (req, res, ctx) => onBadUrl(path, req, res),
+        params: {},
+        store: null
+      };
+    };
+    Router.prototype._onMaxParamLength = function(path) {
+      if (this.onMaxParamLength === null) {
+        return null;
+      }
+      const onMaxParamLength = this.onMaxParamLength;
+      return {
+        handler: (req, res, ctx) => onMaxParamLength(path, req, res),
         params: {},
         store: null
       };
@@ -62618,7 +62762,23 @@ function osUsername() {
 // packages/config/src/env.ts
 if (!process.env.VERCEL) {
   const { config } = await Promise.resolve().then(() => __toESM(require_main(), 1));
-  config();
+  const { existsSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const startDir = dirname(fileURLToPath(import.meta.url));
+  let cursor = startDir;
+  let envPath;
+  for (let i = 0; i < 8; i++) {
+    const candidate = resolve(cursor, ".env");
+    if (existsSync(candidate)) {
+      envPath = candidate;
+      break;
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  config(envPath ? { path: envPath } : void 0);
 }
 var envSchema = external_exports.object({
   NODE_ENV: external_exports.enum(["development", "test", "production"]).default("development"),
@@ -62638,19 +62798,26 @@ var envSchema = external_exports.object({
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
-  SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
+  // Nodemailer accepts both bare emails ("a@b.com") and addresses with a
+  // display name ("Name <a@b.com>"), so we only require a non-empty string.
+  SMTP_FROM: external_exports.string().min(3).default("no-reply@elkatech.local"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: external_exports.string().optional(),
-  GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional()
+  GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional(),
+  FIREBASE_PROJECT_ID: external_exports.string().optional(),
+  FIREBASE_CLIENT_EMAIL: external_exports.string().optional(),
+  FIREBASE_PRIVATE_KEY: external_exports.string().optional()
 });
 var cachedEnv = null;
 function getEnv() {
   if (!cachedEnv) {
     cachedEnv = envSchema.parse(process.env);
     if (process.env.VERCEL === "1" && process.env.VERCEL_URL) {
-      const publicUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL}`;
+      const isProduction = process.env.VERCEL_ENV === "production";
+      const deploymentHost = isProduction ? process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL : process.env.VERCEL_URL;
+      const publicUrl = `https://${deploymentHost}`;
       cachedEnv.APP_BASE_URL = publicUrl;
       cachedEnv.GATEWAY_URL = `${publicUrl}/api`;
       cachedEnv.AUTH_SERVICE_URL = `${publicUrl}/api/internal-auth`;
@@ -62726,12 +62893,19 @@ var catalogCategorySchema = external_exports.object({
   intro: external_exports.string(),
   products: external_exports.array(catalogProductSchema)
 });
+var approvalStatusSchema = external_exports.enum([
+  "pending_approval",
+  "approved",
+  "rejected",
+  "suspended"
+]);
 var authUserSchema = external_exports.object({
   id: external_exports.string(),
   email: external_exports.string().email(),
   displayName: external_exports.string(),
   role: roleSchema,
   emailVerified: external_exports.boolean(),
+  approvalStatus: approvalStatusSchema,
   createdAt: external_exports.string()
 });
 var productSnapshotSchema = external_exports.object({
@@ -62824,6 +62998,36 @@ var oauthFindOrCreateInputSchema = external_exports.object({
   displayName: external_exports.string().min(1),
   inviteToken: external_exports.string().optional()
 });
+var firebaseSessionInputSchema = external_exports.object({
+  idToken: external_exports.string().min(20)
+});
+var firebaseSessionRequestSchema = external_exports.object({
+  firebaseUid: external_exports.string().min(1),
+  email: external_exports.string().email(),
+  emailVerified: external_exports.boolean(),
+  displayName: external_exports.string().min(1),
+  provider: external_exports.enum(["password", "google.com", "other"]).default("other"),
+  pictureUrl: external_exports.string().url().optional()
+});
+var approvalActionInputSchema = external_exports.object({
+  reason: external_exports.string().max(500).optional()
+});
+var serviceHeartbeatSchema = external_exports.object({
+  service: external_exports.string(),
+  status: external_exports.enum(["healthy", "degraded", "down"]),
+  latencyMs: external_exports.number().nullable(),
+  checkedAt: external_exports.string(),
+  details: external_exports.object({
+    version: external_exports.string().optional(),
+    environment: external_exports.string().optional(),
+    message: external_exports.string().optional()
+  }).optional()
+});
+var adminApprovalErrorCodeSchema = external_exports.enum([
+  "USER_PENDING_APPROVAL",
+  "USER_REJECTED",
+  "USER_SUSPENDED"
+]);
 var domainEventTypeSchema = external_exports.enum([
   "user.registered",
   "user.email_verified",
@@ -62854,7 +63058,11 @@ app.addHook("onRequest", async (request, reply) => {
     reply.code(401).send({ message: "Unauthorized" });
   }
 });
-app.get("/health", async () => ({ ok: true, service: "catalog" }));
+app.get("/health", async () => ({
+  ok: true,
+  service: "catalog",
+  environment: env.NODE_ENV
+}));
 app.get("/categories", async () => {
   const redis = getRedis();
   const cacheKey = "catalog:categories";

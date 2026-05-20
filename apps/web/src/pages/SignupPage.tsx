@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import type { AuthUser } from "@elkatech/contracts";
 import AuthPageShell from "@/components/AuthPageShell";
 import GoogleIcon from "@/components/GoogleIcon";
-import { apiRequest } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
+import {
+  firebaseSignInWithGoogle,
+  firebaseSignUpEmail,
+  getFirebaseIdToken,
+  isFirebaseConfigured,
+} from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -14,8 +21,29 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   google_email_unverified: "Your Google email is not verified. Please verify it with Google first.",
 };
 
+function describeFirebaseError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/auth\/email-already-in-use/i.test(message)) {
+    return "An account with that email already exists. Try signing in instead.";
+  }
+  if (/auth\/weak-password/i.test(message)) {
+    return "Please choose a stronger password (at least 8 characters).";
+  }
+  if (/auth\/invalid-email/i.test(message)) {
+    return "Please enter a valid email address.";
+  }
+  if (/auth\/popup-closed-by-user/i.test(message)) {
+    return "Google sign-up was cancelled.";
+  }
+  if (/auth\/network-request-failed/i.test(message)) {
+    return "Network error. Please check your connection and try again.";
+  }
+  return "Sign-up failed. Please try again.";
+}
+
 const SignupPage = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const inviteToken = searchParams.get("inviteToken") ?? undefined;
   const inviteRole = searchParams.get("role");
@@ -27,6 +55,7 @@ const SignupPage = () => {
   });
 
   const oauthError = searchParams.get("error");
+  const firebaseReady = isFirebaseConfigured();
 
   useEffect(() => {
     if (oauthError && OAUTH_ERROR_MESSAGES[oauthError]) {
@@ -41,30 +70,90 @@ const SignupPage = () => {
     return "Create your account";
   }, [inviteRole, inviteToken]);
 
+  async function exchangeFirebaseToken(idToken: string): Promise<AuthUser> {
+    const result = await apiRequest<{ user: AuthUser }>("/api/auth/firebase/session", {
+      method: "POST",
+      body: JSON.stringify({ idToken }),
+    });
+    return result.user;
+  }
+
+  function landingForRoleAndStatus(user: AuthUser): string {
+    if (user.role !== "customer") {
+      return user.role === "admin" ? "/app/queue" : "/app/queue";
+    }
+    return "/app/requests";
+  }
+
   const signupMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ message: string }>("/api/auth/signup", {
-        method: "POST",
-        body: JSON.stringify({
-          ...form,
-          inviteToken,
-        }),
-      }),
-    onSuccess: ({ message }) => {
-      toast.success(message);
-      navigate(`/login?email=${encodeURIComponent(form.email)}`);
+    mutationFn: async () => {
+      // For invite-token signups the legacy backend flow handles role
+      // assignment, so we keep using that route. For self-service
+      // signups we use Firebase Auth + the session bridge.
+      if (inviteToken || !firebaseReady) {
+        const result = await apiRequest<{ message: string }>("/api/auth/signup", {
+          method: "POST",
+          body: JSON.stringify({ ...form, inviteToken }),
+        });
+        return { kind: "legacy" as const, message: result.message };
+      }
+
+      const credential = await firebaseSignUpEmail(form.email, form.password);
+      const idToken = await getFirebaseIdToken(credential.user);
+      const user = await exchangeFirebaseToken(idToken);
+      return { kind: "firebase" as const, user };
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onSuccess: async (result) => {
+      if (result.kind === "legacy") {
+        toast.success(result.message);
+        navigate(`/login?email=${encodeURIComponent(form.email)}`);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["session"] });
+      toast.success("Account created. An administrator will activate your account shortly.");
+      navigate(landingForRoleAndStatus(result.user));
     },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error(describeFirebaseError(error));
+    },
+  });
+
+  const googleSignupMutation = useMutation({
+    mutationFn: async () => {
+      if (firebaseReady) {
+        const credential = await firebaseSignInWithGoogle();
+        const idToken = await getFirebaseIdToken(credential.user);
+        return exchangeFirebaseToken(idToken);
+      }
+      const params = new URLSearchParams();
+      if (inviteToken) params.set("inviteToken", inviteToken);
+      const qs = params.toString();
+      window.location.href = `/api/auth/google/start${qs ? `?${qs}` : ""}`;
+      return null;
+    },
+    onSuccess: async (user) => {
+      if (!user) return;
+      await queryClient.invalidateQueries({ queryKey: ["session"] });
+      toast.success("Account created with Google.");
+      navigate(landingForRoleAndStatus(user));
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        toast.error(error.message);
+        return;
+      }
+      toast.error(describeFirebaseError(error));
+    },
+    onSettled: () => setGoogleLoading(false),
   });
 
   const handleGoogleSignup = () => {
     setGoogleLoading(true);
-    const params = new URLSearchParams();
-    if (inviteToken) params.set("inviteToken", inviteToken);
-    const qs = params.toString();
-    window.location.href = `/api/auth/google/start${qs ? `?${qs}` : ""}`;
+    googleSignupMutation.mutate();
   };
 
   return (
@@ -80,11 +169,11 @@ const SignupPage = () => {
           size="lg"
           className="relative w-full gap-3 rounded-xl border-border/60 bg-background text-foreground shadow-sm transition-all hover:border-accent/40 hover:bg-accent/5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-accent/50"
           onClick={handleGoogleSignup}
-          disabled={googleLoading}
+          disabled={googleLoading || googleSignupMutation.isPending}
           aria-label="Continue with Google"
         >
           <GoogleIcon />
-          {googleLoading ? "Redirecting…" : "Continue with Google"}
+          {googleLoading ? "Connecting…" : "Continue with Google"}
         </Button>
 
         {/* Divider */}
