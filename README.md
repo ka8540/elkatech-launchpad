@@ -34,7 +34,8 @@ This repository contains:
 | Styling | Tailwind CSS, CSS custom properties, shadcn/Radix UI primitives |
 | Motion | Framer Motion for controlled UI animation |
 | Backend | Fastify services, Zod validation |
-| Data | PostgreSQL, optional Redis-compatible cache |
+| Identity | Firebase Authentication (email/password + Google), Firebase Admin SDK on the server |
+| Data | PostgreSQL (local Docker or hosted via Neon), optional Redis-compatible cache |
 | Email | Nodemailer, Mailpit for local testing |
 | Tooling | npm workspaces, TypeScript, Vitest, ESLint |
 | Deployment config | Vercel configuration files and prebuilt serverless handlers |
@@ -221,9 +222,12 @@ All non-health internal endpoints expect `x-internal-token`.
 | `StableReveal` | Fade/blur reveal wrapper that avoids transform-based entrance motion |
 | `ThemeProvider` / `ThemeToggle` | Persisted system/light/dark theme control |
 | `ProtectedRoute` | Session gate plus role-based route fallback |
-| `PortalShell` | Shared portal layout and navigation |
+| `PortalShell` | Collapsible sidebar shell with theme selector, profile block, and logout |
 | `StatusBadge` | Request status presentation |
 | `IntroAnimation` | Initial branded loader animation |
+| `ApprovalStateCard` | Polished pending/rejected/suspended state surfaced to blocked customers |
+| `VerifyEmailNotice` | Friendly banner shown to signed-in users whose email is not yet verified |
+| `AdminDashboardPage` | `/app/admin` — approval counts, request load, recent activity, live heartbeats |
 
 ## Environment Variables
 
@@ -563,15 +567,57 @@ erDiagram
 
 ## Deployment Notes
 
+### Architecture
+
 - Deployment is explicitly configured for Vercel through `vercel.json` and `apps/web/vercel.json`.
 - Root Vercel output is `apps/web/dist`.
 - Root rewrites send `/api/*` traffic to handlers in `api/*.mjs` and all remaining routes to `index.html`.
-- `scripts/bundle-api.cjs` builds those serverless handlers from service entry points.
-- `packages/config/src/env.ts` rewrites service URLs automatically when `VERCEL=1`.
+- `scripts/bundle-api.cjs` builds those serverless handlers from service entry points. Re-run it before pushing if you change any backend service source.
+- `packages/config/src/env.ts` rewrites service URLs automatically when `VERCEL=1`. Preview deployments route internal traffic to their own `VERCEL_URL`; production uses `VERCEL_PROJECT_PRODUCTION_URL`. Each deployment talks to itself end-to-end.
+- `packages/config/src/env.ts` walks the directory tree from the package location to find the workspace-root `.env`, so every service (each launched from its own workspace folder) loads the same env file.
+- The Vite app reads env vars from the workspace root via `envDir`, so `VITE_FIREBASE_*` values stay in one `.env` shared with the backend.
 
-To be confirmed:
+### Production setup on Vercel
 
-- The root `package.json` does not currently expose a script that runs `scripts/bundle-api.cjs`, even though checked-in `api/*.mjs` handlers and Vercel rewrites depend on those bundles. Confirm whether handler bundling is intentionally manual or should become part of the deployment pipeline.
+1. **Connect the GitHub repo** to a new Vercel project. Set `Framework Preset: Vite`, leave Build Command and Output Directory as defined in `vercel.json`.
+2. **Add Firebase env vars** under **Settings → Environment Variables** for the **Production** and **Preview** scopes:
+   - Frontend (web): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`.
+   - Backend (Admin SDK): `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`. The private key may contain escaped `\n` sequences; keep them literal — the platform converts them at load time.
+3. **Add your production domain to Firebase Authorized Domains** (Firebase Console → Authentication → Settings → Authorized domains). Add both the production URL (`<project>.vercel.app`) and the branch URL pattern if you want to test on previews.
+4. **Set the shared internal token**: `INTERNAL_SERVICE_TOKEN` to a strong random value (it gates calls between the gateway and the internal services).
+5. **SMTP**: set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`. `SMTP_FROM` accepts either a bare email (`a@b.com`) or the standard display-name form (`"Brand <a@b.com>"`).
+6. **Bootstrap admin** values: `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` so `npm run db:bootstrap-admin` provisions the same account locally and in production.
+7. **Disable Vercel Deployment Protection for previews** (or set it to "Only Production Deployments"). Server-to-server calls between our own functions can't pass the SSO wall, so leaving Standard Protection on every deployment blocks internal routing.
+
+### Production database with Neon
+
+Neon is the recommended hosted Postgres. Free tier covers initial usage with no credit card.
+
+1. Create a Neon project at https://console.neon.tech (any region close to your Vercel functions).
+2. In Vercel → **Storage** tab → connect the Neon database to your project.
+3. In the connect dialog:
+   - **Custom Environment Variable Prefix**: set this to `POSTGRES` (not the default `STORAGE`). The codebase reads `POSTGRES_URL` directly.
+   - **Create Database Branch For Deployment**: uncheck **both** Preview and Production. Otherwise Neon spawns a fresh empty branch for every deployment and migrations only land on `main`.
+   - Environments: Production + Preview.
+4. After connecting, Vercel injects `POSTGRES_URL`, `POSTGRES_USER`, etc. Confirm `POSTGRES_URL` exists under **Settings → Environment Variables**.
+5. **Run migrations against the production database** from your laptop, one-time:
+
+   ```sh
+   nvm use 22
+   POSTGRES_URL='<paste-the-neon-pooled-url>' npm run db:migrate
+   POSTGRES_URL='<paste-the-neon-pooled-url>' npm run db:seed
+   POSTGRES_URL='<paste-the-neon-pooled-url>' npm run db:bootstrap-admin
+   ```
+
+   - Quote the URL in single quotes (`'...'`) because it contains `&` in the query string.
+   - `db:bootstrap-admin` also provisions the admin user in Firebase Auth when the Admin SDK env vars are set.
+6. Trigger a new deployment so the function picks up the env vars: push any commit, or use Vercel's **Redeploy** with "Use existing build cache" off.
+
+### Deploying changes
+
+- Pushes to `main` deploy to production automatically.
+- Pushes to feature branches create preview deployments on dedicated URLs. Each preview shares the production database when branch-per-deployment is off (see Neon step 3).
+- After modifying any backend service in `services/*`, re-run `node scripts/bundle-api.cjs` so the committed `api/*.mjs` bundles match. Vercel uses the committed bundles directly — it does not rebundle.
 
 ## Troubleshooting
 
@@ -584,6 +630,11 @@ To be confirmed:
 | Product images do not load | Check the path under `apps/web/public/images` and the corresponding product `images` array. |
 | Theme does not change | Check the `elkatech-ui-theme` localStorage value and root `light`/`dark` class. |
 | Portal mutations return `403` | Confirm login state, CSRF cookie/header, email verification, and role permissions. |
+| Customer gets `USER_PENDING_APPROVAL` on `POST /api/requests` | Sign in as admin and approve the user on `/app/users`. New public signups start as `pending_approval`. |
+| Firebase sign-in returns `Invalid Firebase credential` from the gateway | Backend Admin SDK env vars are missing or malformed. Check `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and the formatting of `FIREBASE_PRIVATE_KEY` (escaped `\n` is OK; do not strip the wrapping quotes in `.env`). |
+| Preview deployment hits `column "firebase_uid" does not exist` | Neon's branch-per-deployment is creating a fresh DB per push. Disable branch-per-deployment, or migrate the specific preview branch's connection string. |
+| Internal service calls return Vercel's "Authentication Required" HTML page | Vercel Deployment Protection is blocking server-to-server calls. Set it to "Only Production Deployments" or disable it. |
+| `tsx`/`concurrently` errors with `Unexpected token {` or `Unexpected token ?` | Active Node version is too old. Run `nvm use 22` (or set `nvm alias default 22` so every new terminal starts on Node 22). |
 | Lint fails | The repo currently has pre-existing lint errors in shared UI/config files; isolate whether your change introduced anything new. |
 
 ## Contribution Workflow
