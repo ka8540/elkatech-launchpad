@@ -5374,42 +5374,17 @@ var require_on_exit_leak_free = __commonJS({
 var require_package = __commonJS({
   "node_modules/thread-stream/package.json"(exports, module) {
     module.exports = {
-      _from: "thread-stream@^4.0.0",
-      _id: "thread-stream@4.2.0",
-      _inBundle: false,
-      _integrity: "sha512-e2zZ96wSChazBsbENf/Pcm/4swHt2cEKQ92rhUjkL9GCKiTDJIaTBenjE/m9DXi0QBmTMDkFDdOomUy20A1tDQ==",
-      _location: "/thread-stream",
-      _phantomChildren: {},
-      _requested: {
-        type: "range",
-        registry: true,
-        raw: "thread-stream@^4.0.0",
-        name: "thread-stream",
-        escapedName: "thread-stream",
-        rawSpec: "^4.0.0",
-        saveSpec: null,
-        fetchSpec: "^4.0.0"
+      name: "thread-stream",
+      version: "4.2.0",
+      description: "A streaming way to send data to a Node.js Worker Thread",
+      main: "index.js",
+      types: "index.d.ts",
+      engines: {
+        node: ">=20"
       },
-      _requiredBy: [
-        "/pino"
-      ],
-      _resolved: "https://registry.npmjs.org/thread-stream/-/thread-stream-4.2.0.tgz",
-      _shasum: "054063e93baab22363d05b784d6c7e439230cac7",
-      _spec: "thread-stream@^4.0.0",
-      _where: "/Users/klsterfx/Desktop/elkatech-launchpad/node_modules/pino",
-      author: {
-        name: "Matteo Collina",
-        email: "hello@matteocollina.com"
-      },
-      bugs: {
-        url: "https://github.com/mcollina/thread-stream/issues"
-      },
-      bundleDependencies: false,
       dependencies: {
         "real-require": "^1.0.0"
       },
-      deprecated: false,
-      description: "A streaming way to send data to a Node.js Worker Thread",
       devDependencies: {
         "@types/node": "^25.0.2",
         "@yao-pkg/pkg": "^6.0.0",
@@ -5423,23 +5398,6 @@ var require_package = __commonJS({
         "ts-node": "^10.8.0",
         typescript: "~5.7.3"
       },
-      engines: {
-        node: ">=20"
-      },
-      homepage: "https://github.com/mcollina/thread-stream#readme",
-      keywords: [
-        "worker",
-        "thread",
-        "threads",
-        "stream"
-      ],
-      license: "MIT",
-      main: "index.js",
-      name: "thread-stream",
-      repository: {
-        type: "git",
-        url: "git+https://github.com/mcollina/thread-stream.git"
-      },
       scripts: {
         build: "tsc --noEmit",
         lint: "eslint",
@@ -5448,17 +5406,22 @@ var require_package = __commonJS({
         "test:yarn": 'npm run transpile && borp --pattern "test/*.test.js"',
         transpile: "sh ./test/ts/transpile.sh"
       },
-      types: "index.d.ts",
-      version: "4.2.0",
-      warnings: [
-        {
-          code: "ENOTSUP",
-          required: {
-            node: ">=20"
-          },
-          pkgid: "thread-stream@4.2.0"
-        }
-      ]
+      repository: {
+        type: "git",
+        url: "git+https://github.com/mcollina/thread-stream.git"
+      },
+      keywords: [
+        "worker",
+        "thread",
+        "threads",
+        "stream"
+      ],
+      author: "Matteo Collina <hello@matteocollina.com>",
+      license: "MIT",
+      bugs: {
+        url: "https://github.com/mcollina/thread-stream/issues"
+      },
+      homepage: "https://github.com/mcollina/thread-stream#readme"
     };
   }
 });
@@ -46646,50 +46609,11 @@ var require_rate_limit = __commonJS({
 var require_package2 = __commonJS({
   "node_modules/dotenv/package.json"(exports, module) {
     module.exports = {
-      _from: "dotenv@16.6.1",
-      _id: "dotenv@16.6.1",
-      _inBundle: false,
-      _integrity: "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==",
-      _location: "/dotenv",
-      _phantomChildren: {},
-      _requested: {
-        type: "version",
-        registry: true,
-        raw: "dotenv@16.6.1",
-        name: "dotenv",
-        escapedName: "dotenv",
-        rawSpec: "16.6.1",
-        saveSpec: null,
-        fetchSpec: "16.6.1"
-      },
-      _requiredBy: [
-        "/@elkatech/config"
-      ],
-      _resolved: "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz",
-      _shasum: "773f0e69527a8315c7285d5ee73c4459d20a8020",
-      _spec: "dotenv@16.6.1",
-      _where: "/Users/klsterfx/Desktop/elkatech-launchpad/packages/config",
-      browser: {
-        fs: false
-      },
-      bugs: {
-        url: "https://github.com/motdotla/dotenv/issues"
-      },
-      bundleDependencies: false,
-      deprecated: false,
+      name: "dotenv",
+      version: "16.6.1",
       description: "Loads environment variables from .env file",
-      devDependencies: {
-        "@types/node": "^18.11.3",
-        decache: "^4.6.2",
-        sinon: "^14.0.1",
-        standard: "^17.0.0",
-        "standard-version": "^9.5.0",
-        tap: "^19.2.0",
-        typescript: "^4.8.4"
-      },
-      engines: {
-        node: ">=12"
-      },
+      main: "lib/main.js",
+      types: "lib/main.d.ts",
       exports: {
         ".": {
           types: "./lib/main.d.ts",
@@ -46704,8 +46628,21 @@ var require_package2 = __commonJS({
         "./lib/cli-options.js": "./lib/cli-options.js",
         "./package.json": "./package.json"
       },
-      funding: "https://dotenvx.com",
+      scripts: {
+        "dts-check": "tsc --project tests/types/tsconfig.json",
+        lint: "standard",
+        pretest: "npm run lint && npm run dts-check",
+        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
+        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov",
+        prerelease: "npm test",
+        release: "standard-version"
+      },
+      repository: {
+        type: "git",
+        url: "git://github.com/motdotla/dotenv.git"
+      },
       homepage: "https://github.com/motdotla/dotenv#readme",
+      funding: "https://dotenvx.com",
       keywords: [
         "dotenv",
         "env",
@@ -46715,33 +46652,23 @@ var require_package2 = __commonJS({
         "config",
         "settings"
       ],
+      readmeFilename: "README.md",
       license: "BSD-2-Clause",
-      main: "lib/main.js",
-      name: "dotenv",
-      repository: {
-        type: "git",
-        url: "git://github.com/motdotla/dotenv.git"
+      devDependencies: {
+        "@types/node": "^18.11.3",
+        decache: "^4.6.2",
+        sinon: "^14.0.1",
+        standard: "^17.0.0",
+        "standard-version": "^9.5.0",
+        tap: "^19.2.0",
+        typescript: "^4.8.4"
       },
-      scripts: {
-        "dts-check": "tsc --project tests/types/tsconfig.json",
-        lint: "standard",
-        prerelease: "npm test",
-        pretest: "npm run lint && npm run dts-check",
-        release: "standard-version",
-        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
-        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov"
+      engines: {
+        node: ">=12"
       },
-      types: "lib/main.d.ts",
-      version: "16.6.1",
-      warnings: [
-        {
-          code: "ENOTSUP",
-          required: {
-            node: ">=12"
-          },
-          pkgid: "dotenv@16.6.1"
-        }
-      ]
+      browser: {
+        fs: false
+      }
     };
   }
 });
@@ -71193,108 +71120,121 @@ var require_credential_internal = __commonJS({
 var require_package3 = __commonJS({
   "node_modules/firebase-admin/package.json"(exports, module) {
     module.exports = {
-      _from: "firebase-admin@^12.7.0",
-      _id: "firebase-admin@12.7.0",
-      _inBundle: false,
-      _integrity: "sha512-raFIrOyTqREbyXsNkSHyciQLfv8AUZazehPaQS1lZBSCDYW74FYXU0nQZa3qHI4K+hawohlDbywZ4+qce9YNxA==",
-      _location: "/firebase-admin",
-      _phantomChildren: {},
-      _requested: {
-        type: "range",
-        registry: true,
-        raw: "firebase-admin@^12.7.0",
-        name: "firebase-admin",
-        escapedName: "firebase-admin",
-        rawSpec: "^12.7.0",
-        saveSpec: null,
-        fetchSpec: "^12.7.0"
-      },
-      _requiredBy: [
-        "#USER",
-        "/"
-      ],
-      _resolved: "https://registry.npmjs.org/firebase-admin/-/firebase-admin-12.7.0.tgz",
-      _shasum: "586c9ed852c4bb2d4d72f0d52c1c48a2b6dee793",
-      _spec: "firebase-admin@^12.7.0",
-      _where: "/Users/klsterfx/Desktop/elkatech-launchpad",
-      author: {
-        name: "Firebase",
-        email: "firebase-support@google.com",
-        url: "https://firebase.google.com/"
-      },
-      bugs: {
-        url: "https://github.com/firebase/firebase-admin-node/issues"
-      },
-      bundleDependencies: false,
-      dependencies: {
-        "@fastify/busboy": "^3.0.0",
-        "@firebase/database-compat": "1.0.8",
-        "@firebase/database-types": "1.0.5",
-        "@google-cloud/firestore": "^7.7.0",
-        "@google-cloud/storage": "^7.7.0",
-        "@types/node": "^22.0.1",
-        "farmhash-modern": "^1.1.0",
-        jsonwebtoken: "^9.0.0",
-        "jwks-rsa": "^3.1.0",
-        "node-forge": "^1.3.1",
-        uuid: "^10.0.0"
-      },
-      deprecated: false,
+      name: "firebase-admin",
+      version: "12.7.0",
       description: "Firebase admin SDK for Node.js",
-      devDependencies: {
-        "@firebase/api-documenter": "^0.4.0",
-        "@firebase/app-compat": "^0.2.1",
-        "@firebase/auth-compat": "^0.4.1",
-        "@firebase/auth-types": "^0.12.0",
-        "@microsoft/api-extractor": "^7.11.2",
-        "@types/bcrypt": "^5.0.0",
-        "@types/chai": "^4.0.0",
-        "@types/chai-as-promised": "^7.1.0",
-        "@types/firebase-token-generator": "^2.0.28",
-        "@types/jsonwebtoken": "8.5.1",
-        "@types/lodash": "^4.14.104",
-        "@types/minimist": "^1.2.2",
-        "@types/mocha": "^10.0.0",
-        "@types/nock": "^11.1.0",
-        "@types/request": "^2.47.0",
-        "@types/request-promise": "^4.1.41",
-        "@types/sinon": "^17.0.2",
-        "@types/sinon-chai": "^3.0.0",
-        "@types/uuid": "^10.0.0",
-        "@typescript-eslint/eslint-plugin": "^5.62.0",
-        "@typescript-eslint/parser": "^5.62.0",
-        bcrypt: "^5.0.0",
-        chai: "^4.2.0",
-        "chai-as-promised": "^7.0.0",
-        "chai-exclude": "^2.1.0",
-        chalk: "^4.1.1",
-        "child-process-promise": "^2.2.1",
-        del: "^6.0.0",
-        eslint: "^8.12.0",
-        "firebase-token-generator": "^2.0.0",
-        gulp: "^5.0.0",
-        "gulp-filter": "^7.0.0",
-        "gulp-header": "^2.0.9",
-        "gulp-typescript": "^5.0.1",
-        "http-message-parser": "^0.0.34",
-        lodash: "^4.17.15",
-        minimist: "^1.2.6",
-        mocha: "^10.0.0",
-        mz: "^2.7.0",
-        nock: "^13.0.0",
-        "npm-run-all": "^4.1.5",
-        nyc: "^17.0.0",
-        request: "^2.75.0",
-        "request-promise": "^4.1.1",
-        "run-sequence": "^2.2.1",
-        sinon: "^18.0.0",
-        "sinon-chai": "^3.0.0",
-        "ts-node": "^10.2.0",
-        typescript: "5.1.6",
-        yargs: "^17.0.1"
-      },
+      author: "Firebase <firebase-support@google.com> (https://firebase.google.com/)",
+      license: "Apache-2.0",
+      homepage: "https://firebase.google.com/",
       engines: {
         node: ">=14"
+      },
+      scripts: {
+        build: "gulp build",
+        "build:tests": "gulp compile_test",
+        prepare: "npm run build && npm run esm-wrap",
+        lint: "run-p lint:src lint:test",
+        test: "run-s lint test:unit",
+        integration: "run-s build test:integration",
+        "test:unit": "mocha test/unit/*.spec.ts --require ts-node/register",
+        "test:integration": "mocha test/integration/*.ts --slow 5000 --timeout 20000 --require ts-node/register",
+        "test:coverage": "nyc npm run test:unit",
+        "lint:src": "eslint src/ --ext .ts",
+        "lint:test": "eslint test/ --ext .ts",
+        apidocs: "run-s api-extractor:local api-documenter",
+        "api-extractor": "node generate-reports.js",
+        "api-extractor:local": "npm run build && node generate-reports.js --local",
+        "esm-wrap": "node generate-esm-wrapper.js",
+        "api-documenter": "run-s api-documenter:markdown api-documenter:toc api-documenter:post",
+        "api-documenter:markdown": "api-documenter-fire markdown --input temp --output docgen/markdown -s --project admin",
+        "api-documenter:toc": "api-documenter-fire toc --input temp --output docgen/markdown -p /docs/reference/admin/node -s",
+        "api-documenter:post": "node docgen/post-process.js"
+      },
+      nyc: {
+        extension: [
+          ".ts"
+        ],
+        include: [
+          "src"
+        ],
+        exclude: [
+          "**/*.d.ts"
+        ],
+        all: true
+      },
+      keywords: [
+        "admin",
+        "database",
+        "Firebase",
+        "realtime",
+        "authentication"
+      ],
+      repository: {
+        type: "git",
+        url: "https://github.com/firebase/firebase-admin-node"
+      },
+      main: "lib/index.js",
+      files: [
+        "lib/",
+        "LICENSE",
+        "README.md",
+        "package.json"
+      ],
+      types: "./lib/index.d.ts",
+      typesVersions: {
+        "*": {
+          app: [
+            "lib/app"
+          ],
+          "app-check": [
+            "lib/app-check"
+          ],
+          auth: [
+            "lib/auth"
+          ],
+          eventarc: [
+            "lib/eventarc"
+          ],
+          extensions: [
+            "lib/extensions"
+          ],
+          database: [
+            "lib/database"
+          ],
+          "data-connect": [
+            "lib/data-connect"
+          ],
+          firestore: [
+            "lib/firestore"
+          ],
+          functions: [
+            "lib/functions"
+          ],
+          installations: [
+            "lib/installations"
+          ],
+          "instance-id": [
+            "lib/instance-id"
+          ],
+          "machine-learning": [
+            "lib/machine-learning"
+          ],
+          messaging: [
+            "lib/messaging"
+          ],
+          "project-management": [
+            "lib/project-management"
+          ],
+          "remote-config": [
+            "lib/remote-config"
+          ],
+          "security-rules": [
+            "lib/security-rules"
+          ],
+          storage: [
+            "lib/storage"
+          ]
+        }
       },
       exports: {
         ".": "./lib/index.js",
@@ -71384,137 +71324,73 @@ var require_package3 = __commonJS({
           import: "./lib/esm/storage/index.js"
         }
       },
-      files: [
-        "lib/",
-        "LICENSE",
-        "README.md",
-        "package.json"
-      ],
-      homepage: "https://firebase.google.com/",
-      keywords: [
-        "admin",
-        "database",
-        "Firebase",
-        "realtime",
-        "authentication"
-      ],
-      license: "Apache-2.0",
-      main: "lib/index.js",
-      name: "firebase-admin",
-      nyc: {
-        extension: [
-          ".ts"
-        ],
-        include: [
-          "src"
-        ],
-        exclude: [
-          "**/*.d.ts"
-        ],
-        all: true
+      dependencies: {
+        "@fastify/busboy": "^3.0.0",
+        "@firebase/database-compat": "1.0.8",
+        "@firebase/database-types": "1.0.5",
+        "@types/node": "^22.0.1",
+        "farmhash-modern": "^1.1.0",
+        jsonwebtoken: "^9.0.0",
+        "jwks-rsa": "^3.1.0",
+        "node-forge": "^1.3.1",
+        uuid: "^10.0.0"
       },
       optionalDependencies: {
         "@google-cloud/firestore": "^7.7.0",
         "@google-cloud/storage": "^7.7.0"
       },
-      repository: {
-        type: "git",
-        url: "git+https://github.com/firebase/firebase-admin-node.git"
-      },
-      scripts: {
-        "api-documenter": "run-s api-documenter:markdown api-documenter:toc api-documenter:post",
-        "api-documenter:markdown": "api-documenter-fire markdown --input temp --output docgen/markdown -s --project admin",
-        "api-documenter:post": "node docgen/post-process.js",
-        "api-documenter:toc": "api-documenter-fire toc --input temp --output docgen/markdown -p /docs/reference/admin/node -s",
-        "api-extractor": "node generate-reports.js",
-        "api-extractor:local": "npm run build && node generate-reports.js --local",
-        apidocs: "run-s api-extractor:local api-documenter",
-        build: "gulp build",
-        "build:tests": "gulp compile_test",
-        "esm-wrap": "node generate-esm-wrapper.js",
-        integration: "run-s build test:integration",
-        lint: "run-p lint:src lint:test",
-        "lint:src": "eslint src/ --ext .ts",
-        "lint:test": "eslint test/ --ext .ts",
-        prepare: "npm run build && npm run esm-wrap",
-        test: "run-s lint test:unit",
-        "test:coverage": "nyc npm run test:unit",
-        "test:integration": "mocha test/integration/*.ts --slow 5000 --timeout 20000 --require ts-node/register",
-        "test:unit": "mocha test/unit/*.spec.ts --require ts-node/register"
-      },
-      types: "./lib/index.d.ts",
-      typesVersions: {
-        "*": {
-          app: [
-            "lib/app"
-          ],
-          "app-check": [
-            "lib/app-check"
-          ],
-          auth: [
-            "lib/auth"
-          ],
-          eventarc: [
-            "lib/eventarc"
-          ],
-          extensions: [
-            "lib/extensions"
-          ],
-          database: [
-            "lib/database"
-          ],
-          "data-connect": [
-            "lib/data-connect"
-          ],
-          firestore: [
-            "lib/firestore"
-          ],
-          functions: [
-            "lib/functions"
-          ],
-          installations: [
-            "lib/installations"
-          ],
-          "instance-id": [
-            "lib/instance-id"
-          ],
-          "machine-learning": [
-            "lib/machine-learning"
-          ],
-          messaging: [
-            "lib/messaging"
-          ],
-          "project-management": [
-            "lib/project-management"
-          ],
-          "remote-config": [
-            "lib/remote-config"
-          ],
-          "security-rules": [
-            "lib/security-rules"
-          ],
-          storage: [
-            "lib/storage"
-          ]
-        }
-      },
-      version: "12.7.0",
-      warnings: [
-        {
-          code: "ENOTSUP",
-          required: {
-            node: ">=14"
-          },
-          pkgid: "firebase-admin@12.7.0"
-        },
-        {
-          code: "ENOTSUP",
-          required: {
-            node: ">=14"
-          },
-          pkgid: "firebase-admin@12.7.0"
-        }
-      ]
+      devDependencies: {
+        "@firebase/api-documenter": "^0.4.0",
+        "@firebase/app-compat": "^0.2.1",
+        "@firebase/auth-compat": "^0.4.1",
+        "@firebase/auth-types": "^0.12.0",
+        "@microsoft/api-extractor": "^7.11.2",
+        "@types/bcrypt": "^5.0.0",
+        "@types/chai": "^4.0.0",
+        "@types/chai-as-promised": "^7.1.0",
+        "@types/firebase-token-generator": "^2.0.28",
+        "@types/jsonwebtoken": "8.5.1",
+        "@types/lodash": "^4.14.104",
+        "@types/minimist": "^1.2.2",
+        "@types/mocha": "^10.0.0",
+        "@types/nock": "^11.1.0",
+        "@types/request": "^2.47.0",
+        "@types/request-promise": "^4.1.41",
+        "@types/sinon": "^17.0.2",
+        "@types/sinon-chai": "^3.0.0",
+        "@types/uuid": "^10.0.0",
+        "@typescript-eslint/eslint-plugin": "^5.62.0",
+        "@typescript-eslint/parser": "^5.62.0",
+        bcrypt: "^5.0.0",
+        chai: "^4.2.0",
+        "chai-as-promised": "^7.0.0",
+        "chai-exclude": "^2.1.0",
+        chalk: "^4.1.1",
+        "child-process-promise": "^2.2.1",
+        del: "^6.0.0",
+        eslint: "^8.12.0",
+        "firebase-token-generator": "^2.0.0",
+        gulp: "^5.0.0",
+        "gulp-filter": "^7.0.0",
+        "gulp-header": "^2.0.9",
+        "gulp-typescript": "^5.0.1",
+        "http-message-parser": "^0.0.34",
+        lodash: "^4.17.15",
+        minimist: "^1.2.6",
+        mocha: "^10.0.0",
+        mz: "^2.7.0",
+        nock: "^13.0.0",
+        "npm-run-all": "^4.1.5",
+        nyc: "^17.0.0",
+        request: "^2.75.0",
+        "request-promise": "^4.1.1",
+        "run-sequence": "^2.2.1",
+        sinon: "^18.0.0",
+        "sinon-chai": "^3.0.0",
+        "ts-node": "^10.2.0",
+        typescript: "5.1.6",
+        yargs: "^17.0.1"
+      }
     };
   }
 });
@@ -101573,7 +101449,23 @@ function osUsername() {
 // packages/config/src/env.ts
 if (!process.env.VERCEL) {
   const { config } = await Promise.resolve().then(() => __toESM(require_main(), 1));
-  config();
+  const { existsSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const startDir = dirname(fileURLToPath(import.meta.url));
+  let cursor = startDir;
+  let envPath;
+  for (let i = 0; i < 8; i++) {
+    const candidate = resolve(cursor, ".env");
+    if (existsSync(candidate)) {
+      envPath = candidate;
+      break;
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  config(envPath ? { path: envPath } : void 0);
 }
 var envSchema = external_exports.object({
   NODE_ENV: external_exports.enum(["development", "test", "production"]).default("development"),
@@ -101654,10 +101546,21 @@ async function getFirebaseAdminAuth() {
 }
 async function verifyFirebaseIdToken(idToken) {
   const auth = await getFirebaseAdminAuth();
-  if (!auth) return null;
+  if (!auth) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        "[firebase-admin] verifyIdToken skipped \u2014 Admin SDK not configured. Check FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY."
+      );
+    }
+    return null;
+  }
   try {
     return await auth.verifyIdToken(idToken);
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn("[firebase-admin] verifyIdToken failed:", message);
+    }
     return null;
   }
 }

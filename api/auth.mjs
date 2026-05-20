@@ -5371,42 +5371,17 @@ var require_on_exit_leak_free = __commonJS({
 var require_package = __commonJS({
   "node_modules/thread-stream/package.json"(exports, module) {
     module.exports = {
-      _from: "thread-stream@^4.0.0",
-      _id: "thread-stream@4.2.0",
-      _inBundle: false,
-      _integrity: "sha512-e2zZ96wSChazBsbENf/Pcm/4swHt2cEKQ92rhUjkL9GCKiTDJIaTBenjE/m9DXi0QBmTMDkFDdOomUy20A1tDQ==",
-      _location: "/thread-stream",
-      _phantomChildren: {},
-      _requested: {
-        type: "range",
-        registry: true,
-        raw: "thread-stream@^4.0.0",
-        name: "thread-stream",
-        escapedName: "thread-stream",
-        rawSpec: "^4.0.0",
-        saveSpec: null,
-        fetchSpec: "^4.0.0"
+      name: "thread-stream",
+      version: "4.2.0",
+      description: "A streaming way to send data to a Node.js Worker Thread",
+      main: "index.js",
+      types: "index.d.ts",
+      engines: {
+        node: ">=20"
       },
-      _requiredBy: [
-        "/pino"
-      ],
-      _resolved: "https://registry.npmjs.org/thread-stream/-/thread-stream-4.2.0.tgz",
-      _shasum: "054063e93baab22363d05b784d6c7e439230cac7",
-      _spec: "thread-stream@^4.0.0",
-      _where: "/Users/klsterfx/Desktop/elkatech-launchpad/node_modules/pino",
-      author: {
-        name: "Matteo Collina",
-        email: "hello@matteocollina.com"
-      },
-      bugs: {
-        url: "https://github.com/mcollina/thread-stream/issues"
-      },
-      bundleDependencies: false,
       dependencies: {
         "real-require": "^1.0.0"
       },
-      deprecated: false,
-      description: "A streaming way to send data to a Node.js Worker Thread",
       devDependencies: {
         "@types/node": "^25.0.2",
         "@yao-pkg/pkg": "^6.0.0",
@@ -5420,23 +5395,6 @@ var require_package = __commonJS({
         "ts-node": "^10.8.0",
         typescript: "~5.7.3"
       },
-      engines: {
-        node: ">=20"
-      },
-      homepage: "https://github.com/mcollina/thread-stream#readme",
-      keywords: [
-        "worker",
-        "thread",
-        "threads",
-        "stream"
-      ],
-      license: "MIT",
-      main: "index.js",
-      name: "thread-stream",
-      repository: {
-        type: "git",
-        url: "git+https://github.com/mcollina/thread-stream.git"
-      },
       scripts: {
         build: "tsc --noEmit",
         lint: "eslint",
@@ -5445,17 +5403,22 @@ var require_package = __commonJS({
         "test:yarn": 'npm run transpile && borp --pattern "test/*.test.js"',
         transpile: "sh ./test/ts/transpile.sh"
       },
-      types: "index.d.ts",
-      version: "4.2.0",
-      warnings: [
-        {
-          code: "ENOTSUP",
-          required: {
-            node: ">=20"
-          },
-          pkgid: "thread-stream@4.2.0"
-        }
-      ]
+      repository: {
+        type: "git",
+        url: "git+https://github.com/mcollina/thread-stream.git"
+      },
+      keywords: [
+        "worker",
+        "thread",
+        "threads",
+        "stream"
+      ],
+      author: "Matteo Collina <hello@matteocollina.com>",
+      license: "MIT",
+      bugs: {
+        url: "https://github.com/mcollina/thread-stream/issues"
+      },
+      homepage: "https://github.com/mcollina/thread-stream#readme"
     };
   }
 });
@@ -45873,50 +45836,11 @@ ${body}`);
 var require_package2 = __commonJS({
   "node_modules/dotenv/package.json"(exports, module) {
     module.exports = {
-      _from: "dotenv@16.6.1",
-      _id: "dotenv@16.6.1",
-      _inBundle: false,
-      _integrity: "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==",
-      _location: "/dotenv",
-      _phantomChildren: {},
-      _requested: {
-        type: "version",
-        registry: true,
-        raw: "dotenv@16.6.1",
-        name: "dotenv",
-        escapedName: "dotenv",
-        rawSpec: "16.6.1",
-        saveSpec: null,
-        fetchSpec: "16.6.1"
-      },
-      _requiredBy: [
-        "/@elkatech/config"
-      ],
-      _resolved: "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz",
-      _shasum: "773f0e69527a8315c7285d5ee73c4459d20a8020",
-      _spec: "dotenv@16.6.1",
-      _where: "/Users/klsterfx/Desktop/elkatech-launchpad/packages/config",
-      browser: {
-        fs: false
-      },
-      bugs: {
-        url: "https://github.com/motdotla/dotenv/issues"
-      },
-      bundleDependencies: false,
-      deprecated: false,
+      name: "dotenv",
+      version: "16.6.1",
       description: "Loads environment variables from .env file",
-      devDependencies: {
-        "@types/node": "^18.11.3",
-        decache: "^4.6.2",
-        sinon: "^14.0.1",
-        standard: "^17.0.0",
-        "standard-version": "^9.5.0",
-        tap: "^19.2.0",
-        typescript: "^4.8.4"
-      },
-      engines: {
-        node: ">=12"
-      },
+      main: "lib/main.js",
+      types: "lib/main.d.ts",
       exports: {
         ".": {
           types: "./lib/main.d.ts",
@@ -45931,8 +45855,21 @@ var require_package2 = __commonJS({
         "./lib/cli-options.js": "./lib/cli-options.js",
         "./package.json": "./package.json"
       },
-      funding: "https://dotenvx.com",
+      scripts: {
+        "dts-check": "tsc --project tests/types/tsconfig.json",
+        lint: "standard",
+        pretest: "npm run lint && npm run dts-check",
+        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
+        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov",
+        prerelease: "npm test",
+        release: "standard-version"
+      },
+      repository: {
+        type: "git",
+        url: "git://github.com/motdotla/dotenv.git"
+      },
       homepage: "https://github.com/motdotla/dotenv#readme",
+      funding: "https://dotenvx.com",
       keywords: [
         "dotenv",
         "env",
@@ -45942,33 +45879,23 @@ var require_package2 = __commonJS({
         "config",
         "settings"
       ],
+      readmeFilename: "README.md",
       license: "BSD-2-Clause",
-      main: "lib/main.js",
-      name: "dotenv",
-      repository: {
-        type: "git",
-        url: "git://github.com/motdotla/dotenv.git"
+      devDependencies: {
+        "@types/node": "^18.11.3",
+        decache: "^4.6.2",
+        sinon: "^14.0.1",
+        standard: "^17.0.0",
+        "standard-version": "^9.5.0",
+        tap: "^19.2.0",
+        typescript: "^4.8.4"
       },
-      scripts: {
-        "dts-check": "tsc --project tests/types/tsconfig.json",
-        lint: "standard",
-        prerelease: "npm test",
-        pretest: "npm run lint && npm run dts-check",
-        release: "standard-version",
-        test: "tap run --allow-empty-coverage --disable-coverage --timeout=60000",
-        "test:coverage": "tap run --show-full-coverage --timeout=60000 --coverage-report=text --coverage-report=lcov"
+      engines: {
+        node: ">=12"
       },
-      types: "lib/main.d.ts",
-      version: "16.6.1",
-      warnings: [
-        {
-          code: "ENOTSUP",
-          required: {
-            node: ">=12"
-          },
-          pkgid: "dotenv@16.6.1"
-        }
-      ]
+      browser: {
+        fs: false
+      }
     };
   }
 });
@@ -64754,7 +64681,23 @@ function osUsername() {
 // packages/config/src/env.ts
 if (!process.env.VERCEL) {
   const { config } = await Promise.resolve().then(() => __toESM(require_main(), 1));
-  config();
+  const { existsSync } = await import("node:fs");
+  const { resolve, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const startDir = dirname(fileURLToPath(import.meta.url));
+  let cursor = startDir;
+  let envPath;
+  for (let i = 0; i < 8; i++) {
+    const candidate = resolve(cursor, ".env");
+    if (existsSync(candidate)) {
+      envPath = candidate;
+      break;
+    }
+    const parent = dirname(cursor);
+    if (parent === cursor) break;
+    cursor = parent;
+  }
+  config(envPath ? { path: envPath } : void 0);
 }
 var envSchema = external_exports.object({
   NODE_ENV: external_exports.enum(["development", "test", "production"]).default("development"),
