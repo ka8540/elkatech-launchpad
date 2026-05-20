@@ -62813,7 +62813,9 @@ function getEnv() {
   if (!cachedEnv) {
     cachedEnv = envSchema.parse(process.env);
     if (process.env.VERCEL === "1" && process.env.VERCEL_URL) {
-      const publicUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL}`;
+      const isProduction = process.env.VERCEL_ENV === "production";
+      const deploymentHost = isProduction ? process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL : process.env.VERCEL_URL;
+      const publicUrl = `https://${deploymentHost}`;
       cachedEnv.APP_BASE_URL = publicUrl;
       cachedEnv.GATEWAY_URL = `${publicUrl}/api`;
       cachedEnv.AUTH_SERVICE_URL = `${publicUrl}/api/internal-auth`;
