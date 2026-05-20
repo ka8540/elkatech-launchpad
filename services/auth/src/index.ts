@@ -65,6 +65,23 @@ async function findUserById(userId: string): Promise<UserRow | null> {
   return rows[0] ?? null;
 }
 
+// Best-effort tagging of how the account was created. Wrapped in a guard so
+// that the auth service still works on databases that haven't had migration
+// 004 applied yet — Postgres error code 42703 ("undefined column") is the
+// expected miss when account_origin doesn't exist; everything else bubbles.
+async function setAccountOrigin(userId: string, origin: AccountOrigin) {
+  try {
+    await sql`
+      update auth.users
+      set account_origin = ${origin}, updated_at = now()
+      where id = ${userId}
+    `;
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    if (code !== "42703") throw error;
+  }
+}
+
 async function createSessionForUser(
   user: UserRow,
   request: { headers: Record<string, unknown>; ip: string | undefined },
@@ -185,7 +202,7 @@ app.post("/signup", async (request, reply) => {
     const userId = invite.user_id ?? randomUUID();
     // Invited staff users are pre-approved by definition (an admin invited them).
     await sql`
-      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin)
+      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at)
       values (
         ${userId},
         ${input.email.toLowerCase()},
@@ -195,8 +212,7 @@ app.post("/signup", async (request, reply) => {
         ${false},
         ${"active"},
         ${"approved"},
-        now(),
-        ${"admin_invite"}
+        now()
       )
       on conflict (id)
       do update set
@@ -207,9 +223,9 @@ app.post("/signup", async (request, reply) => {
         status = excluded.status,
         approval_status = 'approved',
         approved_at = coalesce(auth.users.approved_at, now()),
-        account_origin = 'admin_invite',
         updated_at = now()
     `;
+    await setAccountOrigin(userId, "admin_invite");
 
     await sql`
       update auth.tokens
@@ -247,7 +263,7 @@ app.post("/signup", async (request, reply) => {
   // Public customer signups land in pending_approval and stay there
   // until an admin approves the account.
   await sql`
-    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, account_origin)
+    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status)
     values (
       ${userId},
       ${input.email.toLowerCase()},
@@ -256,10 +272,10 @@ app.post("/signup", async (request, reply) => {
       ${passwordHash},
       ${false},
       ${"active"},
-      ${"pending_approval"},
-      ${"self_signup"}
+      ${"pending_approval"}
     )
   `;
+  await setAccountOrigin(userId, "self_signup");
 
   const verifyToken = await createVerificationToken(userId, input.email.toLowerCase());
   await emitOutbox("user", userId, "user.registered", {
@@ -569,10 +585,9 @@ app.post("/internal/invite", async (request, reply) => {
   `;
 
   const userId = existingUsers[0]?.id ?? randomUUID();
-  // Staff invites from an admin land approved and are marked admin_invite
-  // so role management is allowed on the resulting account.
+  // Staff invites from an admin land approved.
   await sql`
-    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at, account_origin)
+    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at)
     values (
       ${userId},
       ${email},
@@ -580,8 +595,7 @@ app.post("/internal/invite", async (request, reply) => {
       ${input.role},
       ${"invited"},
       ${"approved"},
-      now(),
-      ${"admin_invite"}
+      now()
     )
     on conflict (id)
     do update set
@@ -591,9 +605,10 @@ app.post("/internal/invite", async (request, reply) => {
       status = excluded.status,
       approval_status = 'approved',
       approved_at = coalesce(auth.users.approved_at, now()),
-      account_origin = 'admin_invite',
       updated_at = now()
   `;
+  // Mark as staff-managed so the admin UI allows role changes later.
+  await setAccountOrigin(userId, "admin_invite");
 
   const inviteToken = generateToken();
   await sql`
@@ -720,10 +735,11 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
       // Invited users (role !== customer) are pre-approved by an admin.
       // Self-service Google sign-ups become customers and land in pending_approval.
       const approvalStatus = role === "customer" ? "pending_approval" : "approved";
-      const accountOrigin = role === "customer" ? "firebase_google" : "admin_invite";
+      const accountOrigin: AccountOrigin =
+        role === "customer" ? "firebase_google" : "admin_invite";
       await sql`
         insert into auth.users (
-          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin
+          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at
         )
         values (
           ${userId},
@@ -734,8 +750,7 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           ${true},
           ${'active'},
           ${approvalStatus},
-          ${approvalStatus === 'approved' ? sql`now()` : sql`null`},
-          ${accountOrigin}
+          ${approvalStatus === 'approved' ? sql`now()` : sql`null`}
         )
         on conflict (id)
         do update set
@@ -746,6 +761,7 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           status = excluded.status,
           updated_at = now()
       `;
+      await setAccountOrigin(userId, accountOrigin);
 
       // Link OAuth identity
       await sql`
@@ -838,7 +854,7 @@ app.post("/internal/firebase/session", async (request, reply) => {
     await sql`
       insert into auth.users (
         id, email, display_name, role, password_hash, email_verified,
-        status, approval_status, firebase_uid, account_origin
+        status, approval_status, firebase_uid
       )
       values (
         ${userId},
@@ -849,10 +865,10 @@ app.post("/internal/firebase/session", async (request, reply) => {
         ${input.emailVerified},
         ${"active"},
         ${"pending_approval"},
-        ${firebaseUid},
-        ${accountOrigin}
+        ${firebaseUid}
       )
     `;
+    await setAccountOrigin(userId, accountOrigin);
 
     await emitOutbox("user", userId, "user.registered", {
       userId,

@@ -341,24 +341,43 @@ const PortalShell = () => {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       {collapsed && !isMobile ? (
-        /* Collapsed: the expand button takes the logo's slot. No logo, no
-           hover-only behaviour. Same 44px height as the expanded brand mark
-           so the header doesn't jump when toggling. */
-        <div className="flex items-center justify-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            className={cn(
-              "flex h-11 w-11 items-center justify-center rounded-xl border shadow-sm transition-colors",
-              "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-              "dark:border-white/10 dark:bg-[#0b1626] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-            )}
-            aria-label="Expand sidebar"
-            aria-expanded={false}
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
+        /* Collapsed: logo is the default; on hover/focus the expand button
+           takes the same 44x44 slot. They crossfade in place so the header
+           never shifts. */
+        <div className="group flex items-center justify-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
+          <div className="relative h-11 w-11">
+            <Link
+              to="/app/requests"
+              title="ElkaTech"
+              aria-label="ElkaTech"
+              className={cn(
+                "absolute inset-0 flex items-center justify-center text-slate-950 dark:text-white",
+                "transition-opacity duration-200",
+                "opacity-100 group-hover:opacity-0 group-focus-within:opacity-0",
+                "pointer-events-auto group-hover:pointer-events-none group-focus-within:pointer-events-none",
+              )}
+            >
+              <ElkaTechMark size={42} />
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              className={cn(
+                "absolute inset-0 flex items-center justify-center rounded-xl border shadow-sm",
+                "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                "dark:border-white/10 dark:bg-[#0b1626] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white",
+                "transition-opacity duration-200",
+                "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+                "focus:opacity-100 focus:pointer-events-auto",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+              )}
+              aria-label="Expand sidebar"
+              aria-expanded={false}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       ) : (
         /* Expanded / mobile: brand block plus an always-visible toggle button. */

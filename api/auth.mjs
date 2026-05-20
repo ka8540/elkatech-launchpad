@@ -64797,6 +64797,18 @@ async function findUserById(userId) {
   `;
   return rows[0] ?? null;
 }
+async function setAccountOrigin(userId, origin) {
+  try {
+    await sql`
+      update auth.users
+      set account_origin = ${origin}, updated_at = now()
+      where id = ${userId}
+    `;
+  } catch (error) {
+    const code = error?.code;
+    if (code !== "42703") throw error;
+  }
+}
 async function createSessionForUser(user, request) {
   const sessionToken = generateToken();
   const csrfToken = generateToken(16);
@@ -64891,7 +64903,7 @@ app.post("/signup", async (request, reply) => {
     }
     const userId2 = invite.user_id ?? randomUUID();
     await sql`
-      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin)
+      insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at)
       values (
         ${userId2},
         ${input.email.toLowerCase()},
@@ -64901,8 +64913,7 @@ app.post("/signup", async (request, reply) => {
         ${false},
         ${"active"},
         ${"approved"},
-        now(),
-        ${"admin_invite"}
+        now()
       )
       on conflict (id)
       do update set
@@ -64913,9 +64924,9 @@ app.post("/signup", async (request, reply) => {
         status = excluded.status,
         approval_status = 'approved',
         approved_at = coalesce(auth.users.approved_at, now()),
-        account_origin = 'admin_invite',
         updated_at = now()
     `;
+    await setAccountOrigin(userId2, "admin_invite");
     await sql`
       update auth.tokens
       set consumed_at = now()
@@ -64945,7 +64956,7 @@ app.post("/signup", async (request, reply) => {
   }
   const userId = randomUUID();
   await sql`
-    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, account_origin)
+    insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status)
     values (
       ${userId},
       ${input.email.toLowerCase()},
@@ -64954,10 +64965,10 @@ app.post("/signup", async (request, reply) => {
       ${passwordHash},
       ${false},
       ${"active"},
-      ${"pending_approval"},
-      ${"self_signup"}
+      ${"pending_approval"}
     )
   `;
+  await setAccountOrigin(userId, "self_signup");
   const verifyToken = await createVerificationToken(userId, input.email.toLowerCase());
   await emitOutbox("user", userId, "user.registered", {
     userId,
@@ -65209,7 +65220,7 @@ app.post("/internal/invite", async (request, reply) => {
   `;
   const userId = existingUsers[0]?.id ?? randomUUID();
   await sql`
-    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at, account_origin)
+    insert into auth.users (id, email, display_name, role, status, approval_status, approved_at)
     values (
       ${userId},
       ${email},
@@ -65217,8 +65228,7 @@ app.post("/internal/invite", async (request, reply) => {
       ${input.role},
       ${"invited"},
       ${"approved"},
-      now(),
-      ${"admin_invite"}
+      now()
     )
     on conflict (id)
     do update set
@@ -65228,9 +65238,9 @@ app.post("/internal/invite", async (request, reply) => {
       status = excluded.status,
       approval_status = 'approved',
       approved_at = coalesce(auth.users.approved_at, now()),
-      account_origin = 'admin_invite',
       updated_at = now()
   `;
+  await setAccountOrigin(userId, "admin_invite");
   const inviteToken = generateToken();
   await sql`
     insert into auth.tokens (id, token_hash, user_id, email, role, purpose, expires_at)
@@ -65330,7 +65340,7 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
       const accountOrigin = role === "customer" ? "firebase_google" : "admin_invite";
       await sql`
         insert into auth.users (
-          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at, account_origin
+          id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at
         )
         values (
           ${userId},
@@ -65341,8 +65351,7 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           ${true},
           ${"active"},
           ${approvalStatus},
-          ${approvalStatus === "approved" ? sql`now()` : sql`null`},
-          ${accountOrigin}
+          ${approvalStatus === "approved" ? sql`now()` : sql`null`}
         )
         on conflict (id)
         do update set
@@ -65353,6 +65362,7 @@ app.post("/internal/oauth/find-or-create", async (request, reply) => {
           status = excluded.status,
           updated_at = now()
       `;
+      await setAccountOrigin(userId, accountOrigin);
       await sql`
         insert into auth.oauth_identities (id, user_id, provider, provider_user_id, provider_email)
         values (${randomUUID()}, ${userId}, ${input.provider}, ${input.providerUserId}, ${email})
@@ -65424,7 +65434,7 @@ app.post("/internal/firebase/session", async (request, reply) => {
     await sql`
       insert into auth.users (
         id, email, display_name, role, password_hash, email_verified,
-        status, approval_status, firebase_uid, account_origin
+        status, approval_status, firebase_uid
       )
       values (
         ${userId},
@@ -65435,10 +65445,10 @@ app.post("/internal/firebase/session", async (request, reply) => {
         ${input.emailVerified},
         ${"active"},
         ${"pending_approval"},
-        ${firebaseUid},
-        ${accountOrigin}
+        ${firebaseUid}
       )
     `;
+    await setAccountOrigin(userId, accountOrigin);
     await emitOutbox("user", userId, "user.registered", {
       userId,
       email,
