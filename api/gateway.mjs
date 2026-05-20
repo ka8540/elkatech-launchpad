@@ -101485,7 +101485,9 @@ var envSchema = external_exports.object({
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
-  SMTP_FROM: external_exports.string().email().default("no-reply@elkatech.local"),
+  // Nodemailer accepts both bare emails ("a@b.com") and addresses with a
+  // display name ("Name <a@b.com>"), so we only require a non-empty string.
+  SMTP_FROM: external_exports.string().min(3).default("no-reply@elkatech.local"),
   BOOTSTRAP_ADMIN_EMAIL: external_exports.string().email().default("admin@elkatech.local"),
   BOOTSTRAP_ADMIN_PASSWORD: external_exports.string().min(8).default("ChangeMe123!"),
   GOOGLE_OAUTH_CLIENT_ID: external_exports.string().optional(),
