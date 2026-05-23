@@ -96,12 +96,12 @@ const LandingHeader = () => {
     <header className="pointer-events-none fixed inset-x-0 top-3 z-50 px-4 lg:top-4">
       <div
         ref={headerRef}
-        className="relative mx-auto w-full max-w-[1200px]"
+        className="relative mx-auto w-full max-w-[900px]"
         onMouseLeave={() => setProductsOpen(false)}
       >
         <div
           className={cn(
-            "pointer-events-auto relative flex h-14 items-center justify-between gap-4 rounded-2xl border px-4 transition-all duration-300 ease-out lg:px-5",
+            "pointer-events-auto relative flex h-12 items-center justify-between gap-3 rounded-2xl border px-3 transition-all duration-300 ease-out lg:px-4",
             solid ? "shadow-[0_18px_50px_-22px_rgba(0,0,0,0.45)] backdrop-blur-xl" : "backdrop-blur-[2px]"
           )}
           style={{
@@ -114,11 +114,11 @@ const LandingHeader = () => {
           </a>
 
           {/* Desktop nav */}
-          <nav className="hidden items-center gap-1 lg:flex">
+          <nav className="hidden items-center gap-0.5 lg:flex">
             <div className="relative" onMouseEnter={() => setProductsOpen(true)}>
               <a
                 href="#products"
-                className="flex items-center gap-1 rounded-full px-3 py-2 text-sm font-medium transition-colors"
+                className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-sm font-medium transition-colors"
                 style={{ color: linkColor }}
               >
                 Products
@@ -169,7 +169,7 @@ const LandingHeader = () => {
               <a
                 key={item.href}
                 href={item.href}
-                className="rounded-full px-3 py-2 text-sm font-medium transition-colors"
+                className="rounded-full px-2.5 py-1.5 text-sm font-medium transition-colors"
                 style={{ color: linkColor }}
               >
                 {item.label}
@@ -178,7 +178,7 @@ const LandingHeader = () => {
           </nav>
 
           {/* Right cluster */}
-          <div className="hidden items-center gap-2.5 lg:flex">
+          <div className="hidden items-center gap-2 lg:flex">
             <span
               className={cn(
                 "[&_button:hover]:bg-transparent",
@@ -189,21 +189,11 @@ const LandingHeader = () => {
             </span>
             <Link
               to="/login"
-              className="rounded-full border px-4 py-2 text-sm font-semibold transition-all"
-              style={{
-                color: solid ? "var(--lp-ink)" : "#f1efe9",
-                borderColor: solid ? "var(--lp-line-strong)" : "rgba(241,239,233,0.28)",
-              }}
+              className="rounded-full px-4 py-1.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_var(--lp-glow)] transition-transform hover:-translate-y-0.5"
+              style={{ backgroundColor: "var(--lp-accent)" }}
             >
               Service Portal
             </Link>
-            <a
-              href="#contact"
-              className="rounded-full px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_30px_-10px_var(--lp-glow)] transition-transform hover:-translate-y-0.5"
-              style={{ backgroundColor: "var(--lp-accent)" }}
-            >
-              Request Service
-            </a>
           </div>
 
           {/* Mobile toggle */}
@@ -278,8 +268,8 @@ const LandingHeader = () => {
                 <Link
                   to="/login"
                   onClick={() => setMenuOpen(false)}
-                  className="flex-1 rounded-xl border px-4 py-2.5 text-center text-sm font-semibold"
-                  style={{ color: "var(--lp-ink)", borderColor: "var(--lp-line-strong)" }}
+                  className="flex-1 rounded-xl px-4 py-2.5 text-center text-sm font-semibold text-white"
+                  style={{ backgroundColor: "var(--lp-accent)" }}
                 >
                   Service Portal
                 </Link>
@@ -287,14 +277,6 @@ const LandingHeader = () => {
                   <ThemeToggle />
                 </span>
               </div>
-              <a
-                href="#contact"
-                onClick={() => setMenuOpen(false)}
-                className="mt-2 block rounded-xl px-4 py-2.5 text-center text-sm font-semibold text-white"
-                style={{ backgroundColor: "var(--lp-accent)" }}
-              >
-                Request Service
-              </a>
             </motion.div>
           )}
         </AnimatePresence>

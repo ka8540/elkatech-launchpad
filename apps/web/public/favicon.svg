@@ -1,17 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
-    <linearGradient id="bg" x1="20" y1="8" x2="112" y2="120" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#020817"/>
-      <stop offset="1" stop-color="#0f2a44"/>
+    <linearGradient id="bg" x1="10" y1="10" x2="118" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#1a0f06"/>
     </linearGradient>
     <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feGaussianBlur stdDeviation="4" result="blur"/>
       <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <rect x="10" y="10" width="108" height="108" rx="24" fill="url(#bg)"/>
-  <rect x="18" y="18" width="92" height="92" rx="16" fill="none" stroke="#64cefb" stroke-width="7"/>
-  <path d="M41 42h29M41 64h24M41 86h29M41 42v44" fill="none" stroke="#f8fafc" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M41 64h24" fill="none" stroke="#64cefb" stroke-width="8" stroke-linecap="round"/>
-  <circle cx="84" cy="64" r="9" fill="#64cefb" filter="url(#glow)"/>
+  <!-- Background -->
+  <rect x="8" y="8" width="112" height="112" rx="22" fill="url(#bg)"/>
+  <!-- Orange border square -->
+  <rect x="16" y="16" width="96" height="96" rx="14" fill="none" stroke="#db8a4f" stroke-width="4"/>
+  <!-- E-mark: vertical bar -->
+  <path d="M38 38 L38 90" stroke="#f1efe9" stroke-width="8" stroke-linecap="round"/>
+  <!-- E-mark: top bar -->
+  <path d="M38 38 L72 38" stroke="#f1efe9" stroke-width="8" stroke-linecap="round"/>
+  <!-- E-mark: middle bar (orange) -->
+  <path d="M38 64 L66 64" stroke="#db8a4f" stroke-width="8" stroke-linecap="round"/>
+  <!-- E-mark: bottom bar -->
+  <path d="M38 90 L72 90" stroke="#f1efe9" stroke-width="8" stroke-linecap="round"/>
+  <!-- Accent dot (orange glow) -->
+  <circle cx="88" cy="64" r="9" fill="#db8a4f" filter="url(#glow)"/>
 </svg>
