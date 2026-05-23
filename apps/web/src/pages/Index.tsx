@@ -1,42 +1,28 @@
-import { useState } from "react";
-import Header from "@/components/Header";
-import IntroAnimation from "@/components/IntroAnimation";
-import HeroSection from "@/components/HeroSection";
-import AboutSection from "@/components/AboutSection";
-import WorkSolutionsSection from "@/components/WorkSolutionsSection";
-import BrandsSection from "@/components/BrandsSection";
-import StickyStorySection from "@/components/StickyStorySection";
-import InfrastructureSection from "@/components/InfrastructureSection";
-import WhyElkatech from "@/components/WhyElkatech";
-import ContactSection from "@/components/ContactSection";
-import Footer from "@/components/Footer";
-import ScrollProgressBar from "@/components/ScrollProgressBar";
+import LandingHeader from "@/components/landing/LandingHeader";
+import LandingHero from "@/components/landing/LandingHero";
+import LandingProductCategories from "@/components/landing/LandingProductCategories";
+import LandingWhyChoose from "@/components/landing/LandingWhyChoose";
+import LandingApplications from "@/components/landing/LandingApplications";
+import LandingServiceSupport from "@/components/landing/LandingServiceSupport";
+import LandingFinalCTA from "@/components/landing/LandingFinalCTA";
+import LandingFooter from "@/components/landing/LandingFooter";
 
+// Premium industrial landing experience for ElkaTech. All landing styling is
+// scoped under the `.lp` class so the global blue brand tokens used by the
+// product-category and service-portal pages are never affected.
 const Index = () => {
-  // Skip the intro overlay when the user lands with a section hash (e.g.
-  // /#about). The intro otherwise covers the target section for ~950ms while
-  // the ScrollManager is already scrolling to it.
-  const [showIntro, setShowIntro] = useState(() => {
-    if (typeof window === "undefined") return true;
-    return !window.location.hash;
-  });
-
   return (
-    <div className="min-h-screen bg-background">
-      {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
-      <ScrollProgressBar />
-      <Header />
+    <div className="lp min-h-screen" style={{ background: "var(--lp-bg)" }}>
+      <LandingHeader />
       <main>
-        <HeroSection />
-        <AboutSection />
-        <WorkSolutionsSection />
-        <BrandsSection />
-        <StickyStorySection />
-        <InfrastructureSection />
-        <WhyElkatech />
-        <ContactSection />
+        <LandingHero />
+        <LandingProductCategories />
+        <LandingWhyChoose />
+        <LandingApplications />
+        <LandingServiceSupport />
+        <LandingFinalCTA />
       </main>
-      <Footer />
+      <LandingFooter />
     </div>
   );
 };

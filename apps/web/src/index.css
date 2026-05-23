@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -354,6 +354,118 @@
     .ambient-surface-left,
     .ambient-surface-right,
     .product-page-particle {
+      animation: none;
+    }
+  }
+}
+
+/* =====================================================================
+   Premium Landing (ElkaTech) — scoped industrial design system
+   Tokens live under .lp so the global blue brand tokens (used by the
+   product/portal pages) are never touched. Theme-aware via .dark .lp.
+   ===================================================================== */
+@layer base {
+  .lp {
+    --lp-bg: #ece8e0;          /* warm ivory base */
+    --lp-bg-2: #e4dfd4;        /* steel band */
+    --lp-panel: #fbfaf6;       /* card surface */
+    --lp-panel-2: #f3f0e8;
+    --lp-ink: #181a1d;         /* graphite ink */
+    --lp-ink-soft: #45484e;
+    --lp-faint: #6c6f76;
+    --lp-line: rgba(24, 26, 29, 0.12);
+    --lp-line-strong: rgba(24, 26, 29, 0.22);
+    --lp-accent: #ac531c;      /* muted copper — AA on ivory */
+    --lp-accent-2: #c4743b;
+    --lp-graphite: #15171b;    /* dark stage (hero/feature) */
+    --lp-graphite-2: #1d2026;
+    --lp-on-graphite: #f1efe9;
+    --lp-on-graphite-soft: rgba(241, 239, 233, 0.66);
+    --lp-glow: rgba(172, 83, 28, 0.18);
+  }
+
+  .dark .lp {
+    --lp-bg: #0b0c0e;
+    --lp-bg-2: #101216;
+    --lp-panel: #16181d;
+    --lp-panel-2: #1b1e24;
+    --lp-ink: #eceae3;         /* ivory ink */
+    --lp-ink-soft: rgba(236, 234, 227, 0.74);
+    --lp-faint: rgba(236, 234, 227, 0.5);
+    --lp-line: rgba(255, 255, 255, 0.09);
+    --lp-line-strong: rgba(255, 255, 255, 0.17);
+    --lp-accent: #db8a4f;      /* brighter copper on dark */
+    --lp-accent-2: #e7a16a;
+    --lp-graphite: #08090b;
+    --lp-graphite-2: #111317;
+    --lp-on-graphite: #f1efe9;
+    --lp-on-graphite-soft: rgba(241, 239, 233, 0.66);
+    --lp-glow: rgba(219, 138, 79, 0.16);
+  }
+}
+
+@layer utilities {
+  .lp-display {
+    font-family: 'Archivo', 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  .lp-mono {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  /* Engineering blueprint grid (theme-aware via --lp-line) */
+  .lp-grid {
+    background-image:
+      linear-gradient(to right, var(--lp-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--lp-line) 1px, transparent 1px);
+    background-size: 76px 76px;
+  }
+
+  .lp-grid-fine {
+    background-image:
+      linear-gradient(to right, var(--lp-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--lp-line) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+
+  /* Fine film grain for premium texture */
+  .lp-grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+  }
+
+  /* Capabilities marquee */
+  @keyframes lp-marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  .lp-marquee-track {
+    animation: lp-marquee 38s linear infinite;
+    will-change: transform;
+  }
+
+  /* Hero scan line sweeping across the machine stage */
+  @keyframes lp-scan {
+    0% { transform: translateY(-10%); opacity: 0; }
+    12% { opacity: 1; }
+    88% { opacity: 1; }
+    100% { transform: translateY(900%); opacity: 0; }
+  }
+
+  .lp-scan {
+    animation: lp-scan 5.5s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .lp-marquee-track,
+    .lp-scan {
       animation: none;
     }
   }
