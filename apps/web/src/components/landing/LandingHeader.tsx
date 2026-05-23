@@ -49,7 +49,7 @@ const LandingMark = ({ tone }: { tone: "light" | "ink" }) => (
       <circle cx="68" cy="50" r="6" fill="var(--lp-accent)" />
     </svg>
     <span
-      className="lp-display text-[1.05rem] font-extrabold uppercase tracking-[0.14em]"
+      className="text-[1.05rem] font-extrabold uppercase tracking-[0.14em]"
       style={{ color: tone === "light" ? "#f1efe9" : "var(--lp-ink)" }}
     >
       Elkatech
