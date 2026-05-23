@@ -108,7 +108,7 @@ const SiteHeader = ({ variant = "dark" }: SiteHeaderProps) => {
   );
 
   return (
-    <header className="pointer-events-none fixed left-0 right-0 top-3 z-50 px-4 lg:top-4">
+    <header data-site-header className="pointer-events-none fixed left-0 right-0 top-3 z-50 px-4 lg:top-4">
       <div
         ref={headerRef}
         className="relative mx-auto w-full max-w-[calc(100vw-2rem)] lg:w-fit lg:max-w-[1180px]"

@@ -38,7 +38,7 @@ const reasons = [
 
 const WhyElkatech = () => {
   return (
-    <section id="why-us" className="relative scroll-mt-24 overflow-hidden bg-background py-24 md:py-32">
+    <section id="why-us" className="landing-anchor relative overflow-hidden bg-background py-24 md:py-32">
       {/* Background elements */}
       <div className="absolute inset-x-0 top-0 h-px section-divider" />
       <div className="pointer-events-none absolute inset-0 ambient-surface-right" />

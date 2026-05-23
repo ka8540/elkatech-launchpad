@@ -2,6 +2,7 @@ import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion
 import { ArrowRight, MessageCircle } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 const HERO_VIDEO_URL =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_105406_16f4600d-7a92-4292-b96e-b19156c7830a.mp4";
@@ -40,6 +41,37 @@ const TRUST_STATS = [
   { value: "₹1.5–5 Cr", label: "Annual turnover" },
 ];
 
+const HeroStatsGrid = ({ className }: { className?: string }) => {
+  const shouldReduceMotion = useReducedMotion();
+
+  return (
+    <motion.dl
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.35 }}
+      transition={{ duration: shouldReduceMotion ? 0.2 : 0.55, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(
+        "grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] text-left backdrop-blur sm:grid-cols-2 lg:grid-cols-4",
+        className
+      )}
+    >
+      {TRUST_STATS.map((stat) => (
+        <div
+          key={stat.label}
+          className="flex flex-col gap-1 bg-[#040d1c]/55 px-5 py-4 sm:px-6 sm:py-5"
+        >
+          <dt className="order-2 text-[11px] uppercase tracking-[0.16em] text-white/55 md:text-xs">
+            {stat.label}
+          </dt>
+          <dd className="order-1 font-display text-2xl font-semibold tracking-tight text-white md:text-3xl">
+            {stat.value}
+          </dd>
+        </div>
+      ))}
+    </motion.dl>
+  );
+};
+
 const HeroSection = () => {
   const shouldReduceMotion = useReducedMotion();
   const heroRef = useRef<HTMLElement>(null);
@@ -52,28 +84,23 @@ const HeroSection = () => {
   });
   // Subtle parallax on the video and ambient glow — disabled when the user
   // prefers reduced motion.
-  const videoY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 140]);
-  const ambientY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 80]);
-  const heroFade = useTransform(scrollYProgress, [0, 0.65, 1], [1, 0.85, 0.55]);
-  // Apple-style content lift: the headline + CTAs drift up and dim as the
-  // hero scrolls away, so the next section "takes over" instead of cutting in.
+  const videoY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 60]);
+  const ambientY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 36]);
+  const heroFade = useTransform(scrollYProgress, [0, 0.75, 1], [1, 0.95, 0.82]);
+  // Keep the hero motion subtle so anchor jumps don't leave blurred content
+  // hanging behind the fixed navigation.
   const contentY = useTransform(
     scrollYProgress,
     [0, 1],
-    shouldReduceMotion ? [0, 0] : [0, -90]
+    shouldReduceMotion ? [0, 0] : [0, -28]
   );
-  const contentOpacity = useTransform(scrollYProgress, [0, 0.6, 1], [1, 0.7, 0.15]);
-  const contentBlur = useTransform(scrollYProgress, [0, 0.7, 1], [0, 1.5, 4]);
-  const contentFilter = useTransform(
-    contentBlur,
-    (b) => (shouldReduceMotion ? "none" : `blur(${b}px)`)
-  );
+  const contentOpacity = useTransform(scrollYProgress, [0, 0.7, 1], [1, 0.92, 0.68]);
 
   return (
     <section
       ref={heroRef}
       id="home"
-      className="relative min-h-screen overflow-hidden bg-black text-white"
+      className="landing-anchor relative min-h-[calc(100svh-1rem)] overflow-hidden bg-black text-white lg:min-h-[min(960px,calc(100svh-80px))]"
     >
       <motion.div
         className="absolute inset-0 z-0"
@@ -111,12 +138,12 @@ const HeroSection = () => {
             "radial-gradient(ellipse at center, black 30%, transparent 78%)",
         }}
       />
-      <div className="absolute inset-x-0 bottom-0 z-[5] h-44 bg-gradient-to-b from-transparent via-[#050b14]/60 to-[#050b14]" />
+      <div className="absolute inset-x-0 bottom-0 z-[5] h-28 bg-gradient-to-b from-transparent via-[#050b14]/55 to-[#050b14]" />
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col px-6 sm:px-8 lg:px-10">
+      <div className="relative z-10 mx-auto flex min-h-[calc(100svh-1rem)] max-w-7xl flex-col justify-center px-6 pb-8 pt-24 sm:px-8 md:pb-10 md:pt-28 lg:min-h-[min(960px,calc(100svh-80px))] lg:px-10 lg:py-24">
         <motion.div
-          style={{ y: contentY, opacity: contentOpacity, filter: contentFilter }}
-          className="flex flex-1 flex-col items-center justify-center pb-24 pt-28 text-center md:pb-28 md:pt-32"
+          style={{ y: contentY, opacity: contentOpacity }}
+          className="mx-auto flex w-full max-w-5xl flex-col items-center text-center"
         >
           <motion.div
             initial={heroInitial}
@@ -184,48 +211,26 @@ const HeroSection = () => {
             </Link>
           </motion.div>
         </motion.div>
+
+        <HeroStatsGrid className="mt-8 w-full md:mt-10" />
       </div>
     </section>
   );
 };
 
-// Slim stats band that sits right below the hero. Lives outside the hero's
-// min-h-screen container so it never gets clipped on shorter viewports, and
-// carries the dark navy palette forward as a visual bridge into the next
-// section.
+// Optional standalone stats band for any future reuse. The landing page now
+// renders the same grid inside the hero so the CTA and stats stay connected.
 export const HeroStatsStrip = () => {
-  const shouldReduceMotion = useReducedMotion();
-
   return (
     <section
       aria-label="Elkatech at a glance"
-      className="relative isolate overflow-hidden bg-[#050b14] py-10 md:py-12"
+      className="relative isolate overflow-hidden bg-[#050b14] py-6 md:py-8"
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
       <div className="container mx-auto px-4 md:px-6">
-        <motion.dl
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.4 }}
-          transition={{ duration: shouldReduceMotion ? 0.2 : 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur md:grid-cols-4"
-        >
-          {TRUST_STATS.map((stat) => (
-            <div
-              key={stat.label}
-              className="flex flex-col gap-1 bg-[#040d1c]/55 px-5 py-5 md:px-6 md:py-6"
-            >
-              <dt className="order-2 text-[11px] uppercase tracking-[0.16em] text-white/55 md:text-xs">
-                {stat.label}
-              </dt>
-              <dd className="order-1 font-display text-2xl font-semibold tracking-tight text-white md:text-3xl">
-                {stat.value}
-              </dd>
-            </div>
-          ))}
-        </motion.dl>
+        <HeroStatsGrid />
       </div>
     </section>
   );

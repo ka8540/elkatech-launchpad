@@ -83,7 +83,7 @@ const WorkSolutionsSection = () => {
     <section
       ref={sectionRef}
       id="work"
-      className="relative scroll-mt-24 overflow-hidden bg-navy-gradient py-24 md:py-32"
+      className="landing-anchor relative overflow-hidden bg-navy-gradient py-24 md:py-32"
     >
       <div className="absolute inset-x-0 top-0 h-px section-divider" />
       <div className="pointer-events-none absolute inset-0 ambient-surface-right" />
