@@ -279,12 +279,12 @@ function ImageCarousel({ images, alt }: { images: string[]; alt: string }) {
   const next = () => setIdx((current) => (current + 1) % safeImages.length);
 
   return (
-    <div className="catalog-image-frame relative overflow-hidden rounded-[8px] border">
-      <div className="aspect-[16/11] w-full">
+    <div className="catalog-image-frame relative self-start overflow-hidden rounded-[8px] border">
+      <div className="catalog-image-canvas flex aspect-[4/3] max-h-[320px] w-full items-center justify-center sm:aspect-[16/10] sm:max-h-[420px] lg:max-h-[460px]">
         <img
           src={safeImages[idx]}
           alt={alt}
-          className="h-full w-full object-contain p-4 sm:p-6"
+          className="h-full max-h-full w-full max-w-full object-contain p-3 sm:p-5"
           loading="lazy"
         />
       </div>
@@ -512,7 +512,7 @@ const ProductCategoryPage = ({ title, intro, products }: ProductCategoryPageProp
                     </div>
                   </div>
 
-                  <div className="mt-7 grid grid-cols-1 gap-7 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+                  <div className="mt-7 grid grid-cols-1 items-start gap-7 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
                     <ImageCarousel images={product.images} alt={product.name} />
 
                     <div className="min-w-0 space-y-5">

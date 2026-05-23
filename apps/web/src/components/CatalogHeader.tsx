@@ -97,7 +97,7 @@ const CatalogHeader = () => {
       >
         <div
           className={cn(
-            "pointer-events-auto relative flex h-12 items-center justify-between gap-3 overflow-hidden rounded-2xl border px-3 transition-all duration-300 ease-out lg:px-4",
+            "pointer-events-auto relative flex h-12 items-center justify-between gap-3 rounded-2xl border px-3 transition-all duration-300 ease-out lg:px-4",
             solid
               ? "shadow-[0_18px_50px_-22px_rgba(0,0,0,0.55)] backdrop-blur-xl"
               : "backdrop-blur-[2px]"
@@ -132,7 +132,7 @@ const CatalogHeader = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
                     transition={{ duration: shouldReduceMotion ? 0.1 : 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="absolute left-0 top-[calc(100%+0.5rem)] w-[340px] overflow-hidden rounded-2xl border p-1.5 backdrop-blur-xl"
+                    className="absolute left-0 top-[calc(100%+0.5rem)] z-50 w-[340px] overflow-hidden rounded-2xl border p-1.5 backdrop-blur-xl"
                     style={{
                       backgroundColor: "color-mix(in srgb, var(--lp-panel) 94%, transparent)",
                       borderColor: "var(--lp-line)",
@@ -145,6 +145,7 @@ const CatalogHeader = () => {
                         <Link
                           key={category.href}
                           to={category.href}
+                          onClick={() => setProductsOpen(false)}
                           className={cn(
                             "group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
                             active ? "bg-[var(--lp-panel-2)]" : "hover:bg-[var(--lp-panel-2)]"
@@ -222,6 +223,7 @@ const CatalogHeader = () => {
                     <Link
                       key={category.href}
                       to={category.href}
+                      onClick={() => setMenuOpen(false)}
                       className={cn(
                         "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
                         active ? "bg-[var(--lp-panel-2)]" : "hover:bg-[var(--lp-panel-2)]"
