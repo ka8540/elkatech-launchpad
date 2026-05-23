@@ -6,6 +6,7 @@ import type { AuthUser } from "@elkatech/contracts";
 import AuthPageShell from "@/components/AuthPageShell";
 import GoogleIcon from "@/components/GoogleIcon";
 import { ApiError, apiRequest } from "@/lib/api";
+import { ensurePortalSessionReadable, isSessionCookieBlockedError } from "@/lib/sessionGuard";
 import {
   firebaseSignInWithGoogle,
   firebaseSignUpEmail,
@@ -100,7 +101,8 @@ const SignupPage = () => {
 
       const credential = await firebaseSignUpEmail(form.email, form.password);
       const idToken = await getFirebaseIdToken(credential.user);
-      const user = await exchangeFirebaseToken(idToken);
+      await exchangeFirebaseToken(idToken);
+      const user = await ensurePortalSessionReadable();
       return { kind: "firebase" as const, user };
     },
     onSuccess: async (result) => {
@@ -114,6 +116,10 @@ const SignupPage = () => {
       navigate(landingForRoleAndStatus(result.user));
     },
     onError: (error: unknown) => {
+      if (isSessionCookieBlockedError(error)) {
+        toast.error(error.message, { duration: 7000 });
+        return;
+      }
       if (error instanceof ApiError) {
         toast.error(error.message);
         return;
@@ -127,7 +133,8 @@ const SignupPage = () => {
       if (firebaseReady) {
         const credential = await firebaseSignInWithGoogle();
         const idToken = await getFirebaseIdToken(credential.user);
-        return exchangeFirebaseToken(idToken);
+        await exchangeFirebaseToken(idToken);
+        return ensurePortalSessionReadable();
       }
       const params = new URLSearchParams();
       if (inviteToken) params.set("inviteToken", inviteToken);
@@ -142,6 +149,10 @@ const SignupPage = () => {
       navigate(landingForRoleAndStatus(user));
     },
     onError: (error: unknown) => {
+      if (isSessionCookieBlockedError(error)) {
+        toast.error(error.message, { duration: 7000 });
+        return;
+      }
       if (error instanceof ApiError) {
         toast.error(error.message);
         return;
@@ -241,6 +252,10 @@ const SignupPage = () => {
           Sign in
         </Link>
       </div>
+      <p className="mt-5 rounded-[8px] border border-[rgba(210,130,63,0.24)] bg-[rgba(210,130,63,0.08)] px-3 py-2 text-xs leading-5 text-muted-foreground">
+        Secure sign-up uses first-party cookies. If Firefox or an extension stops after Google,
+        allow cookies for this site and try again.
+      </p>
     </AuthPageShell>
   );
 };

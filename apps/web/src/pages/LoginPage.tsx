@@ -6,6 +6,7 @@ import type { AuthUser } from "@elkatech/contracts";
 import AuthPageShell from "@/components/AuthPageShell";
 import GoogleIcon from "@/components/GoogleIcon";
 import { ApiError, apiRequest } from "@/lib/api";
+import { ensurePortalSessionReadable, isSessionCookieBlockedError } from "@/lib/sessionGuard";
 import {
   firebaseSignInEmail,
   firebaseSignInWithGoogle,
@@ -92,19 +93,22 @@ const LoginPage = () => {
         try {
           const credential = await firebaseSignInEmail(form.email, form.password);
           const idToken = await getFirebaseIdToken(credential.user);
-          return await exchangeFirebaseToken(idToken);
+          await exchangeFirebaseToken(idToken);
+          return await ensurePortalSessionReadable();
         } catch (firebaseError) {
           // Existing legacy accounts (bootstrap admin, pre-migration users)
           // live only in our Postgres with a bcrypt password and don't exist
           // in Firebase. Fall back to the legacy /api/auth/login path so
           // those accounts keep working.
           if (isLegacyFallbackError(firebaseError)) {
-            return await legacyLogin();
+            await legacyLogin();
+            return await ensurePortalSessionReadable();
           }
           throw firebaseError;
         }
       }
-      return legacyLogin();
+      await legacyLogin();
+      return await ensurePortalSessionReadable();
     },
     onSuccess: async (user) => {
       await queryClient.invalidateQueries({ queryKey: ["session"] });
@@ -112,6 +116,10 @@ const LoginPage = () => {
       navigate(landingPathForUser(user, next));
     },
     onError: (error: unknown) => {
+      if (isSessionCookieBlockedError(error)) {
+        toast.error(error.message, { duration: 7000 });
+        return;
+      }
       if (error instanceof ApiError) {
         toast.error(error.message);
         return;
@@ -125,7 +133,8 @@ const LoginPage = () => {
       if (firebaseReady) {
         const credential = await firebaseSignInWithGoogle();
         const idToken = await getFirebaseIdToken(credential.user);
-        return exchangeFirebaseToken(idToken);
+        await exchangeFirebaseToken(idToken);
+        return ensurePortalSessionReadable();
       }
       // Legacy Google OAuth fallback: redirect to gateway-driven flow.
       const params = new URLSearchParams();
@@ -141,6 +150,10 @@ const LoginPage = () => {
       navigate(landingPathForUser(user, next));
     },
     onError: (error: unknown) => {
+      if (isSessionCookieBlockedError(error)) {
+        toast.error(error.message, { duration: 7000 });
+        return;
+      }
       if (error instanceof ApiError) {
         toast.error(error.message);
         return;
@@ -226,6 +239,10 @@ const LoginPage = () => {
           Create account
         </Link>
       </div>
+      <p className="mt-5 rounded-[8px] border border-[rgba(210,130,63,0.24)] bg-[rgba(210,130,63,0.08)] px-3 py-2 text-xs leading-5 text-muted-foreground">
+        Secure sign-in uses first-party cookies. If Firefox or an extension stops after Google,
+        allow cookies for this site and try again.
+      </p>
     </AuthPageShell>
   );
 };
