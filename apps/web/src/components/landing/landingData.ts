@@ -128,28 +128,28 @@ export const SERVICE_STEPS = [
     title: "Discovery & sizing",
     description:
       "We map your media, volume and substrates, then shortlist the machine that fits your floor and budget.",
-    image: "images/how-we-work/machine-matching.webp",
+    image: "images/service/discovery-sizing.webp",
   },
   {
     step: "02",
     title: "Dispatch & logistics",
     description:
       "Crated, insured and tracked dispatch across India with clear timelines and on-ground coordination.",
-    image: "images/how-we-work/dispatch-logistics.webp",
+    image: "images/service/dispatch-logistics.webp",
   },
   {
     step: "03",
     title: "Install & training",
     description:
       "On-site installation, calibration and hands-on operator training so production starts the right way.",
-    image: "images/how-we-work/install-training.webp",
+    image: "images/service/install-training.webp",
   },
   {
     step: "04",
     title: "Support & uptime",
     description:
       "Genuine parts, ink and responsive after-sales support that keeps your machines running and earning.",
-    image: "images/how-we-work/support-uptime.webp",
+    image: "images/service/support-uptime.webp",
   },
 ];
 
