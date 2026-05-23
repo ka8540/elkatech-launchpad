@@ -1,10 +1,9 @@
-import { Moon, Sun, Monitor, RefreshCw } from "lucide-react";
+import { Moon, Sun, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/components/ThemeProvider";
@@ -51,11 +50,6 @@ export function ThemeToggle() {
         >
           <Monitor className="mr-2 h-4 w-4" style={{ color: "var(--lp-accent, hsl(var(--accent)))" }} />
           <span>System</span>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => window.location.reload()}>
-          <RefreshCw className="mr-2 h-4 w-4" style={{ color: "var(--lp-accent, hsl(var(--accent)))" }} />
-          <span>Refresh Page</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
