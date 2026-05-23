@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 import { toast } from "sonner";
 import StableReveal from "@/components/StableReveal";
+import SectionEyebrow from "@/components/SectionEyebrow";
 
 const WHATSAPP_NUMBER = "917203033486";
 const PHONE_NUMBER = "+917203033486";
@@ -56,12 +57,10 @@ const ContactSection = () => {
           {/* Left Column - Info */}
           <div>
             <StableReveal variant="section">
-              <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
-                Contact Us
-              </span>
+              <SectionEyebrow tone="navy">Contact Us</SectionEyebrow>
             </StableReveal>
             <StableReveal variant="section" delay={0.08}>
-              <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6">
+              <h2 className="mb-6 font-display text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl">
                 Let's Start a <span className="text-accent">Conversation</span>
               </h2>
             </StableReveal>

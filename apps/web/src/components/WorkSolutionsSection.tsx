@@ -1,6 +1,8 @@
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import StableReveal from "@/components/StableReveal";
+import SectionEyebrow from "@/components/SectionEyebrow";
 import { toPublicAsset } from "@/lib/assets";
 
 const categories = [
@@ -73,71 +75,83 @@ const categories = [
 
 const WorkSolutionsSection = () => {
   return (
-    <section id="work" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
+    <section id="work" className="relative overflow-hidden bg-navy-gradient py-24 md:py-32">
       <div className="absolute inset-x-0 top-0 h-px section-divider" />
       <div className="pointer-events-none absolute inset-0 ambient-surface-right" />
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/3 rounded-full blur-3xl" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.22]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(148,163,184,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.16) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+          maskImage:
+            "radial-gradient(ellipse at 50% 35%, black 30%, transparent 78%)",
+          WebkitMaskImage:
+            "radial-gradient(ellipse at 50% 35%, black 30%, transparent 78%)",
+        }}
+      />
+      <div className="absolute right-0 top-0 h-[500px] w-[500px] rounded-full bg-accent/5 blur-3xl" />
+      <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-accent/[0.04] blur-3xl" />
 
-      <div className="container mx-auto px-4 md:px-6 relative z-10">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <StableReveal variant="section">
-            <span className="inline-block px-3 py-1 rounded-full bg-accent/20 text-accent text-sm font-medium mb-4">
-              Work & Solutions
-            </span>
+      <div className="container relative z-10 mx-auto px-4 md:px-6">
+        <div className="mx-auto mb-16 max-w-3xl text-center">
+          <StableReveal variant="section" className="flex justify-center">
+            <SectionEyebrow tone="navy">Work &amp; Solutions</SectionEyebrow>
           </StableReveal>
           <StableReveal variant="section" delay={0.08}>
-            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
+            <h2 className="mb-4 font-display text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl">
               Complete Industrial <span className="text-accent">Machinery Solutions</span>
             </h2>
           </StableReveal>
           <StableReveal variant="section" delay={0.16}>
-            <p className="text-white/70 text-lg">
+            <p className="text-lg text-white/70">
               Explore our machinery categories tailored for commercial printing, signage, and
               fabrication workflows.
             </p>
           </StableReveal>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid gap-6 md:grid-cols-2">
           {categories.map((category, index) => (
             <StableReveal
               key={category.title}
               variant="card"
               delay={Math.min(index * 0.06, 0.24)}
-              className="group relative isolate overflow-hidden rounded-2xl border border-blue-500/20 bg-slate-950/60 backdrop-blur-sm transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-blue-400/40 hover:bg-slate-900/70 hover:shadow-[0_20px_70px_rgba(14,165,233,0.12)]"
+              className="group relative isolate overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60 backdrop-blur-sm transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-accent/50 hover:bg-slate-900/70 hover:shadow-[0_30px_90px_-30px_rgba(14,165,233,0.45)]"
             >
               <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+              <div className="pointer-events-none absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-              <div className="relative z-10 h-72 md:h-80 overflow-hidden">
+              <div className="relative z-10 h-72 overflow-hidden md:h-80">
                 <img
                   src={toPublicAsset(category.image)}
                   alt={category.title}
-                  className="h-full w-full object-cover transition-[filter] duration-500 ease-out group-hover:brightness-110 group-hover:contrast-105"
+                  className="h-full w-full object-cover transition-[filter,transform] duration-700 ease-out group-hover:scale-[1.02] group-hover:brightness-110 group-hover:contrast-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[hsl(215,60%,8%)] via-[hsl(215,60%,8%)]/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[hsl(215,60%,8%)] via-[hsl(215,60%,8%)]/45 to-transparent" />
                 <div className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 transition-[left,opacity] duration-700 ease-out group-hover:left-full group-hover:opacity-100" />
               </div>
 
               <div className="relative z-10 p-6 md:p-8">
                 <div className="mb-4">
-                  <h3 className="font-display text-xl font-semibold text-white mb-2">
+                  <h3 className="mb-2 font-display text-xl font-semibold text-white">
                     {category.title}
                   </h3>
-                  <p className="text-white/70 text-sm leading-relaxed">
+                  <p className="text-sm leading-relaxed text-white/70">
                     {category.description}
                   </p>
                 </div>
 
                 <div className="mb-4">
-                  <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/55">
                     Typical Applications
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {category.applications.map((app) => (
                       <span
                         key={app}
-                        className="px-2.5 py-1 rounded-full bg-white/10 text-white/80 text-xs transition-colors duration-300 group-hover:bg-white/15 group-hover:text-white"
+                        className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-white/80 transition-colors duration-300 group-hover:bg-white/15 group-hover:text-white"
                       >
                         {app}
                       </span>
@@ -146,14 +160,14 @@ const WorkSolutionsSection = () => {
                 </div>
 
                 <div className="mb-5">
-                  <p className="text-xs text-white/60 uppercase tracking-wider mb-2">
+                  <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/55">
                     Industries Served
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {category.industries.map((ind) => (
                       <span
                         key={ind}
-                        className="px-2.5 py-1 rounded-full border border-accent/30 text-accent text-xs transition-colors duration-300 group-hover:border-accent/50 group-hover:bg-accent/10"
+                        className="rounded-full border border-accent/30 px-2.5 py-1 text-xs text-accent transition-colors duration-300 group-hover:border-accent/50 group-hover:bg-accent/10"
                       >
                         {ind}
                       </span>
@@ -161,17 +175,16 @@ const WorkSolutionsSection = () => {
                   </div>
                 </div>
 
-                {/* CTA -> link to the category page */}
                 <Button
                   asChild
                   variant="outline"
                   size="sm"
-                  className="group/btn border-white/20 bg-white/10 text-white hover:bg-white/15 hover:border-accent/50"
+                  className="group/btn border-white/20 bg-white/10 text-white hover:border-accent/60 hover:bg-white/15"
                 >
-                  <a href={category.href}>
+                  <Link to={category.href}>
                     Explore Products
-                    <ArrowRight className="ml-2 w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
-                  </a>
+                    <ArrowRight className="ml-2 h-3.5 w-3.5 transition-transform group-hover/btn:translate-x-1" />
+                  </Link>
                 </Button>
               </div>
             </StableReveal>

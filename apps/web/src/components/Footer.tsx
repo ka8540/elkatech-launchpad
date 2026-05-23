@@ -1,4 +1,5 @@
 import { Mail, MapPin, Phone, MessageCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const PHONE_NUMBER = "+917203033486";
 const WHATSAPP_NUMBER = "917203033486";
@@ -7,10 +8,10 @@ const Footer = () => {
   const currentYear = new Date().getFullYear();
 
   const quickLinks = [
-    { label: "Home", href: "#home" },
-    { label: "About", href: "#about" },
-    { label: "Work & Solutions", href: "#work" },
-    { label: "Contact", href: "#contact" },
+    { label: "Home", hash: "#home" },
+    { label: "About", hash: "#about" },
+    { label: "Work & Solutions", hash: "#work" },
+    { label: "Contact", hash: "#contact" },
   ];
 
   // Match what you actually sell on the site right now
@@ -31,7 +32,7 @@ const Footer = () => {
           {/* Brand Column */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2.5 mb-4">
-              <a href="#home" className="flex items-center gap-2 text-white">
+              <Link to={{ pathname: "/", hash: "#home" }} className="flex items-center gap-2 text-white">
                 <svg
                   width="32"
                   height="32"
@@ -79,7 +80,7 @@ const Footer = () => {
                 <span className="font-display text-lg font-bold text-white">
                   Elkatech
                 </span>
-              </a>
+              </Link>
             </div>
 
             <p className="text-white/70 text-sm leading-relaxed mb-4">
@@ -98,12 +99,12 @@ const Footer = () => {
             <ul className="space-y-2.5">
               {quickLinks.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <Link
+                    to={{ pathname: "/", hash: link.hash }}
                     className="text-sm text-white/70 hover:text-accent transition-colors duration-200"
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -117,12 +118,12 @@ const Footer = () => {
             <ul className="space-y-2.5">
               {solutions.map((link) => (
                 <li key={link.label}>
-                  <a
-                    href={link.href}
+                  <Link
+                    to={link.href}
                     className="text-sm text-white/70 hover:text-accent transition-colors duration-200"
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

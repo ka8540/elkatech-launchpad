@@ -1,5 +1,6 @@
 import { Heart, Users, HandshakeIcon, Target } from "lucide-react";
 import StableReveal from "@/components/StableReveal";
+import SectionEyebrow from "@/components/SectionEyebrow";
 
 const values = [
   {
@@ -32,30 +33,41 @@ const AboutSection = () => {
   return (
     <section
       id="about"
-      className="py-24 md:py-32 bg-steel-gradient relative overflow-hidden"
+      className="relative overflow-hidden bg-steel-gradient py-24 md:py-32"
     >
       <div className="absolute inset-x-0 top-0 h-px section-divider" />
       <div className="pointer-events-none absolute inset-0 ambient-surface-left" />
-      <div className="absolute bottom-0 left-0 w-80 h-80 bg-primary/5 rounded-full blur-3xl" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-25"
+        style={{
+          backgroundImage:
+            "linear-gradient(hsl(var(--foreground) / 0.025) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground) / 0.025) 1px, transparent 1px)",
+          backgroundSize: "56px 56px",
+          maskImage:
+            "radial-gradient(ellipse at 50% 30%, black 30%, transparent 80%)",
+          WebkitMaskImage:
+            "radial-gradient(ellipse at 50% 30%, black 30%, transparent 80%)",
+        }}
+      />
+      <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-primary/5 blur-3xl" />
 
-      <div className="container mx-auto px-4 md:px-6 relative z-10">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+      <div className="container relative z-10 mx-auto px-4 md:px-6">
+        <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
           {/* Left Column - Content */}
           <div>
             <StableReveal variant="section">
-              <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
-                About Elkatech
-              </span>
+              <SectionEyebrow>About Elkatech</SectionEyebrow>
             </StableReveal>
 
             <StableReveal variant="section" delay={0.08}>
-              <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-6">
+              <h2 className="mb-6 font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl">
                 Partners Beyond <span className="text-gradient-accent">the Purchase</span>
               </h2>
             </StableReveal>
 
             <StableReveal variant="section" delay={0.16}>
-              <div className="space-y-4 text-muted-foreground leading-relaxed">
+              <div className="space-y-4 leading-relaxed text-muted-foreground">
                 <p className="text-lg">
                   Elkatech is an Ahmedabad-based importer, wholesaler, and distributor
                   of industrial printing and signage machinery. We serve printing
@@ -74,29 +86,49 @@ const AboutSection = () => {
                 </p>
               </div>
             </StableReveal>
+
+            <StableReveal variant="section" delay={0.24} className="mt-8">
+              <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border/70 bg-border/40 sm:grid-cols-3">
+                {[
+                  { value: "2017", label: "GST registered" },
+                  { value: "Wholesale", label: "Trade model" },
+                  { value: "Partnership", label: "Firm" },
+                ].map((item) => (
+                  <div key={item.label} className="flex flex-col gap-1 bg-card px-4 py-4">
+                    <dt className="font-display text-base font-semibold tracking-tight text-foreground">
+                      {item.value}
+                    </dt>
+                    <dd className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                      {item.label}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </StableReveal>
           </div>
 
           {/* Right Column - Values */}
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             {values.map((value, index) => (
               <StableReveal
                 key={value.title}
                 variant="card"
                 delay={Math.min(index * 0.06, 0.24)}
-                className="group relative isolate overflow-hidden rounded-xl border border-border bg-card p-5 transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-blue-400/40 hover:shadow-[0_20px_70px_rgba(14,165,233,0.12)]"
+                className="group relative isolate overflow-hidden rounded-2xl border border-border bg-card p-5 transition-[border-color,box-shadow,background-color] duration-300 ease-out hover:border-accent/40 hover:shadow-[0_24px_70px_-22px_rgba(14,165,233,0.35)]"
               >
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-400/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                <div className="pointer-events-none absolute -top-px left-6 right-6 h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
                 <div className="relative z-10">
-                  <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mb-3 transition-[background-color,box-shadow] duration-300 group-hover:bg-accent/20 group-hover:shadow-glow">
-                    <value.icon className="w-5 h-5 text-accent" />
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10 transition-[background-color,box-shadow] duration-300 group-hover:bg-accent/20 group-hover:shadow-glow">
+                    <value.icon className="h-5 w-5 text-accent" />
                   </div>
 
-                  <h3 className="font-display font-semibold text-foreground mb-1.5">
+                  <h3 className="mb-1.5 font-display font-semibold text-foreground">
                     {value.title}
                   </h3>
 
-                  <p className="text-sm text-muted-foreground leading-relaxed">
+                  <p className="text-sm leading-relaxed text-muted-foreground">
                     {value.description}
                   </p>
                 </div>

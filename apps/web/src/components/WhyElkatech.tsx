@@ -1,5 +1,6 @@
 import { MessageSquare, HeartHandshake, Lightbulb, Clock, Building, CheckCircle } from "lucide-react";
 import StableReveal from "@/components/StableReveal";
+import SectionEyebrow from "@/components/SectionEyebrow";
 
 const reasons = [
   {
@@ -44,20 +45,18 @@ const WhyElkatech = () => {
 
       <div className="container mx-auto px-4 md:px-6 relative z-10">
         {/* Section Header */}
-        <div className="text-center max-w-2xl mx-auto mb-16">
-          <StableReveal variant="section">
-            <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
-              Why Choose Us
-            </span>
+        <div className="mx-auto mb-16 max-w-2xl text-center">
+          <StableReveal variant="section" className="flex justify-center">
+            <SectionEyebrow>Why Choose Us</SectionEyebrow>
           </StableReveal>
           <StableReveal variant="section" delay={0.08}>
-            <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
+            <h2 className="mb-4 font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl">
               Reliability You Can{" "}
               <span className="text-gradient-accent">Count On</span>
             </h2>
           </StableReveal>
           <StableReveal variant="section" delay={0.16}>
-            <p className="text-muted-foreground text-lg">
+            <p className="text-lg text-muted-foreground">
               We believe in building trust through actions, not just words. Here's what sets us apart.
             </p>
           </StableReveal>

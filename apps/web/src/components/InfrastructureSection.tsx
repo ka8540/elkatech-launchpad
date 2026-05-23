@@ -10,6 +10,7 @@ import {
   Receipt,
 } from "lucide-react";
 import StableReveal from "@/components/StableReveal";
+import SectionEyebrow from "@/components/SectionEyebrow";
 
 const features = [
   {
@@ -125,13 +126,11 @@ const InfrastructureSection = () => {
           {/* Right: intro + feature cards */}
           <div>
             <StableReveal variant="section">
-              <span className="inline-block px-3 py-1 rounded-full bg-accent/10 text-accent text-sm font-medium mb-4">
-                Infrastructure
-              </span>
+              <SectionEyebrow>Infrastructure</SectionEyebrow>
             </StableReveal>
             <StableReveal variant="section" delay={0.08}>
-              <h2 className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-6">
-                Our Warehouse & <span className="text-gradient-accent">Facilities</span>
+              <h2 className="mb-6 font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl">
+                Our Warehouse &amp; <span className="text-gradient-accent">Facilities</span>
               </h2>
             </StableReveal>
             <StableReveal variant="section" delay={0.16}>

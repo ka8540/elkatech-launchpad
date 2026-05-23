@@ -1,16 +1,16 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTheme } from "@/components/ThemeProvider";
 import { cn } from "@/lib/utils";
 
 type SiteHeaderProps = {
-  useHomeAnchors?: boolean;
   variant?: "dark" | "light";
 };
 
-const SECTION_HASHES = [
+const SECTION_LINKS = [
   { label: "Home", hash: "#home" },
   { label: "About", hash: "#about" },
   { label: "Work & Solutions", hash: "#work" },
@@ -22,13 +22,14 @@ const SECTION_HASHES = [
 const getSystemPrefersDark = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProps) => {
+const SiteHeader = ({ variant = "dark" }: SiteHeaderProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(getSystemPrefersDark);
   const shouldReduceMotion = useReducedMotion();
   const headerRef = useRef<HTMLDivElement>(null);
   const { theme } = useTheme();
+  const location = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -64,6 +65,12 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
     };
   }, [isMenuOpen]);
 
+  // Close the mobile menu when the route or section hash changes so it doesn't
+  // hang open after a navigation triggered by tapping a nav item.
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname, location.hash]);
+
   useEffect(() => {
     if (theme !== "system") return;
 
@@ -75,15 +82,30 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, [theme]);
 
-  const navItems = SECTION_HASHES.map(({ label, hash }) => ({
-    label,
-    href: useHomeAnchors ? hash : `/${hash}`,
-  }));
   const hasGlassShell = isScrolled || isMenuOpen;
   const isDarkTheme = theme === "dark" || (theme === "system" && systemPrefersDark);
   const resolvedVariant = variant === "light" && !isDarkTheme ? "light" : "dark";
   const isLightHeader = resolvedVariant === "light";
   const logoStroke = isLightHeader ? "hsl(215 35% 12%)" : "white";
+
+  // Always route through React Router with explicit pathname+hash so the
+  // ScrollManager sees both the path change and the section target. Using a
+  // raw <a href> here would cause a full page reload and lose the smooth
+  // section scroll.
+  const renderSectionLink = (
+    item: (typeof SECTION_LINKS)[number],
+    extraClassName: string,
+    onClick?: () => void
+  ) => (
+    <Link
+      key={item.label}
+      to={{ pathname: "/", hash: item.hash }}
+      onClick={onClick}
+      className={extraClassName}
+    >
+      {item.label}
+    </Link>
+  );
 
   return (
     <header className="pointer-events-none fixed left-0 right-0 top-3 z-50 px-4 lg:top-4">
@@ -103,7 +125,10 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
                 : "border-transparent bg-[#020817]/20 shadow-none backdrop-blur-sm before:bg-white/15 before:opacity-0"
           )}
         >
-          <a href={useHomeAnchors ? "#home" : "/"} className="flex shrink-0 items-center gap-2">
+          <Link
+            to={{ pathname: "/", hash: "#home" }}
+            className="flex shrink-0 items-center gap-2"
+          >
             <svg
               width="30"
               height="30"
@@ -140,23 +165,20 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
             >
               Elkatech
             </span>
-          </a>
+          </Link>
 
           <nav className="hidden items-center gap-6 lg:flex">
-            {navItems.map((item) => (
-              <a
-                key={item.label}
-                href={item.href}
-                className={cn(
+            {SECTION_LINKS.map((item) =>
+              renderSectionLink(
+                item,
+                cn(
                   "text-sm font-medium transition-colors duration-200",
                   isLightHeader
                     ? "text-slate-600 hover:text-slate-950"
                     : "text-white/75 hover:text-white"
-                )}
-              >
-                {item.label}
-              </a>
-            ))}
+                )
+              )
+            )}
           </nav>
 
           <div
@@ -167,8 +189,8 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
                 : "[&_button:hover]:bg-white/10 [&_button]:text-white"
             )}
           >
-            <a
-              href="/login"
+            <Link
+              to="/login"
               className={cn(
                 "rounded-full border px-4 py-1.5 text-sm font-medium transition-colors",
                 isLightHeader
@@ -177,7 +199,7 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
               )}
             >
               Service Portal
-            </a>
+            </Link>
             <ThemeToggle />
           </div>
 
@@ -220,23 +242,20 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
               )}
             >
               <nav className="flex flex-col gap-1">
-                {navItems.map((item) => (
-                  <a
-                    key={item.label}
-                    href={item.href}
-                    onClick={() => setIsMenuOpen(false)}
-                    className={cn(
+                {SECTION_LINKS.map((item) =>
+                  renderSectionLink(
+                    item,
+                    cn(
                       "rounded-2xl px-4 py-3 text-sm font-medium transition-colors duration-200",
                       isLightHeader
                         ? "text-slate-700 hover:bg-slate-100 hover:text-slate-950"
                         : "text-white/80 hover:bg-white/[0.08] hover:text-white"
-                    )}
-                  >
-                    {item.label}
-                  </a>
-                ))}
-                <a
-                  href="/login"
+                    ),
+                    () => setIsMenuOpen(false)
+                  )
+                )}
+                <Link
+                  to="/login"
                   onClick={() => setIsMenuOpen(false)}
                   className={cn(
                     "mt-2 block w-full rounded-2xl border px-4 py-3 text-center text-sm font-medium transition-colors",
@@ -246,7 +265,7 @@ const SiteHeader = ({ useHomeAnchors = false, variant = "dark" }: SiteHeaderProp
                   )}
                 >
                   Service Portal
-                </a>
+                </Link>
                 <div
                   className={cn(
                     "flex items-center gap-2 px-4 pt-3",
