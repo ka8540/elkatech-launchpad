@@ -1,10 +1,11 @@
 import {
+  AnimatePresence,
   motion,
+  useMotionValueEvent,
   useReducedMotion,
   useScroll,
   useSpring,
   useTransform,
-  type MotionValue,
 } from "framer-motion";
 import {
   ClipboardList,
@@ -14,7 +15,7 @@ import {
   LifeBuoy,
   type LucideIcon,
 } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import SectionEyebrow from "@/components/SectionEyebrow";
 import ScrollReveal from "@/components/ScrollReveal";
 
@@ -93,26 +94,8 @@ const STAGES: readonly Stage[] = [
 
 const N = STAGES.length;
 
-// Each stage owns a slice of the section's 0→1 scroll progress. Adjacent
-// slices overlap slightly via `bleed` so panels cross-fade rather than
-// hard-switch.
-const SLICE = 1 / N;
-const BLEED = SLICE * 0.4;
-
-function stageOpacityRange(i: number) {
-  const start = i * SLICE;
-  const end = (i + 1) * SLICE;
-  return {
-    input: [
-      Math.max(start - BLEED, 0),
-      start,
-      end,
-      Math.min(end + BLEED, 1),
-    ] as const,
-    opacity: [0, 1, 1, 0] as const,
-    y: [24, 0, 0, -24] as const,
-  };
-}
+const clampStepIndex = (raw: number) =>
+  Math.min(N - 1, Math.max(0, Math.floor(raw)));
 
 const StickyStorySection = () => {
   const shouldReduceMotion = useReducedMotion();
@@ -136,41 +119,22 @@ const StickyStorySection = () => {
   });
   const progress = shouldReduceMotion ? scrollYProgress : smoothed;
 
-  // Hooks are called in a fixed order at the top of the component — one
-  // pair per stage. STAGES has a stable length so the call order is stable
-  // across renders.
-  const r0 = stageOpacityRange(0);
-  const r1 = stageOpacityRange(1);
-  const r2 = stageOpacityRange(2);
-  const r3 = stageOpacityRange(3);
-  const r4 = stageOpacityRange(4);
+  // The stepper rail fill is a smooth motion value — it's the only thing
+  // that should animate *continuously* on this section. Stage content
+  // switches discretely.
+  const railFill = useTransform(progress, [0, 1], ["0%", "100%"]);
 
-  const op0 = useTransform(progress, [...r0.input], [...r0.opacity]);
-  const op1 = useTransform(progress, [...r1.input], [...r1.opacity]);
-  const op2 = useTransform(progress, [...r2.input], [...r2.opacity]);
-  const op3 = useTransform(progress, [...r3.input], [...r3.opacity]);
-  const op4 = useTransform(progress, [...r4.input], [...r4.opacity]);
-
-  const y0 = useTransform(progress, [...r0.input], [...r0.y]);
-  const y1 = useTransform(progress, [...r1.input], [...r1.y]);
-  const y2 = useTransform(progress, [...r2.input], [...r2.y]);
-  const y3 = useTransform(progress, [...r3.input], [...r3.y]);
-  const y4 = useTransform(progress, [...r4.input], [...r4.y]);
-
-  const stageMotion = [
-    { opacity: op0, y: y0 },
-    { opacity: op1, y: y1 },
-    { opacity: op2, y: y2 },
-    { opacity: op3, y: y3 },
-    { opacity: op4, y: y4 },
-  ];
-
-  const activeIndex = useTransform(progress, (p) => {
-    const clamped = Math.min(Math.max(p, 0), 0.999);
-    return Math.floor(clamped * N);
+  // Mirror the discrete active-step index into React state so AnimatePresence
+  // can swap a single keyed panel. The functional setState prevents
+  // re-renders when the floor() of progress hasn't actually changed, so the
+  // component renders at most N times across the full scroll.
+  const [activeStep, setActiveStep] = useState(0);
+  useMotionValueEvent(progress, "change", (latest) => {
+    const next = clampStepIndex(latest * N);
+    setActiveStep((prev) => (prev === next ? prev : next));
   });
 
-  const railFill = useTransform(progress, [0, 1], ["0%", "100%"]);
+  const active = STAGES[activeStep];
 
   return (
     <section
@@ -209,7 +173,7 @@ const StickyStorySection = () => {
                   </div>
                   <div>
                     <p className="font-display text-[11px] uppercase tracking-[0.18em] text-accent">
-                      Stage {stage.index}
+                      Step {stage.index}
                     </p>
                     <h3 className="mt-1 font-display text-lg font-semibold text-foreground">
                       {stage.title}
@@ -274,18 +238,41 @@ const StickyStorySection = () => {
                   />
                 </div>
                 <ol className="flex flex-col gap-6">
-                  {STAGES.map((stage, i) => (
-                    <StepperItem
-                      key={stage.id}
-                      stage={stage}
-                      index={i}
-                      activeIndex={activeIndex}
-                    />
-                  ))}
+                  {STAGES.map((stage, i) => {
+                    const isActive = i === activeStep;
+                    return (
+                      <li
+                        key={stage.id}
+                        className="-ml-[15px] flex items-center gap-3"
+                      >
+                        <span
+                          className={
+                            "block h-3 w-3 rounded-full border-2 border-accent bg-background transition-transform duration-300 " +
+                            (isActive ? "scale-100" : "scale-[0.6]")
+                          }
+                        />
+                        <span
+                          className={
+                            "font-display text-sm font-medium tracking-tight text-foreground transition-opacity duration-300 " +
+                            (isActive ? "opacity-100" : "opacity-45")
+                          }
+                        >
+                          <span className="mr-3 font-mono text-[11px] tracking-widest text-accent">
+                            {stage.index}
+                          </span>
+                          {stage.title}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ol>
               </div>
             </div>
 
+            {/* Right column: the visual card. The static frame backgrounds
+                stay mounted; only the active stage's content swaps inside
+                an AnimatePresence so old text exits fully before new text
+                enters — no glyph overlap. */}
             <div className="col-span-6 flex items-center justify-center">
               <div className="relative aspect-[4/5] w-full max-w-md">
                 <div
@@ -310,30 +297,33 @@ const StickyStorySection = () => {
                   className="absolute inset-0 rounded-[28px] bg-[radial-gradient(circle_at_70%_22%,rgba(14,165,233,0.18),transparent_55%)]"
                 />
 
-                {STAGES.map((stage, i) => (
+                <AnimatePresence mode="wait" initial={false}>
                   <motion.div
-                    key={stage.id}
-                    style={{ opacity: stageMotion[i].opacity, y: stageMotion[i].y }}
+                    key={active.id}
+                    initial={{ opacity: 0, y: 14, filter: "blur(6px)" }}
+                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, y: -14, filter: "blur(6px)" }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                     className="absolute inset-0 flex flex-col justify-between rounded-[28px] p-8 xl:p-10"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 font-display text-[11px] uppercase tracking-[0.2em] text-accent">
-                        Stage {stage.index}
+                      <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 font-display text-[11px] uppercase tracking-[0.18em] text-accent">
+                        Step {active.index}
                       </span>
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/80 bg-background/80 shadow-inner shadow-black/[0.04]">
-                        <stage.icon className="h-6 w-6 text-accent" />
+                        <active.icon className="h-6 w-6 text-accent" />
                       </div>
                     </div>
 
                     <div>
                       <h3 className="font-display text-2xl font-semibold tracking-tight text-foreground xl:text-3xl">
-                        {stage.title}
+                        {active.title}
                       </h3>
-                      <p className="mt-3 text-sm leading-relaxed text-muted-foreground xl:text-base">
-                        {stage.description}
+                      <p className="mt-3 min-h-[5rem] text-sm leading-relaxed text-muted-foreground xl:text-base">
+                        {active.description}
                       </p>
                       <ul className="mt-5 space-y-2.5">
-                        {stage.bullets.map((b) => (
+                        {active.bullets.map((b) => (
                           <li
                             key={b}
                             className="flex items-start gap-2.5 text-sm text-foreground/80"
@@ -345,42 +335,13 @@ const StickyStorySection = () => {
                       </ul>
                     </div>
                   </motion.div>
-                ))}
+                </AnimatePresence>
               </div>
             </div>
           </div>
         </div>
       </div>
     </section>
-  );
-};
-
-type StepperItemProps = {
-  stage: Stage;
-  index: number;
-  activeIndex: MotionValue<number>;
-};
-
-const StepperItem = ({ stage, index, activeIndex }: StepperItemProps) => {
-  const titleOpacity = useTransform(activeIndex, (i) => (i === index ? 1 : 0.45));
-  const dotScale = useTransform(activeIndex, (i) => (i === index ? 1.0 : 0.6));
-
-  return (
-    <li className="-ml-[15px] flex items-center gap-3">
-      <motion.span
-        style={{ scale: dotScale }}
-        className="block h-3 w-3 rounded-full border-2 border-accent bg-background"
-      />
-      <motion.span
-        style={{ opacity: titleOpacity }}
-        className="font-display text-sm font-medium tracking-tight text-foreground"
-      >
-        <span className="mr-3 font-mono text-[11px] tracking-widest text-accent">
-          {stage.index}
-        </span>
-        {stage.title}
-      </motion.span>
-    </li>
   );
 };
 
