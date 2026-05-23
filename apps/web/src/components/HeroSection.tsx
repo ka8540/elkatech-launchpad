@@ -136,85 +136,90 @@ const HeroSection = () => {
       />
       <div className="absolute inset-x-0 bottom-0 z-[5] h-28 bg-gradient-to-b from-transparent via-[#050b14]/55 to-[#050b14]" />
 
-      <div className="relative z-10 mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-center px-6 pb-12 pt-24 sm:px-8 md:pb-16 md:pt-28 lg:px-10 lg:py-28">
-        <motion.div
-          style={{ y: contentY, opacity: contentOpacity }}
-          className="mx-auto flex w-full max-w-5xl flex-col items-center text-center"
-        >
+      <div className="relative z-10 mx-auto flex min-h-[100svh] max-w-7xl flex-col px-6 pb-6 pt-24 sm:px-8 md:pb-8 md:pt-28 lg:px-10 lg:pb-8 lg:pt-28">
+        <div className="flex flex-1 items-center justify-center py-8 md:py-10">
           <motion.div
-            initial={heroInitial}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.04 }}
-            className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 backdrop-blur-md"
+            style={{ y: contentY, opacity: contentOpacity }}
+            className="mx-auto flex w-full max-w-5xl flex-col items-center text-center"
           >
-            <span className="relative flex h-2 w-2">
-              <span
-                className={
-                  "absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" +
-                  (shouldReduceMotion ? "" : " animate-ping")
-                }
-              />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-300" />
-            </span>
-            <span className="text-[11px] uppercase tracking-[0.22em] text-white/80 md:text-xs">
-              Industrial Printing &amp; Signage Machinery · Ahmedabad
-            </span>
-          </motion.div>
-
-          <motion.h1
-            initial={heroInitial}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.14 }}
-            className="text-center text-5xl font-medium !leading-[0.92] tracking-tighter sm:text-6xl md:text-7xl lg:text-7xl xl:text-8xl"
-          >
-            <span className="block text-white">Powering</span>
-            <ShinyText>
-              Industrial Printing
-              <br />
-              Machinery.
-            </ShinyText>
-          </motion.h1>
-
-          <motion.p
-            initial={heroInitial}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.2 }}
-            className="mx-auto mt-7 max-w-2xl text-base leading-relaxed text-white/70 md:text-lg"
-          >
-            Importers, wholesalers, and distributors of solvent, UV, laser, and flatbed
-            machinery — backed by honest guidance and dependable after-sales support across India.
-          </motion.p>
-
-          <motion.div
-            initial={heroInitial}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.26 }}
-            className="mt-9 flex flex-col items-center gap-3 sm:flex-row sm:gap-4"
-          >
-            <Link
-              to={{ pathname: "/", hash: "#work" }}
-              className="group inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white px-7 py-3.5 text-sm font-semibold text-slate-950 shadow-[0_18px_45px_-12px_rgba(56,189,248,0.55)] transition hover:bg-white/95 md:text-base"
+            <motion.div
+              initial={heroInitial}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.04 }}
+              className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 backdrop-blur-md"
             >
-              Explore Solutions
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
-            <Link
-              to={{ pathname: "/", hash: "#contact" }}
-              className="group inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.04] px-7 py-3.5 text-sm font-medium text-white backdrop-blur transition hover:border-white/35 hover:bg-white/[0.08] md:text-base"
-            >
-              <MessageCircle className="h-4 w-4 text-cyan-300" />
-              Talk to our team
-            </Link>
-          </motion.div>
-        </motion.div>
+              <span className="relative flex h-2 w-2">
+                <span
+                  className={
+                    "absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" +
+                    (shouldReduceMotion ? "" : " animate-ping")
+                  }
+                />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-300" />
+              </span>
+              <span className="text-[11px] uppercase tracking-[0.22em] text-white/80 md:text-xs">
+                Industrial Printing &amp; Signage Machinery · Ahmedabad
+              </span>
+            </motion.div>
 
+            <motion.h1
+              initial={heroInitial}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.14 }}
+              className="text-center text-5xl font-medium !leading-[0.92] tracking-tighter sm:text-6xl md:text-7xl lg:text-7xl xl:text-8xl"
+            >
+              <span className="block text-white">Powering</span>
+              <ShinyText>
+                Industrial Printing
+                <br />
+                Machinery.
+              </ShinyText>
+            </motion.h1>
+
+            <motion.p
+              initial={heroInitial}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.2 }}
+              className="mx-auto mt-7 max-w-2xl text-base leading-relaxed text-white/70 md:text-lg"
+            >
+              Importers, wholesalers, and distributors of solvent, UV, laser, and flatbed
+              machinery — backed by honest guidance and dependable after-sales support across India.
+            </motion.p>
+
+            <motion.div
+              initial={heroInitial}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.26 }}
+              className="mt-9 flex flex-col items-center gap-3 sm:flex-row sm:gap-4"
+            >
+              <Link
+                to={{ pathname: "/", hash: "#work" }}
+                className="group inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white px-7 py-3.5 text-sm font-semibold text-slate-950 shadow-[0_18px_45px_-12px_rgba(56,189,248,0.55)] transition hover:bg-white/95 md:text-base"
+              >
+                Explore Solutions
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+              <Link
+                to={{ pathname: "/", hash: "#contact" }}
+                className="group inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.04] px-7 py-3.5 text-sm font-medium text-white backdrop-blur transition hover:border-white/35 hover:bg-white/[0.08] md:text-base"
+              >
+                <MessageCircle className="h-4 w-4 text-cyan-300" />
+                Talk to our team
+              </Link>
+            </motion.div>
+          </motion.div>
+        </div>
+
+        <div className="w-full pb-2 md:pb-4">
+          <HeroStatsGrid />
+        </div>
       </div>
     </section>
   );
 };
 
-// Standalone stats band that appears after the full hero viewport. Keeping it
-// outside the hero prevents the next section from peeking into the first load.
+// Optional standalone stats band for future reuse. The landing page renders
+// the stats inside the hero so the first viewport stays self-contained.
 export const HeroStatsStrip = () => {
   return (
     <section

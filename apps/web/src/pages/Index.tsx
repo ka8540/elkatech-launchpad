@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import IntroAnimation from "@/components/IntroAnimation";
-import HeroSection, { HeroStatsStrip } from "@/components/HeroSection";
+import HeroSection from "@/components/HeroSection";
 import AboutSection from "@/components/AboutSection";
 import WorkSolutionsSection from "@/components/WorkSolutionsSection";
 import BrandsSection from "@/components/BrandsSection";
@@ -28,7 +28,6 @@ const Index = () => {
       <Header />
       <main>
         <HeroSection />
-        <HeroStatsStrip />
         <AboutSection />
         <WorkSolutionsSection />
         <BrandsSection />
