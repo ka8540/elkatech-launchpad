@@ -142,7 +142,7 @@ const HeroSection = () => {
             initial={heroInitial}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.14 }}
-            className="text-center text-5xl font-medium !leading-[0.88] tracking-tighter sm:text-6xl md:text-7xl lg:text-8xl xl:text-9xl"
+            className="text-center text-5xl font-medium !leading-[0.92] tracking-tighter sm:text-6xl md:text-7xl lg:text-7xl xl:text-8xl"
           >
             <span className="block text-white">Powering</span>
             <ShinyText>
@@ -184,27 +184,48 @@ const HeroSection = () => {
             </Link>
           </motion.div>
         </motion.div>
+      </div>
+    </section>
+  );
+};
 
-        <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ ...heroTransition, delay: shouldReduceMotion ? 0 : 0.36 }}
-          className="mb-14 grid w-full grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur md:mb-20 md:grid-cols-4"
+// Slim stats band that sits right below the hero. Lives outside the hero's
+// min-h-screen container so it never gets clipped on shorter viewports, and
+// carries the dark navy palette forward as a visual bridge into the next
+// section.
+export const HeroStatsStrip = () => {
+  const shouldReduceMotion = useReducedMotion();
+
+  return (
+    <section
+      aria-label="Elkatech at a glance"
+      className="relative isolate overflow-hidden bg-[#050b14] py-10 md:py-12"
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+      <div className="container mx-auto px-4 md:px-6">
+        <motion.dl
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: shouldReduceMotion ? 0.2 : 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur md:grid-cols-4"
         >
           {TRUST_STATS.map((stat) => (
             <div
               key={stat.label}
               className="flex flex-col gap-1 bg-[#040d1c]/55 px-5 py-5 md:px-6 md:py-6"
             >
-              <span className="font-display text-2xl font-semibold tracking-tight text-white md:text-3xl">
-                {stat.value}
-              </span>
-              <span className="text-[11px] uppercase tracking-[0.16em] text-white/55 md:text-xs">
+              <dt className="order-2 text-[11px] uppercase tracking-[0.16em] text-white/55 md:text-xs">
                 {stat.label}
-              </span>
+              </dt>
+              <dd className="order-1 font-display text-2xl font-semibold tracking-tight text-white md:text-3xl">
+                {stat.value}
+              </dd>
             </div>
           ))}
-        </motion.div>
+        </motion.dl>
       </div>
     </section>
   );
