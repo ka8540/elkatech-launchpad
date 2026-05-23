@@ -1,8 +1,11 @@
 import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import StableReveal from "@/components/StableReveal";
 import SectionEyebrow from "@/components/SectionEyebrow";
+import ScrollReveal from "@/components/ScrollReveal";
+import ParallaxLayer from "@/components/ParallaxLayer";
 import { toPublicAsset } from "@/lib/assets";
 
 const categories = [
@@ -74,8 +77,14 @@ const categories = [
 ];
 
 const WorkSolutionsSection = () => {
+  const sectionRef = useRef<HTMLElement>(null);
+
   return (
-    <section id="work" className="relative overflow-hidden bg-navy-gradient py-24 md:py-32">
+    <section
+      ref={sectionRef}
+      id="work"
+      className="relative overflow-hidden bg-navy-gradient py-24 md:py-32"
+    >
       <div className="absolute inset-x-0 top-0 h-px section-divider" />
       <div className="pointer-events-none absolute inset-0 ambient-surface-right" />
       <div
@@ -91,25 +100,37 @@ const WorkSolutionsSection = () => {
             "radial-gradient(ellipse at 50% 35%, black 30%, transparent 78%)",
         }}
       />
-      <div className="absolute right-0 top-0 h-[500px] w-[500px] rounded-full bg-accent/5 blur-3xl" />
-      <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-accent/[0.04] blur-3xl" />
+      <ParallaxLayer
+        target={sectionRef}
+        offset={-80}
+        className="pointer-events-none absolute right-[-10%] top-[-10%] h-[500px] w-[500px] rounded-full bg-accent/5 blur-3xl"
+      >
+        <span className="sr-only" />
+      </ParallaxLayer>
+      <ParallaxLayer
+        target={sectionRef}
+        offset={80}
+        className="pointer-events-none absolute bottom-[-10%] left-[-8%] h-80 w-80 rounded-full bg-accent/[0.04] blur-3xl"
+      >
+        <span className="sr-only" />
+      </ParallaxLayer>
 
       <div className="container relative z-10 mx-auto px-4 md:px-6">
         <div className="mx-auto mb-16 max-w-3xl text-center">
-          <StableReveal variant="section" className="flex justify-center">
+          <ScrollReveal variant="rise" className="flex justify-center" distance={18}>
             <SectionEyebrow tone="navy">Work &amp; Solutions</SectionEyebrow>
-          </StableReveal>
-          <StableReveal variant="section" delay={0.08}>
+          </ScrollReveal>
+          <ScrollReveal variant="blur-rise" delay={0.08} distance={30}>
             <h2 className="mb-4 font-display text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl">
               Complete Industrial <span className="text-accent">Machinery Solutions</span>
             </h2>
-          </StableReveal>
-          <StableReveal variant="section" delay={0.16}>
+          </ScrollReveal>
+          <ScrollReveal variant="rise" delay={0.16} distance={22}>
             <p className="text-lg text-white/70">
               Explore our machinery categories tailored for commercial printing, signage, and
               fabrication workflows.
             </p>
-          </StableReveal>
+          </ScrollReveal>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">

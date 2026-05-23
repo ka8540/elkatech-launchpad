@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import StableReveal from "@/components/StableReveal";
 import SectionEyebrow from "@/components/SectionEyebrow";
+import ScrollReveal from "@/components/ScrollReveal";
 
 const WHATSAPP_NUMBER = "917203033486";
 const PHONE_NUMBER = "+917203033486";
@@ -56,20 +57,20 @@ const ContactSection = () => {
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-start">
           {/* Left Column - Info */}
           <div>
-            <StableReveal variant="section">
+            <ScrollReveal variant="rise" distance={18}>
               <SectionEyebrow tone="navy">Contact Us</SectionEyebrow>
-            </StableReveal>
-            <StableReveal variant="section" delay={0.08}>
+            </ScrollReveal>
+            <ScrollReveal variant="blur-rise" delay={0.08} distance={30}>
               <h2 className="mb-6 font-display text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl">
                 Let's Start a <span className="text-accent">Conversation</span>
               </h2>
-            </StableReveal>
-            <StableReveal variant="section" delay={0.16}>
+            </ScrollReveal>
+            <ScrollReveal variant="rise" delay={0.16} distance={22}>
               <p className="text-white/70 text-lg mb-8 leading-relaxed">
                 Ready to explore the right machinery for your business? Our team is here to understand
                 your needs and provide honest, practical guidance.
               </p>
-            </StableReveal>
+            </ScrollReveal>
 
             {/* Contact Info */}
             <div className="space-y-4 mb-8">

@@ -1,5 +1,6 @@
 import StableReveal from "@/components/StableReveal";
 import SectionEyebrow from "@/components/SectionEyebrow";
+import ScrollReveal from "@/components/ScrollReveal";
 
 const brands = [
   "Mimaki",
@@ -26,20 +27,20 @@ const BrandsSection = () => {
 
       <div className="container relative z-10 mx-auto px-4 md:px-6">
         <div className="mx-auto mb-14 max-w-2xl text-center">
-          <StableReveal variant="section" className="flex justify-center">
+          <ScrollReveal variant="rise" className="flex justify-center" distance={18}>
             <SectionEyebrow>Trusted Partners</SectionEyebrow>
-          </StableReveal>
-          <StableReveal variant="section" delay={0.08}>
+          </ScrollReveal>
+          <ScrollReveal variant="blur-rise" delay={0.08} distance={28}>
             <h2 className="mb-4 font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl">
               Brands We <span className="text-gradient-accent">Work With</span>
             </h2>
-          </StableReveal>
-          <StableReveal variant="section" delay={0.16}>
+          </ScrollReveal>
+          <ScrollReveal variant="rise" delay={0.16} distance={22}>
             <p className="text-lg text-muted-foreground">
               We source from internationally recognized manufacturers known for reliability,
               precision engineering, and long service life.
             </p>
-          </StableReveal>
+          </ScrollReveal>
         </div>
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 lg:gap-4">

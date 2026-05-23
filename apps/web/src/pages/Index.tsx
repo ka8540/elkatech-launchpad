@@ -5,10 +5,12 @@ import HeroSection from "@/components/HeroSection";
 import AboutSection from "@/components/AboutSection";
 import WorkSolutionsSection from "@/components/WorkSolutionsSection";
 import BrandsSection from "@/components/BrandsSection";
+import StickyStorySection from "@/components/StickyStorySection";
 import InfrastructureSection from "@/components/InfrastructureSection";
 import WhyElkatech from "@/components/WhyElkatech";
 import ContactSection from "@/components/ContactSection";
 import Footer from "@/components/Footer";
+import ScrollProgressBar from "@/components/ScrollProgressBar";
 
 const Index = () => {
   // Skip the intro overlay when the user lands with a section hash (e.g.
@@ -22,12 +24,14 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       {showIntro && <IntroAnimation onComplete={() => setShowIntro(false)} />}
+      <ScrollProgressBar />
       <Header />
       <main>
         <HeroSection />
         <AboutSection />
         <WorkSolutionsSection />
         <BrandsSection />
+        <StickyStorySection />
         <InfrastructureSection />
         <WhyElkatech />
         <ContactSection />

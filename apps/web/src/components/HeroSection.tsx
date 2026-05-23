@@ -52,9 +52,22 @@ const HeroSection = () => {
   });
   // Subtle parallax on the video and ambient glow — disabled when the user
   // prefers reduced motion.
-  const videoY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 120]);
-  const ambientY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 60]);
+  const videoY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 140]);
+  const ambientY = useTransform(scrollYProgress, [0, 1], shouldReduceMotion ? [0, 0] : [0, 80]);
   const heroFade = useTransform(scrollYProgress, [0, 0.65, 1], [1, 0.85, 0.55]);
+  // Apple-style content lift: the headline + CTAs drift up and dim as the
+  // hero scrolls away, so the next section "takes over" instead of cutting in.
+  const contentY = useTransform(
+    scrollYProgress,
+    [0, 1],
+    shouldReduceMotion ? [0, 0] : [0, -90]
+  );
+  const contentOpacity = useTransform(scrollYProgress, [0, 0.6, 1], [1, 0.7, 0.15]);
+  const contentBlur = useTransform(scrollYProgress, [0, 0.7, 1], [0, 1.5, 4]);
+  const contentFilter = useTransform(
+    contentBlur,
+    (b) => (shouldReduceMotion ? "none" : `blur(${b}px)`)
+  );
 
   return (
     <section
@@ -101,7 +114,10 @@ const HeroSection = () => {
       <div className="absolute inset-x-0 bottom-0 z-[5] h-44 bg-gradient-to-b from-transparent via-[#050b14]/60 to-[#050b14]" />
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-7xl flex-col px-6 sm:px-8 lg:px-10">
-        <div className="flex flex-1 flex-col items-center justify-center pb-24 pt-28 text-center md:pb-28 md:pt-32">
+        <motion.div
+          style={{ y: contentY, opacity: contentOpacity, filter: contentFilter }}
+          className="flex flex-1 flex-col items-center justify-center pb-24 pt-28 text-center md:pb-28 md:pt-32"
+        >
           <motion.div
             initial={heroInitial}
             animate={{ opacity: 1, y: 0 }}
@@ -167,7 +183,7 @@ const HeroSection = () => {
               Talk to our team
             </Link>
           </motion.div>
-        </div>
+        </motion.div>
 
         <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0, y: 20 }}

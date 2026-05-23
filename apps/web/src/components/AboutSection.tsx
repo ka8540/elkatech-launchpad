@@ -1,6 +1,9 @@
 import { Heart, Users, HandshakeIcon, Target } from "lucide-react";
+import { useRef } from "react";
 import StableReveal from "@/components/StableReveal";
 import SectionEyebrow from "@/components/SectionEyebrow";
+import ScrollReveal from "@/components/ScrollReveal";
+import ParallaxLayer from "@/components/ParallaxLayer";
 
 const values = [
   {
@@ -30,8 +33,11 @@ const values = [
 ];
 
 const AboutSection = () => {
+  const sectionRef = useRef<HTMLElement>(null);
+
   return (
     <section
+      ref={sectionRef}
       id="about"
       className="relative overflow-hidden bg-steel-gradient py-24 md:py-32"
     >
@@ -50,23 +56,38 @@ const AboutSection = () => {
             "radial-gradient(ellipse at 50% 30%, black 30%, transparent 80%)",
         }}
       />
-      <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-primary/5 blur-3xl" />
+      {/* Scroll-tied parallax accent blob — drifts upward as the section
+          scrolls past, giving the background a sense of depth. */}
+      <ParallaxLayer
+        target={sectionRef}
+        offset={-90}
+        className="pointer-events-none absolute -bottom-24 -left-24 h-96 w-96 rounded-full bg-primary/5 blur-3xl"
+      >
+        <span className="sr-only" />
+      </ParallaxLayer>
+      <ParallaxLayer
+        target={sectionRef}
+        offset={70}
+        className="pointer-events-none absolute -top-32 right-[-10%] h-[28rem] w-[28rem] rounded-full bg-accent/[0.06] blur-3xl"
+      >
+        <span className="sr-only" />
+      </ParallaxLayer>
 
       <div className="container relative z-10 mx-auto px-4 md:px-6">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
           {/* Left Column - Content */}
           <div>
-            <StableReveal variant="section">
+            <ScrollReveal variant="rise" distance={18}>
               <SectionEyebrow>About Elkatech</SectionEyebrow>
-            </StableReveal>
+            </ScrollReveal>
 
-            <StableReveal variant="section" delay={0.08}>
+            <ScrollReveal variant="blur-rise" delay={0.08} distance={28}>
               <h2 className="mb-6 font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl">
                 Partners Beyond <span className="text-gradient-accent">the Purchase</span>
               </h2>
-            </StableReveal>
+            </ScrollReveal>
 
-            <StableReveal variant="section" delay={0.16}>
+            <ScrollReveal variant="rise" delay={0.16} distance={22}>
               <div className="space-y-4 leading-relaxed text-muted-foreground">
                 <p className="text-lg">
                   Elkatech is an Ahmedabad-based importer, wholesaler, and distributor
@@ -85,7 +106,7 @@ const AboutSection = () => {
                   just for a single purchase, but for your business journey ahead.
                 </p>
               </div>
-            </StableReveal>
+            </ScrollReveal>
 
             <StableReveal variant="section" delay={0.24} className="mt-8">
               <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border/70 bg-border/40 sm:grid-cols-3">
