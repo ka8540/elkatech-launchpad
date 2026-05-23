@@ -116,10 +116,16 @@ function stageOpacityRange(i: number) {
 
 const StickyStorySection = () => {
   const shouldReduceMotion = useReducedMotion();
-  const sectionRef = useRef<HTMLElement>(null);
+  // Bind scroll progress to the desktop track wrapper, not the <section>.
+  // The wrapper provides the entire scroll distance for the pinned story; the
+  // section itself just contains it. On viewports below `lg` the wrapper is
+  // display:none and the ref's rect collapses to zero — the motion values
+  // resolve to their initial state and the (unrendered) sticky panel just
+  // doesn't see them. The mobile path uses normal in-flow ScrollReveal.
+  const desktopTrackRef = useRef<HTMLDivElement>(null);
 
   const { scrollYProgress } = useScroll({
-    target: sectionRef,
+    target: desktopTrackRef,
     offset: ["start start", "end end"],
   });
 
@@ -169,17 +175,16 @@ const StickyStorySection = () => {
   return (
     <section
       id="process"
-      ref={sectionRef}
-      className="relative bg-background"
-      // Each stage gets ~80vh of scroll for comfortable reading; an extra
-      // viewport of buffer lets the sticky inner area enter and exit cleanly.
-      style={{ height: `calc(${N} * 80vh + 100vh)` }}
+      className="relative scroll-mt-24 bg-background"
     >
       <div className="absolute inset-x-0 top-0 h-px section-divider" />
 
-      {/* Mobile fallback: stacked cards, no pinning. The sticky layout only
-          renders at lg+ so smaller viewports get a clean linear story. */}
-      <div className="lg:hidden">
+      {/* Mobile fallback: stacked cards in natural flow. Also used whenever
+          the user prefers reduced motion — pinned storytelling is replaced
+          with normal readable flow so the page is comfortable for everyone.
+          The section's height collapses to this content's height — no dead
+          space. */}
+      <div className={shouldReduceMotion ? "" : "lg:hidden"}>
         <div className="container mx-auto px-4 py-20 md:px-6">
           <div className="mb-12 max-w-2xl">
             <SectionEyebrow>How we work</SectionEyebrow>
@@ -231,9 +236,19 @@ const StickyStorySection = () => {
         </div>
       </div>
 
-      {/* Desktop sticky storytelling */}
-      <div className="hidden lg:block">
-        <div className="sticky top-0 flex h-screen items-center">
+      {/* Desktop sticky storytelling. The wrapper owns the full scroll
+          distance (≈ N × 70vh). Inside, the sticky child fills the viewport
+          beneath the navbar and centers its content. When the wrapper's
+          bottom passes the viewport, the child un-sticks cleanly and the
+          next section appears right after — no dead space. Suppressed
+          entirely under prefers-reduced-motion (stacked layout above is
+          shown at all viewport sizes instead). */}
+      <div
+        ref={desktopTrackRef}
+        className={shouldReduceMotion ? "hidden" : "hidden lg:block"}
+        style={{ height: `calc(${N} * 70vh)` }}
+      >
+        <div className="sticky top-24 flex h-[calc(100vh-6rem)] items-center">
           <div className="container mx-auto grid grid-cols-12 gap-10 px-6">
             <div className="col-span-6 flex flex-col justify-center">
               <ScrollReveal variant="rise" amount={0.2}>

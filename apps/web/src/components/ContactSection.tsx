@@ -46,7 +46,7 @@ const ContactSection = () => {
   const whatsappPrefill = encodeURIComponent(inquiryBody);
 
   return (
-    <section id="contact" className="py-24 md:py-32 bg-navy-gradient relative overflow-hidden">
+    <section id="contact" className="relative scroll-mt-24 overflow-hidden bg-navy-gradient py-24 md:py-32">
       {/* Background elements */}
       <div className="absolute inset-x-0 top-0 h-px section-divider" />
       <div className="pointer-events-none absolute inset-0 ambient-surface-left" />
