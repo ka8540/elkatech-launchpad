@@ -25,6 +25,8 @@ type Stage = {
   title: string;
   description: string;
   icon: LucideIcon;
+  imageSrc: string;
+  imageAlt: string;
   bullets: string[];
 };
 
@@ -36,6 +38,9 @@ const STAGES: readonly Stage[] = [
     description:
       "We start with a discovery conversation — substrates, throughput, finishing, environment. Honest scoping, no upsell pressure.",
     icon: ClipboardList,
+    imageSrc: "/images/how-we-work/discovery-operation.webp",
+    imageAlt:
+      "Industrial consultation workbench with substrate samples and printing workflow planning",
     bullets: [
       "On-site or virtual walkthrough",
       "Workflow & substrate audit",
@@ -49,6 +54,9 @@ const STAGES: readonly Stage[] = [
     description:
       "We recommend from 10+ international brands based on what your work actually needs — not whatever happens to be on the shelf.",
     icon: Compass,
+    imageSrc: "/images/how-we-work/machine-matching.webp",
+    imageAlt:
+      "Technical visualization of large-format printing machines being compared for selection",
     bullets: [
       "Solvent, UV, laser, lamination, flatbed",
       "Side-by-side spec comparison",
@@ -62,6 +70,9 @@ const STAGES: readonly Stage[] = [
     description:
       "Ready stock of popular models and parts, secure warehouse handling in Ahmedabad, and road dispatch across India when you're ready.",
     icon: PackageSearch,
+    imageSrc: "/images/how-we-work/dispatch-logistics.webp",
+    imageAlt:
+      "Crated industrial printing machinery prepared for warehouse dispatch and road logistics",
     bullets: ["Pan-India road logistics", "Insured handling", "Transparent timelines"],
   },
   {
@@ -71,6 +82,9 @@ const STAGES: readonly Stage[] = [
     description:
       "Calibration, profile setup, and operator training on your floor — so the machine is producing revenue, not sitting in a crate.",
     icon: Settings2,
+    imageSrc: "/images/how-we-work/install-training.webp",
+    imageAlt:
+      "Technician calibrating a large-format printer during operator training in a workshop",
     bullets: [
       "On-site commissioning",
       "Operator + supervisor training",
@@ -84,6 +98,9 @@ const STAGES: readonly Stage[] = [
     description:
       "Long-term after-sales partnership — service requests, spare parts, and engineering help, all tracked through the ElkaTech service portal.",
     icon: LifeBuoy,
+    imageSrc: "/images/how-we-work/support-uptime.webp",
+    imageAlt:
+      "Close-up of industrial printer maintenance parts with diagnostic support lighting",
     bullets: [
       "Portal-tracked service tickets",
       "Spares + consumables",
@@ -167,31 +184,42 @@ const StickyStorySection = () => {
                 className="group relative isolate overflow-hidden rounded-2xl border border-border bg-card p-6"
               >
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-accent/[0.06] via-transparent to-cyan-400/5 opacity-80" />
-                <div className="relative z-10 flex items-start gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
-                    <stage.icon className="h-5 w-5" />
+                <div className="relative z-10">
+                  <div className="mb-5 overflow-hidden rounded-xl border border-border/80 bg-navy-gradient shadow-[0_20px_55px_-28px_rgba(14,165,233,0.5)]">
+                    <img
+                      src={stage.imageSrc}
+                      alt={stage.imageAlt}
+                      loading="lazy"
+                      className="aspect-video h-full w-full object-cover"
+                    />
                   </div>
-                  <div>
-                    <p className="font-display text-[11px] uppercase tracking-[0.18em] text-accent">
-                      Step {stage.index}
-                    </p>
-                    <h3 className="mt-1 font-display text-lg font-semibold text-foreground">
-                      {stage.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      {stage.description}
-                    </p>
-                    <ul className="mt-3 space-y-1.5">
-                      {stage.bullets.map((b) => (
-                        <li
-                          key={b}
-                          className="flex items-start gap-2 text-xs text-muted-foreground"
-                        >
-                          <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
-                          <span>{b}</span>
-                        </li>
-                      ))}
-                    </ul>
+
+                  <div className="flex items-start gap-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                      <stage.icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-display text-[11px] uppercase tracking-[0.18em] text-accent">
+                        Step {stage.index}
+                      </p>
+                      <h3 className="mt-1 font-display text-lg font-semibold text-foreground">
+                        {stage.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        {stage.description}
+                      </p>
+                      <ul className="mt-3 space-y-1.5">
+                        {stage.bullets.map((b) => (
+                          <li
+                            key={b}
+                            className="flex items-start gap-2 text-xs text-muted-foreground"
+                          >
+                            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </li>
@@ -274,7 +302,7 @@ const StickyStorySection = () => {
                 an AnimatePresence so old text exits fully before new text
                 enters — no glyph overlap. */}
             <div className="col-span-6 flex items-center justify-center">
-              <div className="relative aspect-[4/5] w-full max-w-md">
+              <div className="relative min-h-[640px] w-full max-w-lg">
                 <div
                   aria-hidden
                   className="absolute inset-0 rounded-[28px] border border-border/80 bg-card shadow-[0_30px_90px_-30px_rgba(15,23,42,0.35)]"
@@ -313,6 +341,15 @@ const StickyStorySection = () => {
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border/80 bg-background/80 shadow-inner shadow-black/[0.04]">
                         <active.icon className="h-6 w-6 text-accent" />
                       </div>
+                    </div>
+
+                    <div className="overflow-hidden rounded-2xl border border-border/80 bg-navy-gradient shadow-[0_24px_70px_-32px_rgba(14,165,233,0.55)]">
+                      <img
+                        src={active.imageSrc}
+                        alt={active.imageAlt}
+                        loading="lazy"
+                        className="aspect-video h-full w-full object-cover"
+                      />
                     </div>
 
                     <div>

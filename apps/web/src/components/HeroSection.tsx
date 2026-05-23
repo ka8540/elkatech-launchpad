@@ -2,7 +2,6 @@ import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion
 import { ArrowRight, MessageCircle } from "lucide-react";
 import { useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { cn } from "@/lib/utils";
 
 const HERO_VIDEO_URL =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260328_105406_16f4600d-7a92-4292-b96e-b19156c7830a.mp4";
@@ -41,7 +40,7 @@ const TRUST_STATS = [
   { value: "₹1.5–5 Cr", label: "Annual turnover" },
 ];
 
-const HeroStatsGrid = ({ className }: { className?: string }) => {
+const HeroStatsGrid = () => {
   const shouldReduceMotion = useReducedMotion();
 
   return (
@@ -50,10 +49,7 @@ const HeroStatsGrid = ({ className }: { className?: string }) => {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.35 }}
       transition={{ duration: shouldReduceMotion ? 0.2 : 0.55, ease: [0.22, 1, 0.36, 1] }}
-      className={cn(
-        "grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] text-left backdrop-blur sm:grid-cols-2 lg:grid-cols-4",
-        className
-      )}
+      className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] text-left backdrop-blur sm:grid-cols-2 lg:grid-cols-4"
     >
       {TRUST_STATS.map((stat) => (
         <div
@@ -100,7 +96,7 @@ const HeroSection = () => {
     <section
       ref={heroRef}
       id="home"
-      className="landing-anchor relative min-h-[calc(100svh-1rem)] overflow-hidden bg-black text-white lg:min-h-[min(960px,calc(100svh-80px))]"
+      className="landing-anchor relative min-h-[100svh] overflow-hidden bg-black text-white"
     >
       <motion.div
         className="absolute inset-0 z-0"
@@ -140,7 +136,7 @@ const HeroSection = () => {
       />
       <div className="absolute inset-x-0 bottom-0 z-[5] h-28 bg-gradient-to-b from-transparent via-[#050b14]/55 to-[#050b14]" />
 
-      <div className="relative z-10 mx-auto flex min-h-[calc(100svh-1rem)] max-w-7xl flex-col justify-center px-6 pb-8 pt-24 sm:px-8 md:pb-10 md:pt-28 lg:min-h-[min(960px,calc(100svh-80px))] lg:px-10 lg:py-24">
+      <div className="relative z-10 mx-auto flex min-h-[100svh] max-w-7xl flex-col justify-center px-6 pb-12 pt-24 sm:px-8 md:pb-16 md:pt-28 lg:px-10 lg:py-28">
         <motion.div
           style={{ y: contentY, opacity: contentOpacity }}
           className="mx-auto flex w-full max-w-5xl flex-col items-center text-center"
@@ -212,14 +208,13 @@ const HeroSection = () => {
           </motion.div>
         </motion.div>
 
-        <HeroStatsGrid className="mt-8 w-full md:mt-10" />
       </div>
     </section>
   );
 };
 
-// Optional standalone stats band for any future reuse. The landing page now
-// renders the same grid inside the hero so the CTA and stats stay connected.
+// Standalone stats band that appears after the full hero viewport. Keeping it
+// outside the hero prevents the next section from peeking into the first load.
 export const HeroStatsStrip = () => {
   return (
     <section
