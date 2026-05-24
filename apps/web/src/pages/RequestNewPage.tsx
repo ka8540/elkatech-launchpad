@@ -35,18 +35,39 @@ const cardSurface =
   "border border-[var(--lp-line)] bg-[var(--lp-panel)]/85 backdrop-blur-xl shadow-[0_28px_80px_-52px_rgba(0,0,0,0.6)]";
 
 /* ─── Shared input class strings ────────────────────────────────────────────── */
+/*
+ * Form fields live inside the `.lp` scope (PortalShell), so var(--lp-*) all
+ * resolve. We use --lp-panel-2 as the surface (slightly lighter than the
+ * portal background, slightly darker than the card) so fields read clearly
+ * in both light and dark themes.
+ */
 const inputClassName =
-  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-bg)]/60 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 " +
+  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)]/85 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 " +
   "placeholder:text-[var(--lp-faint)] transition-colors " +
-  "focus-visible:border-[var(--lp-accent)] focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/20 focus-visible:ring-offset-0";
+  "focus-visible:border-[var(--lp-accent)] focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/25 focus-visible:ring-offset-0";
 
 const selectTriggerClassName =
-  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-bg)]/60 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 transition-colors " +
+  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)]/85 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 transition-colors " +
   "data-[placeholder]:text-[var(--lp-faint)] " +
-  "focus:border-[var(--lp-accent)] focus:ring-2 focus:ring-[var(--lp-accent)]/20 focus:ring-offset-0 [&>span]:truncate";
+  "focus:border-[var(--lp-accent)] focus:ring-2 focus:ring-[var(--lp-accent)]/25 focus:ring-offset-0 [&>span]:truncate";
 
+/*
+ * Radix Select portals its content to <body>, OUTSIDE the `.lp` subtree,
+ * so var(--lp-*) would collapse to invalid and the popover would fall back
+ * to the global electric-blue accent. `lp-portal` re-declares the lp tokens
+ * so the portaled menu picks up the graphite/copper palette correctly.
+ */
 const selectContentClassName =
-  "rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-2xl shadow-black/30 backdrop-blur-xl";
+  "lp-portal rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_24px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl";
+
+/*
+ * Override the shadcn SelectItem default `focus:bg-accent focus:text-accent-foreground`
+ * (which renders bright electric blue) with the copper accent at low opacity.
+ */
+const selectItemClassName =
+  "rounded-xl py-2.5 pl-8 pr-3 text-sm text-[var(--lp-ink)] " +
+  "focus:bg-[var(--lp-accent)]/15 focus:text-[var(--lp-accent)] " +
+  "data-[state=checked]:text-[var(--lp-accent)]";
 
 /* ─── Form config ───────────────────────────────────────────────────────────── */
 const priorityOptions: Array<{ value: RequestPriority; label: string }> = [
@@ -445,7 +466,7 @@ const RequestNewPage = () => {
                   </SelectTrigger>
                   <SelectContent className={selectContentClassName}>
                     {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id} className="rounded-xl py-2.5 text-sm">
+                      <SelectItem key={product.id} value={product.id} className={selectItemClassName}>
                         <span className="block truncate">{product.name}</span>
                       </SelectItem>
                     ))}
@@ -512,7 +533,7 @@ const RequestNewPage = () => {
                   </SelectTrigger>
                   <SelectContent className={selectContentClassName}>
                     {priorityOptions.map((priority) => (
-                      <SelectItem key={priority.value} value={priority.value} className="rounded-xl py-2.5">
+                      <SelectItem key={priority.value} value={priority.value} className={selectItemClassName}>
                         {priority.label}
                       </SelectItem>
                     ))}

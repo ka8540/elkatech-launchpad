@@ -491,7 +491,7 @@ const PortalShell = () => {
   );
 
   return (
-    <div className="lp relative flex min-h-screen bg-[var(--lp-bg)] text-[var(--lp-ink)]">
+    <div className="lp lp-portal-bg relative flex min-h-screen text-[var(--lp-ink)]">
 
       {/* ── Desktop sidebar ─────────────────────────────────────────────── */}
       <aside
@@ -500,7 +500,7 @@ const PortalShell = () => {
         aria-label="Main navigation"
       >
         <div
-          className="fixed flex h-screen flex-col border-r border-[var(--lp-line)] bg-[var(--lp-panel)]/70 backdrop-blur-2xl"
+          className="fixed flex h-screen flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/92 shadow-[1px_0_28px_rgba(0,0,0,0.18)] backdrop-blur-2xl"
           style={{ width: sidebarWidth }}
         >
           {/* Subtle copper top glow + blueprint grid for premium glass feel */}
@@ -524,7 +524,10 @@ const PortalShell = () => {
             <SidebarContent />
           </div>
 
-          {/* ── Floating collapse / expand control on the sidebar edge ──── */}
+          {/* ── Floating collapse / expand control — anchored to the
+                 header row at the sidebar's right edge. Centered vertically
+                 with the logo/brand block (which sits in py-5 padding + ~40px
+                 logo, ≈ 44px from the top of the sidebar). */}
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
@@ -532,8 +535,8 @@ const PortalShell = () => {
             aria-expanded={!collapsed}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
-              "absolute right-0 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full",
-              "border border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/90 text-[var(--lp-ink-soft)] shadow-[0_6px_22px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-all duration-150",
+              "absolute right-0 top-[44px] z-20 flex h-8 w-8 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full",
+              "border border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/95 text-[var(--lp-ink-soft)] shadow-[0_6px_22px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-all duration-150",
               "hover:border-[var(--lp-accent)] hover:text-[var(--lp-accent)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45 focus-visible:ring-offset-0",
             )}
@@ -557,7 +560,7 @@ const PortalShell = () => {
       )}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-[276px] flex-col border-r border-[var(--lp-line)] bg-[var(--lp-panel)]/90 backdrop-blur-2xl transition-transform duration-200 ease-in-out lg:hidden",
+          "fixed inset-y-0 left-0 z-50 w-[276px] flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/95 shadow-[2px_0_30px_rgba(0,0,0,0.32)] backdrop-blur-2xl transition-transform duration-200 ease-in-out lg:hidden",
           mobileOpen ? "flex translate-x-0" : "-translate-x-full",
         )}
         aria-label="Mobile navigation"

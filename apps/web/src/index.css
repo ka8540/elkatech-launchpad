@@ -470,6 +470,47 @@
     --lp-on-graphite-soft: rgba(241, 239, 233, 0.66);
     --lp-glow: rgba(219, 138, 79, 0.16);
   }
+
+  /*
+   * Re-declare the lp tokens so Radix-portaled UI (Select/Popover/Dropdown
+   * content) that lives OUTSIDE the `.lp` subtree still resolves the
+   * graphite/copper palette. Without this, var(--lp-*) collapses to invalid
+   * and portaled menus render with transparent backgrounds and the global
+   * electric-blue accent.
+   */
+  .lp-portal {
+    --lp-bg: #ece8e0;
+    --lp-bg-2: #e4dfd4;
+    --lp-panel: #fbfaf6;
+    --lp-panel-2: #f3f0e8;
+    --lp-ink: #181a1d;
+    --lp-ink-soft: #45484e;
+    --lp-faint: #6c6f76;
+    --lp-line: rgba(24, 26, 29, 0.12);
+    --lp-line-strong: rgba(24, 26, 29, 0.22);
+    --lp-accent: #ac531c;
+    --lp-accent-2: #c4743b;
+    --lp-graphite: #15171b;
+    --lp-graphite-2: #1d2026;
+    --lp-glow: rgba(172, 83, 28, 0.18);
+  }
+
+  .dark .lp-portal {
+    --lp-bg: #0b0c0e;
+    --lp-bg-2: #101216;
+    --lp-panel: #16181d;
+    --lp-panel-2: #1b1e24;
+    --lp-ink: #eceae3;
+    --lp-ink-soft: rgba(236, 234, 227, 0.74);
+    --lp-faint: rgba(236, 234, 227, 0.5);
+    --lp-line: rgba(255, 255, 255, 0.09);
+    --lp-line-strong: rgba(255, 255, 255, 0.17);
+    --lp-accent: #db8a4f;
+    --lp-accent-2: #e7a16a;
+    --lp-graphite: #08090b;
+    --lp-graphite-2: #111317;
+    --lp-glow: rgba(219, 138, 79, 0.16);
+  }
 }
 
 @layer utilities {
@@ -480,6 +521,18 @@
 
   .lp-mono {
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  /*
+   * Portal shell background — warm graphite gradient with a soft copper
+   * highlight, so the protected app pages never collapse to pure black.
+   * Theme-aware via .lp tokens.
+   */
+  .lp-portal-bg {
+    background:
+      radial-gradient(110% 80% at 85% -10%, color-mix(in srgb, var(--lp-accent) 7%, transparent), transparent 55%),
+      radial-gradient(70% 55% at 10% 6%, color-mix(in srgb, var(--lp-accent) 5%, transparent), transparent 60%),
+      linear-gradient(180deg, var(--lp-graphite-2) 0%, var(--lp-bg) 42%, var(--lp-bg) 100%);
   }
 
   /* Engineering blueprint grid (theme-aware via --lp-line) */
