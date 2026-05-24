@@ -29,7 +29,7 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
-import { apiRequest } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
 import {
   getRequestStatusLabel,
   REQUEST_STATUS_DESCRIPTIONS,
@@ -139,6 +139,31 @@ function formatEvent(eventType: string) {
   return eventType
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function friendlyActionError(
+  error: unknown,
+  fallback: string,
+  perStatus?: Record<number, string>,
+) {
+  if (error instanceof ApiError) {
+    if (perStatus?.[error.status]) return perStatus[error.status];
+    if (error.status === 401) return "Your session expired. Please sign in again.";
+    if (error.status === 403) return "You do not have permission to perform this action.";
+    if (error.status === 404) return fallback;
+    if (
+      typeof error.message === "string" &&
+      error.message.trim() &&
+      !error.message.startsWith("Route ")
+    ) {
+      return error.message;
+    }
+    return fallback;
+  }
+  if (error instanceof Error && error.message && !error.message.startsWith("Route ")) {
+    return error.message;
+  }
+  return fallback;
 }
 
 function DetailItem({
@@ -352,7 +377,17 @@ const RequestDetailPage = () => {
       toast.success("Request details updated.");
       await refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error) =>
+      toast.error(
+        friendlyActionError(
+          error,
+          "Could not save changes. Please try again.",
+          {
+            403: "You do not have permission to edit this request.",
+            404: "This request no longer exists.",
+          },
+        ),
+      ),
   });
 
   const assignMutation = useMutation({
@@ -380,7 +415,18 @@ const RequestDetailPage = () => {
       await refresh();
       navigate("/app/requests?status=archived");
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error) =>
+      toast.error(
+        friendlyActionError(
+          error,
+          "Could not cancel request. Please try again.",
+          {
+            400: "This request can no longer be cancelled.",
+            403: "You do not have permission to cancel this request.",
+            404: "This request no longer exists.",
+          },
+        ),
+      ),
   });
 
   if (isLoading) {
@@ -475,26 +521,32 @@ const RequestDetailPage = () => {
       </Button>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="lp-card border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)] sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="lp-display text-2xl text-[var(--lp-ink)]">
+        <DialogContent
+          className={cn(
+            "lp-portal gap-0 overflow-hidden border-[var(--lp-line)] bg-[var(--lp-panel)] p-0 text-[var(--lp-ink)] shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)]",
+            "w-[calc(100vw-2rem)] max-w-[min(720px,calc(100vw-2rem))] rounded-2xl sm:max-w-[720px]",
+            "max-h-[min(86vh,860px)]",
+          )}
+        >
+          <DialogHeader className="space-y-1.5 border-b border-[var(--lp-line)] bg-[var(--lp-panel-2)]/60 px-6 py-5 text-left">
+            <DialogTitle className="lp-display text-xl font-semibold text-[var(--lp-ink)] sm:text-2xl">
               Edit request
             </DialogTitle>
             <DialogDescription className="text-sm leading-6 text-[var(--lp-ink-soft)]">
-              Update safe service request details. Request number, product, history, and conversation stay unchanged.
+              Update the safe service request details. Request number, product, history, and conversation stay unchanged.
             </DialogDescription>
           </DialogHeader>
 
           <form
-            className="space-y-4"
+            className="flex max-h-[calc(86vh-9rem)] flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               editMutation.mutate();
             }}
           >
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 overflow-y-auto px-6 py-5 sm:grid-cols-2">
               <label className="sm:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
                   Subject
                 </span>
                 <Input
@@ -504,12 +556,12 @@ const RequestDetailPage = () => {
                   onChange={(event) =>
                     setEditForm((current) => ({ ...current, subject: event.target.value }))
                   }
-                  className={cn(fieldClassName, "h-11")}
+                  className={cn(fieldClassName, "h-10 rounded-xl px-3 py-2")}
                 />
               </label>
 
               <label>
-                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
                   Contact phone
                 </span>
                 <Input
@@ -519,12 +571,12 @@ const RequestDetailPage = () => {
                   onChange={(event) =>
                     setEditForm((current) => ({ ...current, contactPhone: event.target.value }))
                   }
-                  className={cn(fieldClassName, "h-11")}
+                  className={cn(fieldClassName, "h-10 rounded-xl px-3 py-2")}
                 />
               </label>
 
               <label>
-                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
                   Serial number
                 </span>
                 <Input
@@ -532,12 +584,12 @@ const RequestDetailPage = () => {
                   onChange={(event) =>
                     setEditForm((current) => ({ ...current, serialNumber: event.target.value }))
                   }
-                  className={cn(fieldClassName, "h-11")}
+                  className={cn(fieldClassName, "h-10 rounded-xl px-3 py-2")}
                 />
               </label>
 
               <label className="sm:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
                   Site location
                 </span>
                 <Input
@@ -547,12 +599,12 @@ const RequestDetailPage = () => {
                   onChange={(event) =>
                     setEditForm((current) => ({ ...current, siteLocation: event.target.value }))
                   }
-                  className={cn(fieldClassName, "h-11")}
+                  className={cn(fieldClassName, "h-10 rounded-xl px-3 py-2")}
                 />
               </label>
 
               <label className="sm:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
                   Description
                 </span>
                 <Textarea
@@ -563,16 +615,16 @@ const RequestDetailPage = () => {
                   onChange={(event) =>
                     setEditForm((current) => ({ ...current, description: event.target.value }))
                   }
-                  className={cn(fieldClassName, "min-h-[132px] resize-y")}
+                  className={cn(fieldClassName, "min-h-[120px] rounded-xl px-3 py-2 resize-y")}
                 />
               </label>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="flex flex-col-reverse gap-2 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)]/55 px-6 py-4 sm:flex-row sm:justify-end sm:gap-3 sm:space-x-0">
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+                className="h-10 rounded-xl border-[var(--lp-line-strong)] bg-transparent px-4 text-sm text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
                 onClick={() => setIsEditOpen(false)}
                 disabled={editMutation.isPending}
               >
@@ -580,10 +632,14 @@ const RequestDetailPage = () => {
               </Button>
               <Button
                 type="submit"
-                className="rounded-xl bg-[var(--lp-accent)] font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+                className="h-10 gap-2 rounded-xl bg-[var(--lp-accent)] px-4 text-sm font-semibold text-[#fbfaf6] shadow-[0_10px_30px_-18px_var(--lp-accent)] hover:bg-[var(--lp-accent-2)]"
                 disabled={editMutation.isPending}
               >
-                {editMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PencilLine className="h-4 w-4" />}
+                {editMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PencilLine className="h-4 w-4" />
+                )}
                 {editMutation.isPending ? "Saving..." : "Save changes"}
               </Button>
             </DialogFooter>
@@ -925,28 +981,41 @@ const RequestDetailPage = () => {
           if (!open) setConfirmAction(null);
         }}
       >
-        <AlertDialogContent className="lp-card border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)]">
-          <AlertDialogHeader>
-            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300">
+        <AlertDialogContent
+          className={cn(
+            "lp-portal gap-0 overflow-hidden border-[var(--lp-line)] bg-[var(--lp-panel)] p-0 text-[var(--lp-ink)] shadow-[0_30px_80px_-40px_rgba(0,0,0,0.6)]",
+            "w-[calc(100vw-2rem)] max-w-[min(440px,calc(100vw-2rem))] rounded-2xl",
+          )}
+        >
+          <AlertDialogHeader className="space-y-3 px-6 pb-2 pt-6 text-left">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-amber-400/35 bg-amber-400/12 text-amber-600 dark:text-amber-300">
               <AlertTriangle className="h-5 w-5" />
             </div>
-            <AlertDialogTitle className="lp-display text-2xl text-[var(--lp-ink)]">
+            <AlertDialogTitle className="lp-display text-xl font-semibold text-[var(--lp-ink)]">
               {confirmAction?.type === "cancel-request" ? "Cancel request?" : "Archive request?"}
             </AlertDialogTitle>
             <AlertDialogDescription className="text-sm leading-6 text-[var(--lp-ink-soft)]">
               {confirmAction?.type === "cancel-request"
-                ? "This will cancel the service request and move it out of the active dashboard. The request history and conversation will be kept."
-                : "This will archive the service request and remove it from active request lists. The full history and conversation will be kept for audit."}
+                ? "This cancels the service request and moves it out of the active dashboard. The full history and conversation are kept."
+                : "This archives the service request and removes it from active lists. The full history and conversation are kept for audit."}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]">
+          <AlertDialogFooter className="flex flex-col-reverse gap-2 px-6 pb-5 pt-3 sm:flex-row sm:justify-end sm:gap-2 sm:space-x-0">
+            <AlertDialogCancel className="mt-0 h-10 rounded-xl border-[var(--lp-line-strong)] bg-transparent px-4 text-sm text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]">
               Keep request
             </AlertDialogCancel>
             <AlertDialogAction
-              className="rounded-xl bg-[var(--lp-accent)] font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+              className={cn(
+                "h-10 rounded-xl px-4 text-sm font-semibold transition",
+                "border border-amber-400/50 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 hover:text-amber-800",
+                "dark:border-amber-400/45 dark:bg-amber-400/15 dark:text-amber-200 dark:hover:bg-amber-400/25 dark:hover:text-amber-100",
+              )}
               onClick={confirmDestructiveAction}
+              disabled={cancelMutation.isPending || statusMutation.isPending}
             >
+              {(cancelMutation.isPending || statusMutation.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               {confirmAction?.type === "cancel-request" ? "Cancel request" : "Archive request"}
             </AlertDialogAction>
           </AlertDialogFooter>

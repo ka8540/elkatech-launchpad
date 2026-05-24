@@ -99260,6 +99260,15 @@ var createServiceRequestInputSchema = external_exports.object({
   serialNumber: external_exports.string().optional(),
   priority: requestPrioritySchema.default("normal")
 });
+var updateServiceRequestInputSchema = external_exports.object({
+  subject: external_exports.string().trim().min(4).optional(),
+  description: external_exports.string().trim().min(10).optional(),
+  contactPhone: external_exports.string().trim().min(7).optional(),
+  siteLocation: external_exports.string().trim().min(2).optional(),
+  serialNumber: external_exports.string().trim().max(100).nullable().optional()
+}).refine((input) => Object.values(input).some((value) => value !== void 0), {
+  message: "At least one request detail must be provided."
+});
 var createRequestMessageInputSchema = external_exports.object({
   body: external_exports.string().min(1),
   visibility: messageVisibilitySchema
@@ -99268,8 +99277,21 @@ var assignRequestInputSchema = external_exports.object({
   engineerId: external_exports.string()
 });
 var updateRequestStatusInputSchema = external_exports.object({
-  status: requestStatusSchema
+  status: requestStatusSchema,
+  note: external_exports.string().max(1e3).optional(),
+  visibility: messageVisibilitySchema.optional()
 });
+var cancelRequestInputSchema = external_exports.object({
+  reason: external_exports.string().max(1e3).optional()
+});
+var requestStatusGroupSchema = external_exports.enum([
+  "all",
+  "open",
+  "in_progress",
+  "pending",
+  "resolved",
+  "archived"
+]);
 var sessionResponseSchema = external_exports.object({
   sessionToken: external_exports.string(),
   csrfToken: external_exports.string(),
@@ -102006,6 +102028,18 @@ app.get("/api/requests/:requestId", async (request, reply) => {
     headers: userHeaders(session.user)
   });
 });
+app.patch("/api/requests/:requestId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
+  const input = updateServiceRequestInputSchema.parse(request.body);
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
+    method: "PATCH",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input)
+  });
+});
 app.post("/api/requests/:requestId/messages", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
   if (!session) return;
@@ -102047,6 +102081,18 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
   return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+    method: "POST",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input)
+  });
+});
+app.post("/api/requests/:requestId/cancel", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
+  const input = cancelRequestInputSchema.parse(request.body ?? {});
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/cancel`, {
     method: "POST",
     headers: userHeaders(session.user),
     body: JSON.stringify(input)

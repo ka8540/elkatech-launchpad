@@ -62985,6 +62985,15 @@ var createServiceRequestInputSchema = external_exports.object({
   serialNumber: external_exports.string().optional(),
   priority: requestPrioritySchema.default("normal")
 });
+var updateServiceRequestInputSchema = external_exports.object({
+  subject: external_exports.string().trim().min(4).optional(),
+  description: external_exports.string().trim().min(10).optional(),
+  contactPhone: external_exports.string().trim().min(7).optional(),
+  siteLocation: external_exports.string().trim().min(2).optional(),
+  serialNumber: external_exports.string().trim().max(100).nullable().optional()
+}).refine((input) => Object.values(input).some((value) => value !== void 0), {
+  message: "At least one request detail must be provided."
+});
 var createRequestMessageInputSchema = external_exports.object({
   body: external_exports.string().min(1),
   visibility: messageVisibilitySchema
@@ -62993,8 +63002,21 @@ var assignRequestInputSchema = external_exports.object({
   engineerId: external_exports.string()
 });
 var updateRequestStatusInputSchema = external_exports.object({
-  status: requestStatusSchema
+  status: requestStatusSchema,
+  note: external_exports.string().max(1e3).optional(),
+  visibility: messageVisibilitySchema.optional()
 });
+var cancelRequestInputSchema = external_exports.object({
+  reason: external_exports.string().max(1e3).optional()
+});
+var requestStatusGroupSchema = external_exports.enum([
+  "all",
+  "open",
+  "in_progress",
+  "pending",
+  "resolved",
+  "archived"
+]);
 var sessionResponseSchema = external_exports.object({
   sessionToken: external_exports.string(),
   csrfToken: external_exports.string(),
