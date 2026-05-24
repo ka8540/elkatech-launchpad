@@ -13,9 +13,27 @@ const ProtectedRoute = ({ children, roles }: ProtectedRouteProps) => {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="rounded-2xl border bg-card px-6 py-4 text-sm text-muted-foreground shadow-soft">
-          Loading your workspace...
+      <div className="lp lp-portal-bg relative flex min-h-screen items-center justify-center overflow-hidden text-[var(--lp-ink)]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 lp-grid opacity-[0.18]"
+          style={{
+            maskImage: "linear-gradient(to bottom, black, transparent 75%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black, transparent 75%)",
+          }}
+        />
+        <div
+          role="status"
+          aria-live="polite"
+          className="relative flex items-center gap-3 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel)] px-6 py-4 text-sm font-medium text-[var(--lp-ink-soft)] shadow-[0_14px_36px_-28px_rgba(0,0,0,0.55)]"
+        >
+          <span
+            aria-hidden="true"
+            className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--lp-line-strong)] border-t-[var(--lp-accent)]"
+          />
+          <span>
+            Loading your workspace...
+          </span>
         </div>
       </div>
     );
