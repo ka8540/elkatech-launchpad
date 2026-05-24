@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import {
   approvalActionInputSchema,
+  cancelRequestInputSchema,
   createRequestMessageInputSchema,
   createServiceRequestInputSchema,
   firebaseSessionInputSchema,
@@ -560,6 +561,20 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
   return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+    method: "POST",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input),
+  });
+});
+
+app.post("/api/requests/:requestId/cancel", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+
+  const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
+  const input = cancelRequestInputSchema.parse(request.body ?? {});
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/cancel`, {
     method: "POST",
     headers: userHeaders(session.user),
     body: JSON.stringify(input),

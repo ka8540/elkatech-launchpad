@@ -68,6 +68,17 @@ describe("service desk workflow permissions", () => {
     expect(canClaimRequest(admin, assignedRequest)).toBe(true);
     expect(canUpdateRequestStatus(admin, assignedRequest)).toBe(true);
   });
+
+  it("prevents engineers from changing archived requests", () => {
+    const archivedRequest = {
+      customerId: "customer-1",
+      assignedEngineerId: "engineer-1",
+      status: "closed" as const,
+    };
+
+    expect(canUpdateRequestStatus(engineer, archivedRequest)).toBe(false);
+    expect(canUpdateRequestStatus(admin, archivedRequest)).toBe(true);
+  });
 });
 
 describe("service desk workflow transitions", () => {
@@ -75,12 +86,13 @@ describe("service desk workflow transitions", () => {
     expect(isValidStatusTransition("new", "triaged")).toBe(true);
     expect(isValidStatusTransition("assigned", "in_progress")).toBe(true);
     expect(isValidStatusTransition("waiting_for_customer", "resolved")).toBe(true);
+    expect(isValidStatusTransition("resolved", "new")).toBe(true);
     expect(isValidStatusTransition("resolved", "closed")).toBe(true);
+    expect(isValidStatusTransition("closed", "new")).toBe(true);
   });
 
   it("rejects unsupported status jumps", () => {
-    expect(isValidStatusTransition("new", "resolved")).toBe(false);
     expect(isValidStatusTransition("closed", "in_progress")).toBe(false);
-    expect(isValidStatusTransition("triaged", "new")).toBe(false);
+    expect(isValidStatusTransition("resolved", "assigned")).toBe(false);
   });
 });

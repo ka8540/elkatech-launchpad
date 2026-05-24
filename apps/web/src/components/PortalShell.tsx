@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import {
+  Archive,
   Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Clock3,
   Gauge,
   Inbox,
   LogOut,
@@ -12,6 +15,7 @@ import {
   Sun,
   SunMoon,
   Users,
+  Wrench,
   X,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -314,12 +318,24 @@ const PortalShell = () => {
   const user = data?.user;
   const isStaff = user?.role === "engineer" || user?.role === "admin";
 
+  const requestNavItems: NavItem[] = isStaff
+    ? [
+        { to: "/app/requests", icon: ClipboardList, label: "All Requests", exact: true },
+        { to: "/app/requests/open", icon: Inbox, label: "Open", exact: true },
+        { to: "/app/requests/in-progress", icon: Wrench, label: "In Progress", exact: true },
+        { to: "/app/requests/pending", icon: Clock3, label: "Pending", exact: true },
+        { to: "/app/requests/resolved", icon: CheckCircle2, label: "Resolved", exact: true },
+        { to: "/app/requests/archived", icon: Archive, label: "Archived", exact: true },
+      ]
+    : [
+        { to: "/app/requests", icon: ClipboardList, label: "My Requests", exact: true },
+        { to: "/app/requests/open", icon: Inbox, label: "Open", exact: true },
+        { to: "/app/requests/in-progress", icon: Wrench, label: "In Progress", exact: true },
+        { to: "/app/requests/resolved", icon: CheckCircle2, label: "Resolved", exact: true },
+      ];
+
   const navItems: NavItem[] = [
-    {
-      to: "/app/requests",
-      icon: ClipboardList,
-      label: user?.role === "customer" ? "My Requests" : "Requests",
-    },
+    ...requestNavItems,
     ...(isStaff
       ? [{ to: "/app/queue", icon: Inbox, label: "Queue" }]
       : []),

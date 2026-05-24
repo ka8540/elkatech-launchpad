@@ -12,13 +12,13 @@ export type WorkflowRequest = {
 };
 
 const statusTransitions: Record<RequestStatus, RequestStatus[]> = {
-  new: ["triaged", "assigned", "closed"],
-  triaged: ["assigned", "waiting_for_customer", "closed"],
-  assigned: ["in_progress", "waiting_for_customer", "resolved", "closed"],
-  in_progress: ["waiting_for_customer", "resolved", "closed"],
-  waiting_for_customer: ["in_progress", "resolved", "closed"],
-  resolved: ["in_progress", "closed"],
-  closed: [],
+  new: ["triaged", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  triaged: ["new", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  assigned: ["new", "triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  in_progress: ["new", "triaged", "waiting_for_customer", "resolved", "closed"],
+  waiting_for_customer: ["new", "triaged", "assigned", "in_progress", "resolved", "closed"],
+  resolved: ["new", "in_progress", "closed"],
+  closed: ["new"],
 };
 
 export function canViewRequest(actor: WorkflowActor, request: WorkflowRequest) {
@@ -71,6 +71,10 @@ export function canUpdateRequestStatus(actor: WorkflowActor, request: WorkflowRe
   }
 
   if (actor.role !== "engineer") {
+    return false;
+  }
+
+  if (request.status === "closed") {
     return false;
   }
 

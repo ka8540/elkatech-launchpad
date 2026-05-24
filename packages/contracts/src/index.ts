@@ -169,7 +169,23 @@ export const assignRequestInputSchema = z.object({
 
 export const updateRequestStatusInputSchema = z.object({
   status: requestStatusSchema,
+  note: z.string().max(1000).optional(),
+  visibility: messageVisibilitySchema.optional(),
 });
+
+export const cancelRequestInputSchema = z.object({
+  reason: z.string().max(1000).optional(),
+});
+
+export const requestStatusGroupSchema = z.enum([
+  "all",
+  "open",
+  "in_progress",
+  "pending",
+  "resolved",
+  "archived",
+]);
+export type RequestStatusGroup = z.infer<typeof requestStatusGroupSchema>;
 
 export const sessionResponseSchema = z.object({
   sessionToken: z.string(),

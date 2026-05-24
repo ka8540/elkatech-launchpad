@@ -1,8 +1,14 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import type { ServiceRequest } from "@elkatech/contracts";
+import type { RequestStatusGroup, ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
+import {
+  getRequestStatusGroup,
+  getRequestStatusLabel,
+  REQUEST_STATUS_BADGE_CLASSES,
+  REQUEST_STATUS_GROUPS,
+} from "@/lib/request-status";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
 import { Button } from "@/components/ui/button";
@@ -29,17 +35,6 @@ function fmtDate(iso: string) {
     year: "numeric",
   });
 }
-
-/* ─── Status color mapping (industrial copper / steel palette) ─────────────── */
-const statusColors: Record<string, string> = {
-  new: "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-  triaged: "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-  assigned: "border-sky-400/35 bg-sky-400/10 text-sky-600 dark:text-sky-300",
-  in_progress: "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-  waiting_for_customer: "border-orange-400/35 bg-orange-400/10 text-orange-600 dark:text-orange-300",
-  resolved: "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-  closed: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
-};
 
 /* ─── Priority badge ───────────────────────────────────────────────────────── */
 const priorityColors: Record<string, string> = {
@@ -145,7 +140,13 @@ function LoadingSkeleton() {
 }
 
 /* ─── Premium empty state ──────────────────────────────────────────────────── */
-function EmptyState() {
+function EmptyState({
+  title = "No service requests yet",
+  description = "Create your first request to get support for a machine, installation, maintenance, or troubleshooting issue.",
+}: {
+  title?: string;
+  description?: string;
+}) {
   return (
     <div className={cn("relative overflow-hidden rounded-3xl", cardSurface)}>
       {/* Very subtle blueprint grid only — no copper glow */}
@@ -172,12 +173,9 @@ function EmptyState() {
           </div>
         </div>
 
-        <h3 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">
-          No service requests yet
-        </h3>
+        <h3 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">{title}</h3>
         <p className="mt-3 max-w-md text-sm leading-7 text-[var(--lp-ink-soft)]">
-          Create your first request to get support for a machine, installation,
-          maintenance, or troubleshooting issue.
+          {description}
         </p>
 
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
@@ -226,10 +224,11 @@ function RequestCard({ request }: { request: ServiceRequest }) {
             <span
               className={cn(
                 "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                statusColors[request.status] ?? "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
+                REQUEST_STATUS_BADGE_CLASSES[request.status] ??
+                  "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
               )}
             >
-              {request.status.replace(/_/g, " ")}
+              {getRequestStatusLabel(request.status)}
             </span>
             <span
               className={cn(
@@ -286,11 +285,16 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 /* ─── Page ─────────────────────────────────────────────────────────────────── */
-const RequestsPage = () => {
+const RequestsPage = ({ filter = "all" }: { filter?: RequestStatusGroup }) => {
   const { data: session } = useSession();
+  const filterMeta = REQUEST_STATUS_GROUPS[filter];
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["requests", "mine"],
-    queryFn: () => apiRequest<ServiceRequest[]>("/api/requests"),
+    queryKey: ["requests", filter],
+    queryFn: () => apiRequest<ServiceRequest[]>(`/api/requests?statusGroup=${filter}`),
+  });
+  const { data: summaryData } = useQuery({
+    queryKey: ["requests", "summary", "all"],
+    queryFn: () => apiRequest<ServiceRequest[]>("/api/requests?statusGroup=all"),
   });
 
   const isCustomer = session?.user?.role === "customer";
@@ -304,15 +308,14 @@ const RequestsPage = () => {
 
   /* ── Derive stats ─── */
   const requests = data ?? [];
-  const totalCount = requests.length;
+  const summaryRequests = summaryData ?? requests;
+  const totalCount = summaryRequests.length;
 
-  const openStatuses = new Set(["new", "triaged"]);
-  const inProgressStatuses = new Set(["assigned", "in_progress", "waiting_for_customer"]);
-  const resolvedStatuses = new Set(["resolved", "closed"]);
-
-  const openCount = requests.filter((r) => openStatuses.has(r.status)).length;
-  const inProgressCount = requests.filter((r) => inProgressStatuses.has(r.status)).length;
-  const resolvedCount = requests.filter((r) => resolvedStatuses.has(r.status)).length;
+  const openCount = summaryRequests.filter((r) => getRequestStatusGroup(r.status) === "open").length;
+  const inProgressCount = summaryRequests.filter((r) =>
+    getRequestStatusGroup(r.status) === "in_progress" || getRequestStatusGroup(r.status) === "pending"
+  ).length;
+  const resolvedCount = summaryRequests.filter((r) => getRequestStatusGroup(r.status) === "resolved").length;
 
   if (isLoading) return <LoadingSkeleton />;
 
@@ -339,11 +342,14 @@ const RequestsPage = () => {
               </p>
             </div>
             <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">
-              {isCustomer ? "Your Service Requests" : "Assigned Work"}
+              {filter === "all"
+                ? isCustomer
+                  ? "Your Service Requests"
+                  : "All Active Requests"
+                : filterMeta.title}
             </h1>
             <p className="mt-2.5 max-w-xl text-sm leading-7 text-[var(--lp-ink-soft)]">
-              Track your machinery service requests, updates, and support activity in
-              one place.
+              {filterMeta.description}
             </p>
           </div>
 
@@ -394,7 +400,18 @@ const RequestsPage = () => {
       {!isError && (
         <>
           {requests.length === 0 ? (
-            <EmptyState />
+            <EmptyState
+              title={
+                filter === "all"
+                  ? "No service requests yet"
+                  : `No ${filterMeta.shortLabel.toLowerCase()} service requests`
+              }
+              description={
+                filter === "all"
+                  ? undefined
+                  : `There are no ${filterMeta.shortLabel.toLowerCase()} service requests in this view.`
+              }
+            />
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
