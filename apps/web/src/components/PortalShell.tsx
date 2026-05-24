@@ -30,7 +30,7 @@ type NavItem = {
   exact?: boolean;
 };
 
-/* ── Real ElkaTech SVG logo mark (matches SiteHeader) ─────────────────── */
+/* ── Real ElkaTech SVG logo mark (copper accent, matches premium brand) ──── */
 function ElkaTechMark({ size = 32 }: { size?: number }) {
   return (
     <svg
@@ -47,7 +47,7 @@ function ElkaTechMark({ size = 32 }: { size?: number }) {
         width="76"
         height="76"
         rx="12"
-        stroke="hsl(var(--accent))"
+        stroke="var(--lp-accent)"
         strokeWidth="2.5"
         fill="none"
       />
@@ -59,7 +59,7 @@ function ElkaTechMark({ size = 32 }: { size?: number }) {
       />
       <path
         d="M30 50 L50 50"
-        stroke="hsl(var(--accent))"
+        stroke="var(--lp-accent)"
         strokeWidth="4"
         strokeLinecap="round"
       />
@@ -75,7 +75,7 @@ function ElkaTechMark({ size = 32 }: { size?: number }) {
         strokeWidth="4"
         strokeLinecap="round"
       />
-      <circle cx="68" cy="50" r="6" fill="hsl(var(--accent))" />
+      <circle cx="68" cy="50" r="6" fill="var(--lp-accent)" />
     </svg>
   );
 }
@@ -132,10 +132,9 @@ function ThemeSelector({
         title={compact ? `Theme: ${current.label}` : undefined}
         aria-label={compact ? `Theme: ${current.label}` : undefined}
         className={cn(
-          "flex items-center rounded-xl border transition-all duration-150",
-          "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-          "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+          "flex items-center rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 text-[var(--lp-ink-soft)] transition-all duration-150",
+          "hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
           compact
             ? "h-8 w-8 justify-center px-0"
             : "h-9 w-full justify-between gap-2 px-3 py-2",
@@ -148,7 +147,7 @@ function ThemeSelector({
           )}
         </span>
         {showLabel && (
-          <span className="flex items-center gap-1.5 text-[12px] font-medium text-slate-400 dark:text-slate-500">
+          <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--lp-faint)]">
             {current.label}
             <ChevronRight
               className={cn(
@@ -165,9 +164,8 @@ function ThemeSelector({
           role="menu"
           aria-label="Select theme"
           className={cn(
-            "absolute z-[60] w-44 overflow-hidden rounded-2xl border p-1.5",
-            "bg-white text-slate-900 border-slate-200 shadow-lg",
-            "dark:bg-[#07111f] dark:text-white dark:border-white/10 dark:shadow-[0_18px_50px_rgba(0,0,0,0.35)]",
+            "absolute z-[60] w-44 overflow-hidden rounded-2xl border border-[var(--lp-line)] p-1.5",
+            "bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl",
             compact && menuSide === "right" && "bottom-0 left-full ml-3",
             compact && menuSide === "bottom" && "right-0 top-full mt-2",
             !compact && "bottom-full left-0 right-0 mb-2 w-auto",
@@ -188,10 +186,10 @@ function ThemeSelector({
                 }}
                 className={cn(
                   "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-medium transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
                   active
-                    ? "bg-blue-50 text-blue-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-                    : "hover:bg-slate-100 dark:hover:bg-white/[0.08]",
+                    ? "bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
+                    : "text-[var(--lp-ink-soft)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
                 )}
               >
                 <OptIcon className="h-[15px] w-[15px] shrink-0" />
@@ -228,31 +226,28 @@ function SidebarNavItem({
       onClick={onClick}
       title={collapsed ? item.label : undefined}
       className={cn(
-        "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+        "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
         isActive
-          ? [
-              // Dark active
-              "dark:bg-[#1a3a5c] dark:text-white dark:shadow-[0_0_0_1px_rgba(59,130,246,0.25)]",
-              // Light active
-              "bg-blue-50 text-blue-700 shadow-[0_0_0_1px_rgba(59,130,246,0.18)] border border-blue-200",
-            ]
-          : [
-              // Dark inactive
-              "dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-100",
-              // Light inactive
-              "text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent",
-            ],
+          ? "bg-[var(--lp-accent)]/[0.12] text-[var(--lp-ink)] shadow-[inset_0_0_0_1px_var(--lp-accent)]"
+          : "text-[var(--lp-ink-soft)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
         collapsed && "justify-center px-2.5",
       )}
       aria-current={isActive ? "page" : undefined}
     >
+      {/* Active copper edge indicator */}
+      {isActive && !collapsed && (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[var(--lp-accent)]"
+        />
+      )}
       <Icon
         className={cn(
           "h-[18px] w-[18px] shrink-0 transition-colors",
           isActive
-            ? "dark:text-blue-300 text-blue-600"
-            : "dark:text-slate-500 dark:group-hover:text-slate-300 text-slate-400 group-hover:text-slate-700",
+            ? "text-[var(--lp-accent)]"
+            : "text-[var(--lp-faint)] group-hover:text-[var(--lp-ink)]",
         )}
       />
       {!collapsed && <span className="truncate leading-none">{item.label}</span>}
@@ -333,7 +328,7 @@ const PortalShell = () => {
       : []),
   ];
 
-  const sidebarWidth = collapsed ? "72px" : "272px";
+  const sidebarWidth = collapsed ? "76px" : "276px";
 
   /* ── Sidebar content (shared desktop + mobile drawer) ──────────────────── */
   const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
@@ -341,93 +336,51 @@ const PortalShell = () => {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       {collapsed && !isMobile ? (
-        /* Collapsed: logo is the default; on hover/focus the expand button
-           takes the same 44x44 slot. They crossfade in place so the header
-           never shifts. */
-        <div className="group flex items-center justify-center border-b border-slate-200 px-3 py-5 dark:border-white/10">
-          <div className="relative h-11 w-11">
-            <Link
-              to="/app/requests"
-              title="ElkaTech"
-              aria-label="ElkaTech"
-              className={cn(
-                "absolute inset-0 flex items-center justify-center text-slate-950 dark:text-white",
-                "transition-opacity duration-200",
-                "opacity-100 group-hover:opacity-0 group-focus-within:opacity-0",
-                "pointer-events-auto group-hover:pointer-events-none group-focus-within:pointer-events-none",
-              )}
-            >
-              <ElkaTechMark size={42} />
-            </Link>
-
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              className={cn(
-                "absolute inset-0 flex items-center justify-center rounded-xl border shadow-sm",
-                "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                "dark:border-white/10 dark:bg-[#0b1626] dark:text-slate-300 dark:hover:bg-white/[0.08] dark:hover:text-white",
-                "transition-opacity duration-200",
-                "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
-                "focus:opacity-100 focus:pointer-events-auto",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-              )}
-              aria-label="Expand sidebar"
-              aria-expanded={false}
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* Expanded / mobile: brand block plus an always-visible toggle button. */
-        <div className="relative border-b border-slate-200 px-5 py-5 dark:border-white/10">
+        /* Collapsed: clean centered logo mark. The collapse/expand control now
+           lives as a floating button on the sidebar edge (see desktop aside). */
+        <div className="flex items-center justify-center border-b border-[var(--lp-line)] px-3 py-5">
           <Link
             to="/app/requests"
             title="ElkaTech"
-            className="flex items-center gap-3 text-slate-950 transition-opacity hover:opacity-80 dark:text-white"
+            aria-label="ElkaTech"
+            className="flex h-11 w-11 items-center justify-center text-[var(--lp-ink)] transition-opacity hover:opacity-80"
+          >
+            <ElkaTechMark size={40} />
+          </Link>
+        </div>
+      ) : (
+        /* Expanded / mobile: brand block. */
+        <div className="relative border-b border-[var(--lp-line)] px-5 py-5">
+          <Link
+            to="/app/requests"
+            title="ElkaTech"
+            className="flex items-center gap-3 text-[var(--lp-ink)] transition-opacity hover:opacity-80"
           >
             <span className="shrink-0">
               <ElkaTechMark size={38} />
             </span>
             <div className="min-w-0 leading-tight">
-              <p className="font-display text-base font-bold leading-none text-slate-950 dark:text-white">
+              <p className="lp-display text-base font-bold leading-none text-[var(--lp-ink)]">
                 ElkaTech
               </p>
-              <p className="mt-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+              <p className="lp-mono mt-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-[var(--lp-faint)]">
                 Service Platform
               </p>
             </div>
           </Link>
 
-          {isMobile ? (
+          {isMobile && (
             <button
               type="button"
               onClick={() => setMobileOpen(false)}
               className={cn(
-                "absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-colors",
-                "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
-                "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
+                "absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--lp-line)] bg-[var(--lp-panel)]/70 text-[var(--lp-ink-soft)] shadow-sm transition-colors backdrop-blur-md",
+                "hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
               )}
               aria-label="Close menu"
             >
               <X className="h-4 w-4" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              className={cn(
-                "absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-colors",
-                "border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900",
-                "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50",
-              )}
-              aria-label="Collapse sidebar"
-              aria-expanded
-            >
-              <ChevronLeft className="h-4 w-4" />
             </button>
           )}
         </div>
@@ -448,10 +401,7 @@ const PortalShell = () => {
       </nav>
 
       {/* ── Bottom section ─────────────────────────────────────────────────── */}
-      <div className={cn(
-        "border-t space-y-0 pb-4 pt-3",
-        "border-slate-200 dark:border-white/10",
-      )}>
+      <div className="space-y-0 border-t border-[var(--lp-line)] pb-4 pt-3">
 
         {/* ── Group A: Theme selector ───────────────────────────────────── */}
         <div className="px-3 pb-3">
@@ -465,41 +415,32 @@ const PortalShell = () => {
         </div>
 
         {/* Divider A→B */}
-        <div className="mx-3 border-t border-slate-200 dark:border-white/[0.07]" />
+        <div className="mx-3 border-t border-[var(--lp-line)]" />
 
         {/* ── Group B: User profile ──────────────────────────────────────── */}
         {user && (
-          <div className="px-3 pt-3 pb-2">
+          <div className="px-3 pb-2 pt-3">
             {collapsed && !isMobile ? (
               /* Collapsed: just avatar with tooltip */
               <div className="flex justify-center">
                 <div
                   title={`${user.displayName} — ${user.role}`}
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold",
-                    "bg-gradient-to-br from-blue-500/40 to-emerald-500/30 text-white",
-                  )}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--lp-accent)] to-[var(--lp-accent-2)] text-xs font-bold text-[#08090b]"
                 >
                   {user.displayName.charAt(0).toUpperCase()}
                 </div>
               </div>
             ) : (
               /* Expanded: full profile block */
-              <div className={cn(
-                "flex items-center gap-2.5 rounded-xl px-3 py-2.5",
-                "bg-slate-100 dark:bg-white/[0.04]",
-              )}>
-                <div className={cn(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold",
-                  "bg-gradient-to-br from-blue-500/40 to-emerald-500/30 text-white",
-                )}>
+              <div className="flex items-center gap-2.5 rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/60 px-3 py-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[var(--lp-accent)] to-[var(--lp-accent-2)] text-xs font-bold text-[#08090b]">
                   {user.displayName.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-[13px] font-medium text-slate-800 dark:text-slate-200">
+                  <p className="truncate text-[13px] font-medium text-[var(--lp-ink)]">
                     {user.displayName}
                   </p>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-blue-500 dark:text-blue-400">
+                  <p className="lp-mono text-[10px] uppercase tracking-[0.18em] text-[var(--lp-accent)]">
                     {user.role}
                   </p>
                 </div>
@@ -509,7 +450,7 @@ const PortalShell = () => {
         )}
 
         {/* Divider B→C */}
-        <div className="mx-3 border-t border-slate-200 dark:border-white/[0.07]" />
+        <div className="mx-3 border-t border-[var(--lp-line)]" />
 
         {/* ── Group C: Logout ────────────────────────────────────────────── */}
         <div className="px-3 pt-3">
@@ -521,9 +462,8 @@ const PortalShell = () => {
                 title="Log out"
                 aria-label="Log out"
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-xl border transition-all",
-                  "border-slate-200 bg-slate-50 text-slate-400 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600",
-                  "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/10 dark:hover:text-rose-300",
+                  "flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/50 text-[var(--lp-faint)] transition-all",
+                  "hover:border-rose-400/40 hover:bg-rose-500/10 hover:text-rose-400",
                   "disabled:opacity-50",
                 )}
               >
@@ -535,9 +475,8 @@ const PortalShell = () => {
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
               className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium transition-all",
-                "border-slate-200 bg-slate-50 text-slate-500 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600",
-                "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/10 dark:hover:text-rose-300",
+                "flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/50 px-3 py-2 text-[13px] font-medium text-[var(--lp-ink-soft)] transition-all",
+                "hover:border-rose-400/40 hover:bg-rose-500/10 hover:text-rose-400",
                 "disabled:opacity-50",
               )}
             >
@@ -552,19 +491,59 @@ const PortalShell = () => {
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-[#060e1a]">
+    <div className="lp relative flex min-h-screen bg-[var(--lp-bg)] text-[var(--lp-ink)]">
 
       {/* ── Desktop sidebar ─────────────────────────────────────────────── */}
       <aside
         style={{ width: sidebarWidth }}
-        className={cn(
-          "hidden shrink-0 flex-col border-r transition-[width] duration-200 ease-in-out lg:flex",
-          "border-slate-200 bg-white dark:border-white/[0.07] dark:bg-[#070f1d]",
-        )}
+        className="relative hidden shrink-0 flex-col transition-[width] duration-200 ease-in-out lg:flex"
         aria-label="Main navigation"
       >
-        <div className="fixed flex h-screen flex-col" style={{ width: sidebarWidth }}>
-          <SidebarContent />
+        <div
+          className="fixed flex h-screen flex-col border-r border-[var(--lp-line)] bg-[var(--lp-panel)]/70 backdrop-blur-2xl"
+          style={{ width: sidebarWidth }}
+        >
+          {/* Subtle copper top glow + blueprint grid for premium glass feel */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.35]"
+            style={{
+              maskImage: "linear-gradient(to bottom, black, transparent 60%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black, transparent 60%)",
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-32"
+            style={{
+              background:
+                "radial-gradient(120% 80% at 30% 0%, var(--lp-glow), transparent 70%)",
+            }}
+          />
+          <div className="relative z-10 flex h-full flex-col">
+            <SidebarContent />
+          </div>
+
+          {/* ── Floating collapse / expand control on the sidebar edge ──── */}
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "absolute right-0 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full",
+              "border border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/90 text-[var(--lp-ink-soft)] shadow-[0_6px_22px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-all duration-150",
+              "hover:border-[var(--lp-accent)] hover:text-[var(--lp-accent)]",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45 focus-visible:ring-offset-0",
+            )}
+          >
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
+          </button>
         </div>
       </aside>
 
@@ -578,8 +557,7 @@ const PortalShell = () => {
       )}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-[272px] flex-col border-r transition-transform duration-200 ease-in-out lg:hidden",
-          "border-slate-200 bg-white dark:border-white/[0.07] dark:bg-[#070f1d]",
+          "fixed inset-y-0 left-0 z-50 w-[276px] flex-col border-r border-[var(--lp-line)] bg-[var(--lp-panel)]/90 backdrop-blur-2xl transition-transform duration-200 ease-in-out lg:hidden",
           mobileOpen ? "flex translate-x-0" : "-translate-x-full",
         )}
         aria-label="Mobile navigation"
@@ -588,19 +566,32 @@ const PortalShell = () => {
       </div>
 
       {/* ── Main content area ────────────────────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {/* Ambient industrial backdrop for the content column */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 lp-grid opacity-[0.5]"
+          style={{
+            maskImage: "linear-gradient(to bottom, black, transparent 85%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black, transparent 85%)",
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-64"
+          style={{
+            background:
+              "radial-gradient(80% 60% at 85% 0%, var(--lp-glow), transparent 65%)",
+          }}
+        />
 
         {/* Mobile top bar */}
-        <div className={cn(
-          "sticky top-0 z-30 flex items-center gap-3 border-b px-4 py-3 backdrop-blur-sm lg:hidden",
-          "border-slate-200 bg-white/90 dark:border-white/[0.07] dark:bg-[#070f1d]/90",
-        )}>
+        <div className="sticky top-0 z-30 flex items-center gap-3 border-b border-[var(--lp-line)] bg-[var(--lp-bg)]/85 px-4 py-3 backdrop-blur-xl lg:hidden">
           <button
             onClick={() => setMobileOpen(true)}
             className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-xl border transition-all",
-              "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-900",
-              "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-white/[0.08] dark:hover:text-slate-200",
+              "flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 text-[var(--lp-ink-soft)] transition-all",
+              "hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]",
             )}
             aria-label="Open navigation"
           >
@@ -608,12 +599,12 @@ const PortalShell = () => {
           </button>
 
           <Link to="/" className="flex items-center gap-2" title="Back to homepage">
-            <span className="text-slate-950 dark:text-white">
+            <span className="text-[var(--lp-ink)]">
               <ElkaTechMark size={28} />
             </span>
             <div className="leading-tight">
-              <p className="text-[13px] font-bold text-slate-950 dark:text-white">ElkaTech</p>
-              <p className="text-[9px] uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+              <p className="lp-display text-[13px] font-bold text-[var(--lp-ink)]">ElkaTech</p>
+              <p className="lp-mono text-[9px] uppercase tracking-[0.16em] text-[var(--lp-faint)]">
                 Service Platform
               </p>
             </div>
@@ -625,9 +616,8 @@ const PortalShell = () => {
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
               className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-lg border transition-all",
-                "border-slate-200 bg-slate-50 text-slate-400 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600",
-                "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-300",
+                "flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 text-[var(--lp-faint)] transition-all",
+                "hover:border-rose-400/40 hover:bg-rose-500/10 hover:text-rose-400",
               )}
               aria-label="Log out"
             >
@@ -637,7 +627,7 @@ const PortalShell = () => {
         </div>
 
         {/* Page content */}
-        <main className="flex-1 overflow-x-hidden px-4 py-8 md:px-6 md:py-10 lg:px-8 lg:py-10">
+        <main className="relative z-10 flex-1 overflow-x-hidden px-4 py-8 md:px-6 md:py-10 lg:px-8 lg:py-10">
           <Outlet />
         </main>
       </div>

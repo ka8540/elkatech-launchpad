@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import type { ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
-import StatusBadge from "@/components/StatusBadge";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
 import { Button } from "@/components/ui/button";
@@ -16,7 +15,6 @@ import {
   ExternalLink,
   Inbox,
   LifeBuoy,
-  Loader2,
   Package2,
   Plus,
   RefreshCw,
@@ -32,23 +30,23 @@ function fmtDate(iso: string) {
   });
 }
 
-/* ─── Status color mapping ─────────────────────────────────────────────────── */
+/* ─── Status color mapping (industrial copper / steel palette) ─────────────── */
 const statusColors: Record<string, string> = {
-  new: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-300",
-  triaged: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-300",
-  assigned: "border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-500/10 dark:text-cyan-300",
-  in_progress: "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300",
-  waiting_for_customer: "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-400/30 dark:bg-orange-500/10 dark:text-orange-300",
-  resolved: "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300",
-  closed: "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
+  new: "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
+  triaged: "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+  assigned: "border-sky-400/35 bg-sky-400/10 text-sky-600 dark:text-sky-300",
+  in_progress: "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
+  waiting_for_customer: "border-orange-400/35 bg-orange-400/10 text-orange-600 dark:text-orange-300",
+  resolved: "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
+  closed: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
 };
 
 /* ─── Priority badge ───────────────────────────────────────────────────────── */
 const priorityColors: Record<string, string> = {
-  low: "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-  normal: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-  high: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-300",
-  urgent: "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300",
+  low: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
+  normal: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
+  high: "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+  urgent: "border-rose-400/35 bg-rose-400/10 text-rose-600 dark:text-rose-300",
 };
 
 /* ─── Skeleton shimmer ─────────────────────────────────────────────────────── */
@@ -56,12 +54,16 @@ function Skeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded-xl bg-slate-200 dark:bg-white/[0.05]",
+        "animate-pulse rounded-xl bg-[var(--lp-panel-2)]",
         className,
       )}
     />
   );
 }
+
+/* ─── Premium glass card surface ───────────────────────────────────────────── */
+const cardSurface =
+  "border border-[var(--lp-line)] bg-[var(--lp-panel)]/80 backdrop-blur-xl shadow-[0_24px_70px_-50px_rgba(0,0,0,0.55)]";
 
 /* ─── Stat card ────────────────────────────────────────────────────────────── */
 function StatCard({
@@ -73,28 +75,28 @@ function StatCard({
   label: string;
   count: number;
   icon: React.ComponentType<{ className?: string }>;
-  accent: "blue" | "emerald" | "amber" | "slate";
+  accent: "copper" | "emerald" | "amber" | "steel";
 }) {
   const accentMap = {
-    blue: {
-      badge: "border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-      glow: "from-blue-500/5 to-transparent",
-      count: "text-blue-700 dark:text-blue-100",
+    copper: {
+      badge: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
+      glow: "radial-gradient(120% 90% at 15% 0%, var(--lp-glow), transparent 60%)",
+      count: "text-[var(--lp-ink)]",
     },
     emerald: {
-      badge: "border-emerald-300 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-      glow: "from-emerald-500/5 to-transparent",
-      count: "text-emerald-700 dark:text-emerald-100",
+      badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
+      glow: "radial-gradient(120% 90% at 15% 0%, rgba(16,185,129,0.12), transparent 60%)",
+      count: "text-[var(--lp-ink)]",
     },
     amber: {
-      badge: "border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300",
-      glow: "from-amber-500/5 to-transparent",
-      count: "text-amber-700 dark:text-amber-100",
+      badge: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+      glow: "radial-gradient(120% 90% at 15% 0%, rgba(245,158,11,0.12), transparent 60%)",
+      count: "text-[var(--lp-ink)]",
     },
-    slate: {
-      badge: "border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-      glow: "from-slate-500/5 to-transparent",
-      count: "text-slate-700 dark:text-slate-200",
+    steel: {
+      badge: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
+      glow: "radial-gradient(120% 90% at 15% 0%, rgba(120,130,150,0.10), transparent 60%)",
+      count: "text-[var(--lp-ink)]",
     },
   };
 
@@ -102,22 +104,21 @@ function StatCard({
 
   return (
     <div className={cn(
-      "relative overflow-hidden rounded-2xl border p-5 transition-colors duration-150",
-      "border-slate-200 bg-white hover:border-slate-300",
-      "dark:border-white/[0.08] dark:bg-[#0b1626]/80 dark:hover:border-white/[0.14] dark:backdrop-blur-sm",
+      "group relative overflow-hidden rounded-2xl p-5 transition-colors duration-150",
+      cardSurface,
+      "hover:border-[var(--lp-line-strong)]",
     )}>
       <div
-        className={cn(
-          "absolute inset-0 bg-gradient-to-br opacity-60",
-          c.glow,
-        )}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 opacity-70"
+        style={{ background: c.glow }}
       />
       <div className="relative flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+          <p className="lp-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
             {label}
           </p>
-          <p className={cn("mt-2 font-display text-4xl font-bold", c.count)}>
+          <p className={cn("lp-display mt-2 text-4xl font-bold", c.count)}>
             {count}
           </p>
         </div>
@@ -139,10 +140,7 @@ function LoadingSkeleton() {
   return (
     <div className="space-y-6">
       {/* Header skeleton */}
-      <div className={cn(
-        "rounded-3xl border p-6 sm:p-8",
-        "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80",
-      )}>
+      <div className={cn("rounded-3xl p-6 sm:p-8", cardSurface)}>
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
             <Skeleton className="h-4 w-28" />
@@ -173,49 +171,44 @@ function LoadingSkeleton() {
 /* ─── Premium empty state ──────────────────────────────────────────────────── */
 function EmptyState() {
   return (
-    <div className={cn(
-      "relative overflow-hidden rounded-3xl border",
-      "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80 dark:backdrop-blur-sm",
-    )}>
-      {/* Subtle grid pattern */}
+    <div className={cn("relative overflow-hidden rounded-3xl", cardSurface)}>
+      {/* Subtle blueprint grid */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-40"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-50"
         style={{
-          backgroundImage:
-            "linear-gradient(rgba(148,163,184,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.07) 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
+          maskImage: "radial-gradient(ellipse at 50% 35%, black 30%, transparent 80%)",
+          WebkitMaskImage: "radial-gradient(ellipse at 50% 35%, black 30%, transparent 80%)",
         }}
       />
-      {/* Radial glow */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(59,130,246,0.06),transparent_55%),radial-gradient(circle_at_70%_80%,rgba(16,185,129,0.04),transparent_40%)]" />
+      {/* Copper radial glow */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(60% 50% at 50% 25%, var(--lp-glow), transparent 60%)",
+        }}
+      />
 
-      <div className="relative flex flex-col items-center px-6 py-20 text-center sm:py-24">
+      <div className="relative flex flex-col items-center px-6 py-16 text-center sm:py-20">
         {/* Icon cluster */}
-        <div className="relative mb-8">
-          <div className={cn(
-            "flex h-20 w-20 items-center justify-center rounded-3xl border shadow-[0_0_40px_rgba(59,130,246,0.10)]",
-            "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-          )}>
+        <div className="relative mb-7">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)] shadow-[0_0_50px_-10px_var(--lp-accent)]">
             <ClipboardList className="h-9 w-9" />
           </div>
-          <div className={cn(
-            "absolute -right-3 -top-2 flex h-9 w-9 items-center justify-center rounded-2xl border",
-            "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-          )}>
+          <div className="absolute -right-3 -top-2 flex h-9 w-9 items-center justify-center rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)]">
             <Wrench className="h-4 w-4" />
           </div>
-          <div className={cn(
-            "absolute -bottom-1 -left-3 flex h-8 w-8 items-center justify-center rounded-xl border",
-            "border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-          )}>
+          <div className="absolute -bottom-1 -left-3 flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-faint)]">
             <LifeBuoy className="h-4 w-4" />
           </div>
         </div>
 
-        <h3 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">
+        <h3 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">
           No service requests yet
         </h3>
-        <p className="mt-3 max-w-md text-sm leading-7 text-slate-500 dark:text-slate-400">
+        <p className="mt-3 max-w-md text-sm leading-7 text-[var(--lp-ink-soft)]">
           Create your first request to get support for a machine, installation,
           maintenance, or troubleshooting issue.
         </p>
@@ -223,7 +216,7 @@ function EmptyState() {
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
           <Button
             asChild
-            className="h-11 rounded-full bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700"
+            className="h-11 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] shadow-[0_10px_30px_-10px_var(--lp-accent)] transition-colors hover:bg-[var(--lp-accent-2)]"
           >
             <Link to="/app/requests/new">
               <Plus className="mr-1.5 h-4 w-4" />
@@ -233,11 +226,7 @@ function EmptyState() {
           <Button
             asChild
             variant="outline"
-            className={cn(
-              "h-11 rounded-full px-6",
-              "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-              "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-            )}
+            className="h-11 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-6 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
           >
             <Link to="/">
               <Package2 className="mr-1.5 h-4 w-4" />
@@ -256,21 +245,21 @@ function RequestCard({ request }: { request: ServiceRequest }) {
     <Link
       to={`/app/requests/${request.id}`}
       className={cn(
-        "group block overflow-hidden rounded-2xl border p-5 transition-all duration-150",
-        "border-slate-200 bg-white hover:border-blue-300 hover:shadow-[0_4px_16px_rgba(59,130,246,0.08)]",
-        "dark:border-white/[0.07] dark:bg-[#0b1626]/70 dark:backdrop-blur-sm dark:hover:border-blue-400/20 dark:hover:bg-[#0d1c30]/80 dark:hover:shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_8px_32px_rgba(0,0,0,0.18)]",
+        "group block overflow-hidden rounded-2xl p-5 transition-all duration-150",
+        cardSurface,
+        "hover:border-[var(--lp-accent)]/45 hover:shadow-[0_18px_50px_-30px_var(--lp-accent)]",
       )}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            <span className="lp-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
               {request.requestNumber}
             </span>
             <span
               className={cn(
                 "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                statusColors[request.status] ?? "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
+                statusColors[request.status] ?? "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
               )}
             >
               {request.status.replace(/_/g, " ")}
@@ -278,27 +267,27 @@ function RequestCard({ request }: { request: ServiceRequest }) {
             <span
               className={cn(
                 "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                priorityColors[request.priority] ?? "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
+                priorityColors[request.priority] ?? "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
               )}
             >
               {request.priority}
             </span>
           </div>
-          <h3 className="truncate font-display text-[15px] font-semibold text-slate-900 group-hover:text-slate-950 dark:text-slate-100 dark:group-hover:text-white">
+          <h3 className="truncate lp-display text-[15px] font-semibold text-[var(--lp-ink)]">
             {request.subject}
           </h3>
           {request.productSnapshot?.name && (
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-[var(--lp-faint)]">
               {request.productSnapshot.name}
             </p>
           )}
         </div>
 
         <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
-          <p className="text-xs text-slate-400 dark:text-slate-600">
+          <p className="text-xs text-[var(--lp-faint)]">
             {fmtDate((request as unknown as Record<string, string>)["updatedAt"] ?? (request as unknown as Record<string, string>)["createdAt"] ?? "")}
           </p>
-          <span className="flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400">
+          <span className="flex items-center gap-1 text-xs font-medium text-[var(--lp-faint)] transition-colors group-hover:text-[var(--lp-accent)]">
             View details
             <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </span>
@@ -311,19 +300,15 @@ function RequestCard({ request }: { request: ServiceRequest }) {
 /* ─── Error state ──────────────────────────────────────────────────────────── */
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-rose-200 bg-rose-50 px-6 py-12 text-center dark:border-rose-500/20 dark:bg-rose-500/[0.06]">
+    <div className="flex flex-col items-center rounded-2xl border border-rose-400/30 bg-rose-500/[0.07] px-6 py-12 text-center">
       <AlertCircle className="mb-4 h-10 w-10 text-rose-500 dark:text-rose-400" />
-      <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-white">
+      <h3 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">
         Could not load service requests
       </h3>
-      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Please try again.</p>
+      <p className="mt-2 text-sm text-[var(--lp-ink-soft)]">Please try again.</p>
       <Button
         variant="outline"
-        className={cn(
-          "mt-6 rounded-full",
-          "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-          "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]",
-        )}
+        className="mt-6 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
         onClick={onRetry}
       >
         <RefreshCw className="mr-2 h-4 w-4" />
@@ -366,35 +351,38 @@ const RequestsPage = () => {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      {/* ── Ambient glow (subtle in light, stronger in dark) ───────────────── */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute left-[-20%] top-[-10%] h-[600px] w-[600px] rounded-full bg-blue-500/[0.03] blur-[120px] dark:bg-blue-500/[0.04]" />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[400px] w-[400px] rounded-full bg-emerald-500/[0.03] blur-[100px] dark:bg-emerald-500/[0.04]" />
-      </div>
-
       {/* ── Header card ───────────────────────────────────────────────────── */}
-      <header className={cn(
-        "relative overflow-hidden rounded-3xl border p-6 backdrop-blur-xl sm:p-8",
-        "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80",
-      )}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.08),transparent_32%),radial-gradient(circle_at_88%_22%,rgba(16,185,129,0.05),transparent_30%)] dark:bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.14),transparent_32%),radial-gradient(circle_at_88%_22%,rgba(16,185,129,0.09),transparent_30%)]" />
+      <header className={cn("relative overflow-hidden rounded-3xl p-6 sm:p-8", cardSurface)}>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-40"
+          style={{
+            maskImage: "linear-gradient(to right, black, transparent 70%)",
+            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
+          }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(70% 90% at 12% 0%, var(--lp-glow), transparent 45%)",
+          }}
+        />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="mb-4 flex items-center gap-3">
-              <div className={cn(
-                "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
                 <ClipboardList className="h-5 w-5" />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600 dark:text-blue-300">
+              <p className="lp-mono text-xs font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
                 Service Requests
               </p>
             </div>
-            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
+            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">
               {isCustomer ? "Your Service Requests" : "Assigned Work"}
             </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-7 text-slate-500 dark:text-slate-400">
+            <p className="mt-2.5 max-w-xl text-sm leading-7 text-[var(--lp-ink-soft)]">
               Track your machinery service requests, updates, and support activity in
               one place.
             </p>
@@ -404,7 +392,7 @@ const RequestsPage = () => {
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-11 w-fit shrink-0 rounded-full bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700",
+              "h-11 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] shadow-[0_10px_30px_-10px_var(--lp-accent)] transition-colors hover:bg-[var(--lp-accent-2)]",
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >
@@ -434,9 +422,9 @@ const RequestsPage = () => {
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total Requests" count={totalCount} icon={ClipboardList} accent="blue" />
+        <StatCard label="Total Requests" count={totalCount} icon={ClipboardList} accent="copper" />
         <StatCard label="Open" count={openCount} icon={Inbox} accent="amber" />
-        <StatCard label="In Progress" count={inProgressCount} icon={Wrench} accent="slate" />
+        <StatCard label="In Progress" count={inProgressCount} icon={Wrench} accent="steel" />
         <StatCard label="Resolved" count={resolvedCount} icon={CheckCircle2} accent="emerald" />
       </div>
 
@@ -451,7 +439,7 @@ const RequestsPage = () => {
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-400 dark:text-slate-500">
+                <p className="lp-mono text-xs font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
                   {requests.length} request{requests.length !== 1 ? "s" : ""}
                 </p>
               </div>
@@ -465,18 +453,15 @@ const RequestsPage = () => {
 
       {/* ── Help panel ────────────────────────────────────────────────────── */}
       {requests.length > 0 && (
-        <div className={cn(
-          "rounded-2xl border px-5 py-4",
-          "border-slate-200 bg-slate-50 dark:border-white/[0.06] dark:bg-[#0b1626]/60",
-        )}>
+        <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/55 px-5 py-4 backdrop-blur-xl">
           <div className="flex items-start gap-3">
-            <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
-            <div className="min-w-0 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              <span className="font-medium text-slate-700 dark:text-slate-300">Need to report a new issue?</span>{" "}
+            <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
+            <div className="min-w-0 text-sm leading-6 text-[var(--lp-ink-soft)]">
+              <span className="font-medium text-[var(--lp-ink)]">Need to report a new issue?</span>{" "}
               You can also start a request directly from a{" "}
               <Link
                 to="/"
-                className="inline-flex items-center gap-1 text-blue-500 underline-offset-2 hover:underline dark:text-blue-400"
+                className="inline-flex items-center gap-1 text-[var(--lp-accent)] underline-offset-2 hover:underline"
               >
                 product page
                 <ExternalLink className="h-3 w-3" />

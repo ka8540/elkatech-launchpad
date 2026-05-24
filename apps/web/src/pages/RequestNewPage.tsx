@@ -30,23 +30,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+/* ─── Premium glass surfaces (graphite / ivory, copper accent) ──────────────── */
+const cardSurface =
+  "border border-[var(--lp-line)] bg-[var(--lp-panel)]/85 backdrop-blur-xl shadow-[0_28px_80px_-52px_rgba(0,0,0,0.6)]";
+
 /* ─── Shared input class strings ────────────────────────────────────────────── */
 const inputClassName =
-  "h-12 min-w-0 rounded-2xl px-4 shadow-inner shadow-black/5 placeholder:text-slate-400 transition-colors " +
-  "border-slate-200 bg-white text-slate-950 focus-visible:border-blue-400 focus-visible:ring-2 focus-visible:ring-blue-500/15 focus-visible:ring-offset-0 " +
-  "dark:border-white/10 dark:bg-[#050b14]/80 dark:text-white dark:placeholder:text-slate-500 dark:focus-visible:border-blue-400/60 dark:shadow-black/10";
+  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-bg)]/60 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 " +
+  "placeholder:text-[var(--lp-faint)] transition-colors " +
+  "focus-visible:border-[var(--lp-accent)] focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/20 focus-visible:ring-offset-0";
 
 const selectTriggerClassName =
-  "h-12 min-w-0 rounded-2xl px-4 shadow-inner shadow-black/5 transition-colors " +
-  "border-slate-200 bg-white text-slate-950 data-[placeholder]:text-slate-400 " +
-  "dark:border-white/10 dark:bg-[#050b14]/80 dark:text-white dark:data-[placeholder]:text-slate-500 " +
-  "focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 focus:ring-offset-0 " +
-  "dark:focus:border-blue-400/60 dark:shadow-black/10 [&>span]:truncate";
+  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-bg)]/60 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 transition-colors " +
+  "data-[placeholder]:text-[var(--lp-faint)] " +
+  "focus:border-[var(--lp-accent)] focus:ring-2 focus:ring-[var(--lp-accent)]/20 focus:ring-offset-0 [&>span]:truncate";
 
 const selectContentClassName =
-  "rounded-2xl border shadow-2xl " +
-  "border-slate-200 bg-white text-slate-900 shadow-black/10 " +
-  "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-100 dark:shadow-black/40";
+  "rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-2xl shadow-black/30 backdrop-blur-xl";
 
 /* ─── Form config ───────────────────────────────────────────────────────────── */
 const priorityOptions: Array<{ value: RequestPriority; label: string }> = [
@@ -80,12 +80,12 @@ function Field({
 }) {
   return (
     <div className={cn("min-w-0 space-y-2.5", className)}>
-      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-[var(--lp-ink)]">
         {label}
-        {required && <span className="text-blue-500 dark:text-blue-300" aria-hidden="true">*</span>}
+        {required && <span className="text-[var(--lp-accent)]" aria-hidden="true">*</span>}
       </label>
       {children}
-      {helper && <p className="text-xs leading-relaxed text-slate-400 dark:text-slate-500">{helper}</p>}
+      {helper && <p className="text-xs leading-relaxed text-[var(--lp-faint)]">{helper}</p>}
     </div>
   );
 }
@@ -103,21 +103,15 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className={cn(
-      "min-w-0 border-t px-5 py-7 sm:px-7 lg:px-8",
-      "border-slate-200 dark:border-white/10",
-    )}>
+    <section className="min-w-0 border-t border-[var(--lp-line)] px-5 py-7 sm:px-7 lg:px-8">
       <div className="mb-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex gap-3">
-          <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
-            "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-          )}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
             <Icon className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-display text-xl font-semibold text-slate-900 dark:text-white">{title}</h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
+            <h3 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">{title}</h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--lp-ink-soft)]">{description}</p>
           </div>
         </div>
       </div>
@@ -132,45 +126,112 @@ function GuidancePanel({
   title,
   description,
   items,
-  accent = "blue",
+  accent = "copper",
 }: {
   icon: LucideIcon;
   title: string;
   description?: string;
   items: string[];
-  accent?: "blue" | "emerald";
+  accent?: "copper" | "emerald";
 }) {
   const accentClass =
     accent === "emerald"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300"
-      : "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300";
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300"
+      : "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]";
 
   return (
-    <aside className={cn(
-      "min-w-0 overflow-hidden rounded-3xl border shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl",
-      "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/70 dark:shadow-[0_24px_80px_rgba(0,0,0,0.18)]",
-    )}>
+    <aside className={cn("min-w-0 overflow-hidden rounded-3xl", cardSurface)}>
       <div className="relative p-5 sm:p-6">
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-blue-500/5 blur-3xl dark:bg-blue-500/10" />
+        <div
+          aria-hidden="true"
+          className="absolute right-0 top-0 h-24 w-24"
+          style={{ background: "radial-gradient(circle at 80% 10%, var(--lp-glow), transparent 70%)" }}
+        />
         <div className="relative flex min-w-0 items-start gap-3">
           <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border", accentClass)}>
             <Icon className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>
-            {description && <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>}
+            <h3 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">{title}</h3>
+            {description && <p className="mt-1 text-sm leading-6 text-[var(--lp-ink-soft)]">{description}</p>}
           </div>
         </div>
         <ul className="relative mt-5 space-y-3">
           {items.map((item) => (
-            <li key={item} className="flex min-w-0 gap-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-300" />
+            <li key={item} className="flex min-w-0 gap-3 text-sm leading-6 text-[var(--lp-ink-soft)]">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
               <span>{item}</span>
             </li>
           ))}
         </ul>
       </div>
     </aside>
+  );
+}
+
+/* ─── Page hero (shared across gated + main states) ──────────────────────────── */
+function PageHero({
+  icon: Icon,
+  title,
+  description,
+  badge,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  badge?: ReactNode;
+}) {
+  return (
+    <header className={cn("relative min-w-0 overflow-hidden rounded-3xl p-6 sm:p-8", cardSurface)}>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-40"
+        style={{
+          maskImage: "linear-gradient(to right, black, transparent 70%)",
+          WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(70% 90% at 14% 0%, var(--lp-glow), transparent 42%)" }}
+      />
+      <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 max-w-3xl">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+              <Icon className="h-5 w-5" />
+            </div>
+            <p className="lp-mono text-xs font-semibold uppercase tracking-[0.32em] text-[var(--lp-accent)]">
+              Create Request
+            </p>
+          </div>
+          <h1 className="lp-display text-3xl font-bold leading-tight text-[var(--lp-ink)] sm:text-4xl">
+            {title}
+          </h1>
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-[var(--lp-ink-soft)] sm:text-base">
+            {description}
+          </p>
+        </div>
+        {badge}
+      </div>
+    </header>
+  );
+}
+
+/* ─── Back to requests button ────────────────────────────────────────────────── */
+function BackToRequests() {
+  return (
+    <Button
+      asChild
+      variant="outline"
+      className="h-11 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+    >
+      <Link to="/app/requests">
+        <ArrowLeft className="h-4 w-4" />
+        Back to requests
+      </Link>
+    </Button>
   );
 }
 
@@ -229,54 +290,24 @@ const RequestNewPage = () => {
   if (approvalBlocked && session?.user && session.user.approvalStatus !== "approved") {
     return (
       <div className="mx-auto max-w-3xl min-w-0 space-y-6 overflow-x-hidden">
-        <header className={cn(
-          "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
-          "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
-        )}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%)]" />
-          <div className="relative min-w-0">
-            <div className="mb-5 flex items-center gap-3">
-              <div className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
-            </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white">
-              {session.user.approvalStatus === "pending_approval"
-                ? "Waiting for admin approval"
-                : session.user.approvalStatus === "rejected"
-                  ? "Account not approved"
-                  : "Account suspended"}
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Service request creation unlocks once an ElkaTech administrator activates
-              your account. We&apos;ll have you up and running shortly.
-            </p>
-          </div>
-        </header>
+        <PageHero
+          icon={ShieldCheck}
+          title={
+            session.user.approvalStatus === "pending_approval"
+              ? "Waiting for admin approval"
+              : session.user.approvalStatus === "rejected"
+                ? "Account not approved"
+                : "Account suspended"
+          }
+          description="Service request creation unlocks once an ElkaTech administrator activates your account. We'll have you up and running shortly."
+        />
 
         <ApprovalStateCard
           status={session.user.approvalStatus}
           showBackToRequests={false}
         />
 
-        <Button
-          asChild
-          variant="outline"
-          className={cn(
-            "h-11 w-fit rounded-full px-5",
-            "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-            "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-          )}
-        >
-          <Link to="/app/requests">
-            <ArrowLeft className="h-4 w-4" />
-            Back to requests
-          </Link>
-        </Button>
+        <BackToRequests />
       </div>
     );
   }
@@ -290,47 +321,15 @@ const RequestNewPage = () => {
   if (unverifiedUser) {
     return (
       <div className="mx-auto max-w-3xl min-w-0 space-y-6 overflow-x-hidden">
-        <header className={cn(
-          "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
-          "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
-        )}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%)]" />
-          <div className="relative min-w-0">
-            <div className="mb-5 flex items-center gap-3">
-              <div className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
-            </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white">
-              Verify your email first
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-              For your account&apos;s security, service requests can only be created once your
-              email address is verified. It takes less than a minute.
-            </p>
-          </div>
-        </header>
+        <PageHero
+          icon={ShieldCheck}
+          title="Verify your email first"
+          description="For your account's security, service requests can only be created once your email address is verified. It takes less than a minute."
+        />
 
         <VerifyEmailNotice email={unverifiedUser.email} />
 
-        <Button
-          asChild
-          variant="outline"
-          className={cn(
-            "h-11 w-fit rounded-full px-5",
-            "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-            "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-          )}
-        >
-          <Link to="/app/requests">
-            <ArrowLeft className="h-4 w-4" />
-            Back to requests
-          </Link>
-        </Button>
+        <BackToRequests />
       </div>
     );
   }
@@ -338,46 +337,21 @@ const RequestNewPage = () => {
   return (
     <div className="mx-auto max-w-7xl min-w-0 space-y-8 overflow-x-hidden">
       {/* ── Page header ──────────────────────────────────────────────────────── */}
-      <header className={cn(
-        "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
-        "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
-      )}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%),radial-gradient(circle_at_92%_20%,rgba(16,185,129,0.05),transparent_30%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%),radial-gradient(circle_at_92%_20%,rgba(16,185,129,0.12),transparent_30%)]" />
-        <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 max-w-3xl">
-            <div className="mb-5 flex items-center gap-3">
-              <div className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
-                <Wrench className="h-5 w-5" />
-              </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
-            </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white sm:text-4xl">
-              Request service support
-            </h1>
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400 sm:text-base">
-              Tell us what machine needs attention and what problem you are facing. Our team will use this information
-              to triage your request.
-            </p>
-          </div>
-          <div className={cn(
-            "w-fit max-w-full rounded-full border px-4 py-2 text-sm font-medium",
-            "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300",
-          )}>
+      <PageHero
+        icon={Wrench}
+        title="Request service support"
+        description="Tell us what machine needs attention and what problem you are facing. Our team will use this information to triage your request."
+        badge={
+          <div className="w-fit max-w-full rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-4 py-2 text-sm font-medium text-[var(--lp-ink-soft)]">
             Support team review
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(320px,1fr)]">
         {/* ── Form card ──────────────────────────────────────────────────────── */}
         <form
-          className={cn(
-            "min-w-0 overflow-hidden rounded-3xl border shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur-xl",
-            "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/85 dark:shadow-[0_24px_80px_rgba(0,0,0,0.25)]",
-          )}
+          className={cn("min-w-0 overflow-hidden rounded-3xl", cardSurface)}
           onSubmit={(event) => {
             event.preventDefault();
             mutation.mutate();
@@ -386,26 +360,19 @@ const RequestNewPage = () => {
           {/* Form header */}
           <div className="flex min-w-0 flex-col gap-4 px-5 py-6 sm:px-7 lg:flex-row lg:items-start lg:justify-between lg:px-8">
             <div className="min-w-0">
-              <div className={cn(
-                "mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
-                "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300",
-              )}>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
                 <ClipboardCheck className="h-3.5 w-3.5" />
                 Required details
               </div>
-              <h2 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">Service details</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+              <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Service details</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--lp-ink-soft)]">
                 Choose the affected product and describe the issue clearly.
               </p>
             </div>
             <Button
               asChild
               variant="outline"
-              className={cn(
-                "h-10 w-fit rounded-full px-4",
-                "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-              )}
+              className="h-10 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-4 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
             >
               <Link to="/app/requests">
                 <ArrowLeft className="h-4 w-4" />
@@ -416,15 +383,12 @@ const RequestNewPage = () => {
 
           {/* Error banner */}
           {mutation.isError && (
-            <div className={cn(
-              "mx-5 mb-2 rounded-2xl border p-4 text-sm sm:mx-7 lg:mx-8",
-              "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-100",
-            )}>
+            <div className="mx-5 mb-2 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-600 dark:text-rose-100 sm:mx-7 lg:mx-8">
               <div className="flex gap-3">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500 dark:text-rose-300" />
                 <div>
                   <p className="font-semibold">We couldn't create the request.</p>
-                  <p className="mt-1 text-rose-600/75 dark:text-rose-100/75">Please check the details and try again.</p>
+                  <p className="mt-1 opacity-75">Please check the details and try again.</p>
                 </div>
               </div>
             </div>
@@ -437,26 +401,19 @@ const RequestNewPage = () => {
             description="Select the product and provide any machine identifiers that can help us locate the issue faster."
           >
             {productsQuery.isError && (
-              <div className={cn(
-                "mb-5 rounded-2xl border p-4 text-sm",
-                "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-50",
-              )}>
+              <div className="mb-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-700 dark:text-amber-50">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex gap-3">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 dark:text-amber-200" />
                     <div>
                       <p className="font-semibold">Unable to load products</p>
-                      <p className="mt-1 text-amber-700/70 dark:text-amber-50/70">Try again before selecting the affected machine.</p>
+                      <p className="mt-1 opacity-70">Try again before selecting the affected machine.</p>
                     </div>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
-                    className={cn(
-                      "h-10 rounded-xl",
-                      "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200",
-                      "dark:border-amber-200/20 dark:bg-amber-200/10 dark:text-amber-50 dark:hover:bg-amber-200/15 dark:hover:text-white",
-                    )}
+                    className="h-10 rounded-xl border-amber-400/40 bg-amber-400/15 text-amber-700 hover:bg-amber-400/25 dark:text-amber-50"
                     onClick={() => productsQuery.refetch()}
                     disabled={productsQuery.isFetching}
                   >
@@ -497,24 +454,18 @@ const RequestNewPage = () => {
               </Field>
 
               {selectedProduct && (
-                <div className={cn(
-                  "min-w-0 rounded-2xl border p-4 md:col-span-2",
-                  "border-blue-200 bg-blue-50 dark:border-blue-400/15 dark:bg-blue-500/[0.08]",
-                )}>
+                <div className="min-w-0 rounded-2xl border border-[var(--lp-accent)]/25 bg-[var(--lp-accent)]/[0.07] p-4 md:col-span-2">
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex min-w-0 gap-3">
-                      <div className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
-                        "border-blue-200 bg-blue-100 text-blue-600 dark:border-blue-300/20 dark:bg-blue-300/10 dark:text-blue-200",
-                      )}>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/15 text-[var(--lp-accent)]">
                         <PackageCheck className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-200">
+                        <p className="lp-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
                           Selected product
                         </p>
-                        <p className="mt-1 break-words font-medium text-slate-900 dark:text-white">{selectedProduct.name}</p>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        <p className="mt-1 break-words font-medium text-[var(--lp-ink)]">{selectedProduct.name}</p>
+                        <p className="mt-1 text-xs text-[var(--lp-faint)]">
                           Category: {formatCategorySlug(selectedProduct.categorySlug)}
                         </p>
                       </div>
@@ -612,30 +563,23 @@ const RequestNewPage = () => {
           </FormSection>
 
           {/* Form footer / submit */}
-          <div className={cn(
-            "flex min-w-0 flex-col gap-4 border-t px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8",
-            "border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-[#07111f]/70",
-          )}>
-            <div className="flex items-start gap-3 text-sm text-slate-500 dark:text-slate-400">
-              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500 dark:text-emerald-300" />
+          <div className="flex min-w-0 flex-col gap-4 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8">
+            <div className="flex items-start gap-3 text-sm text-[var(--lp-ink-soft)]">
+              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--lp-accent)]" />
               <span>Your request will be saved to the service portal.</span>
             </div>
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
               <Button
                 asChild
                 variant="outline"
-                className={cn(
-                  "h-12 rounded-2xl px-5",
-                  "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                  "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-                )}
+                className="h-12 rounded-2xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
               >
                 <Link to="/app/requests">Cancel</Link>
               </Button>
               <Button
                 type="submit"
                 size="lg"
-                className="h-12 rounded-2xl bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700"
+                className="h-12 rounded-2xl bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] shadow-[0_10px_30px_-10px_var(--lp-accent)] transition-colors hover:bg-[var(--lp-accent-2)]"
                 disabled={mutation.isPending}
               >
                 {mutation.isPending ? (
@@ -689,12 +633,9 @@ const RequestNewPage = () => {
               "Return to the portal to track updates",
             ]}
           />
-          <div className={cn(
-            "rounded-3xl border p-5 text-sm leading-6",
-            "border-slate-200 bg-white text-slate-500 dark:border-white/10 dark:bg-[#07111f]/75 dark:text-slate-400",
-          )}>
-            <div className="mb-3 flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
-              <HelpCircle className="h-4 w-4 text-blue-500 dark:text-blue-300" />
+          <div className="rounded-3xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/55 p-5 text-sm leading-6 text-[var(--lp-ink-soft)] backdrop-blur-xl">
+            <div className="mb-3 flex items-center gap-2 font-medium text-[var(--lp-ink)]">
+              <HelpCircle className="h-4 w-4 text-[var(--lp-accent)]" />
               Request quality check
             </div>
             A concise subject, accurate product, and clear troubleshooting notes help the team understand the issue
