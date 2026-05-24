@@ -101,19 +101,34 @@ const LandingFinalCTA = () => {
           </Link>
         </motion.div>
 
-        <div className="mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border md:grid-cols-4"
-          style={{ borderColor: "rgba(241,239,233,0.12)", background: "rgba(241,239,233,0.06)" }}
-        >
+        <div className="mx-auto mt-12 grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {methods.map((m) => {
             const inner = (
               <>
-                <m.icon className="mx-auto h-5 w-5" style={{ color: COPPER }} />
-                <p className="lp-mono mt-2 text-[10px] uppercase tracking-[0.16em]" style={{ color: "rgba(241,239,233,0.5)" }}>
-                  {m.label}
-                </p>
-                <p className="mt-1 text-sm font-medium" style={{ color: "#f1efe9" }}>
-                  {m.value}
-                </p>
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+                  style={{
+                    borderColor: "rgba(210,130,63,0.32)",
+                    background: "rgba(210,130,63,0.12)",
+                    color: COPPER,
+                  }}
+                >
+                  <m.icon className="h-[18px] w-[18px]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    className="lp-mono block text-[10px] uppercase tracking-[0.18em]"
+                    style={{ color: "rgba(241,239,233,0.46)" }}
+                  >
+                    {m.label}
+                  </span>
+                  <span
+                    className="mt-1 block break-words text-[15px] font-semibold leading-snug"
+                    style={{ color: "#f1efe9" }}
+                  >
+                    {m.value}
+                  </span>
+                </span>
               </>
             );
             return m.href ? (
@@ -122,13 +137,23 @@ const LandingFinalCTA = () => {
                 href={m.href}
                 target={m.href.startsWith("http") ? "_blank" : undefined}
                 rel={m.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                className="px-4 py-6 transition-colors hover:bg-white/[0.04]"
-                style={{ background: "rgba(8,9,11,0.5)" }}
+                className="group flex min-h-[104px] items-center gap-3 rounded-2xl border p-4 text-left transition-[background-color,border-color,transform] hover:-translate-y-0.5"
+                style={{
+                  borderColor: "rgba(241,239,233,0.12)",
+                  background: "rgba(8,9,11,0.48)",
+                }}
               >
                 {inner}
               </a>
             ) : (
-              <div key={m.label} className="px-4 py-6" style={{ background: "rgba(8,9,11,0.5)" }}>
+              <div
+                key={m.label}
+                className="flex min-h-[104px] items-center gap-3 rounded-2xl border p-4 text-left"
+                style={{
+                  borderColor: "rgba(241,239,233,0.12)",
+                  background: "rgba(8,9,11,0.48)",
+                }}
+              >
                 {inner}
               </div>
             );
