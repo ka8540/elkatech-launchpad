@@ -65,11 +65,6 @@ const App = () => {
             >
               <Route index element={<Navigate to="requests" replace />} />
               <Route path="requests" element={<RequestsPage />} />
-              <Route path="requests/open" element={<RequestsPage filter="open" />} />
-              <Route path="requests/in-progress" element={<RequestsPage filter="in_progress" />} />
-              <Route path="requests/pending" element={<RequestsPage filter="pending" />} />
-              <Route path="requests/resolved" element={<RequestsPage filter="resolved" />} />
-              <Route path="requests/archived" element={<RequestsPage filter="archived" />} />
               <Route path="requests/new" element={<RequestNewPage />} />
               <Route path="requests/:requestId" element={<RequestDetailPage />} />
               <Route

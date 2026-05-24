@@ -12,11 +12,13 @@ import {
   requestStatusSchema,
   roleSchema,
   serviceRequestSchema,
+  updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
 } from "@elkatech/contracts";
 import { fetchJson, getDb, getEnv, internalHeaders } from "@elkatech/config";
 import {
   canClaimRequest,
+  canEditRequestDetails,
   canReplyToRequest,
   canUpdateRequestStatus,
   canViewRequest,
@@ -393,6 +395,80 @@ app.get("/requests/:requestId", async (request, reply) => {
   };
 });
 
+app.patch("/requests/:requestId", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const actor = getUserContext(request.headers);
+  const paramsSchema = z.object({ requestId: z.string().uuid() });
+  const params = paramsSchema.parse(request.params);
+  const input = updateServiceRequestInputSchema.parse(request.body);
+
+  const rows = await sql<any[]>`
+    select *
+    from service_desk.requests
+    where id = ${params.requestId}
+    limit 1
+  `;
+
+  const current = rows[0];
+  if (!current) {
+    return reply.code(404).send({ message: "Request not found." });
+  }
+
+  if (
+    !canEditRequestDetails(toWorkflowActor(actor), {
+      customerId: current.customer_id,
+      assignedEngineerId: current.assigned_engineer_id,
+      status: current.status,
+    })
+  ) {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  const nextDetails = {
+    subject: input.subject ?? current.subject,
+    description: input.description ?? current.description,
+    contactPhone: input.contactPhone ?? current.contact_phone,
+    siteLocation: input.siteLocation ?? current.site_location,
+    serialNumber:
+      input.serialNumber === undefined
+        ? current.serial_number
+        : input.serialNumber?.trim() || null,
+  };
+
+  const changedFields = [
+    current.subject !== nextDetails.subject ? "subject" : null,
+    current.description !== nextDetails.description ? "description" : null,
+    current.contact_phone !== nextDetails.contactPhone ? "contactPhone" : null,
+    current.site_location !== nextDetails.siteLocation ? "siteLocation" : null,
+    (current.serial_number ?? null) !== (nextDetails.serialNumber ?? null) ? "serialNumber" : null,
+  ].filter((field): field is string => Boolean(field));
+
+  if (changedFields.length === 0) {
+    return mapRequestRow(current);
+  }
+
+  const updatedRows = await sql<any[]>`
+    update service_desk.requests
+    set subject = ${nextDetails.subject},
+        description = ${nextDetails.description},
+        contact_phone = ${nextDetails.contactPhone},
+        site_location = ${nextDetails.siteLocation},
+        serial_number = ${nextDetails.serialNumber},
+        updated_at = now()
+    where id = ${params.requestId}
+    returning *
+  `;
+
+  await addHistory(params.requestId, actor, "request_updated", {
+    fields: changedFields,
+  });
+
+  return mapRequestRow(updatedRows[0]);
+});
+
 app.post("/requests/:requestId/messages", async (request, reply) => {
   if (!ensureInternal(request.headers)) {
     return reply.code(401).send({ message: "Unauthorized" });
@@ -726,8 +802,10 @@ app.post("/requests/:requestId/cancel", async (request, reply) => {
       return reply.code(403).send({ message: "Forbidden" });
     }
 
-    if (current.status === "resolved") {
-      return reply.code(400).send({ message: "Resolved requests cannot be cancelled by customers." });
+    if (!["new", "triaged", "waiting_for_customer"].includes(current.status)) {
+      return reply.code(400).send({
+        message: "Only open or pending requests can be cancelled by customers.",
+      });
     }
   } else if (
     !canUpdateRequestStatus(toWorkflowActor(actor), {

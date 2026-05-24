@@ -11,9 +11,11 @@ import type {
 import {
   Archive,
   ArrowLeft,
+  AlertTriangle,
   CheckCircle2,
   ClipboardList,
   Clock3,
+  PencilLine,
   History,
   Loader2,
   MessageSquare,
@@ -24,7 +26,7 @@ import {
   UserCheck,
   Wrench,
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
@@ -35,6 +37,25 @@ import {
 } from "@/lib/request-status";
 import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -60,6 +81,19 @@ type RequestDetailResponse = {
   messages: RequestMessage[];
   history: RequestHistoryEntry[];
 };
+
+type EditRequestForm = {
+  subject: string;
+  description: string;
+  contactPhone: string;
+  siteLocation: string;
+  serialNumber: string;
+};
+
+type ConfirmAction =
+  | { type: "archive-status"; nextStatus: RequestStatus }
+  | { type: "cancel-request" }
+  | null;
 
 const cardSurface = "lp-card border";
 const fieldClassName =
@@ -126,6 +160,67 @@ function DetailItem({
   );
 }
 
+function canEditRequestDetails({
+  request,
+  user,
+}: {
+  request: ServiceRequest;
+  user?: AuthUser | null;
+}) {
+  if (!user || request.status === "closed") return false;
+  if (user.role === "admin") return true;
+  if (user.role === "engineer") return request.assignedEngineerId === user.id;
+  return (
+    request.customerId === user.id &&
+    ["new", "triaged", "waiting_for_customer"].includes(request.status)
+  );
+}
+
+function MessageBubble({
+  message,
+  isStaff,
+}: {
+  message: RequestMessage;
+  isStaff: boolean;
+}) {
+  const isCustomerMessage = message.authorRole === "customer";
+  const isInternal = message.visibility === "internal_note";
+
+  return (
+    <div className={cn("flex", isCustomerMessage ? "justify-start" : "justify-end")}>
+      <article
+        className={cn(
+          "max-w-[88%] rounded-2xl border px-4 py-3 shadow-[0_18px_38px_-32px_rgba(0,0,0,0.75)] sm:max-w-[76%]",
+          isCustomerMessage
+            ? "rounded-bl-md border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70"
+            : "rounded-br-md border-[var(--lp-accent)]/28 bg-[var(--lp-accent)]/[0.10]",
+          isInternal && "border-amber-400/30 bg-amber-400/[0.08]",
+        )}
+      >
+        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.16em]">
+          <span
+            className={cn(
+              "lp-mono font-semibold",
+              isCustomerMessage ? "text-[var(--lp-faint)]" : "text-[var(--lp-accent)]",
+            )}
+          >
+            {isCustomerMessage ? "Customer" : "Service team"}
+          </span>
+          {isStaff && isInternal && (
+            <span className="rounded-full border border-amber-400/30 px-2 py-0.5 text-amber-600 dark:text-amber-300">
+              Internal note
+            </span>
+          )}
+          <span className="text-[var(--lp-faint)]">{fmtDateTime(message.createdAt)}</span>
+        </div>
+        <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--lp-ink)]">
+          {message.body}
+        </p>
+      </article>
+    </div>
+  );
+}
+
 function getAllowedStatuses({
   request,
   user,
@@ -147,6 +242,7 @@ function getAllowedStatuses({
 
 const RequestDetailPage = () => {
   const { requestId = "" } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: session } = useSession();
   const [messageBody, setMessageBody] = useState("");
@@ -155,6 +251,15 @@ const RequestDetailPage = () => {
   const [statusVisibility, setStatusVisibility] =
     useState<MessageVisibility>("customer_visible");
   const [engineerId, setEngineerId] = useState("");
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [editForm, setEditForm] = useState<EditRequestForm>({
+    subject: "",
+    description: "",
+    contactPhone: "",
+    siteLocation: "",
+    serialNumber: "",
+  });
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["request", requestId],
@@ -230,6 +335,26 @@ const RequestDetailPage = () => {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const editMutation = useMutation({
+    mutationFn: () =>
+      apiRequest<ServiceRequest>(`/api/requests/${requestId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          subject: editForm.subject,
+          description: editForm.description,
+          contactPhone: editForm.contactPhone,
+          siteLocation: editForm.siteLocation,
+          serialNumber: editForm.serialNumber.trim() || null,
+        }),
+      }),
+    onSuccess: async () => {
+      setIsEditOpen(false);
+      toast.success("Request details updated.");
+      await refresh();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const assignMutation = useMutation({
     mutationFn: () =>
       apiRequest(`/api/requests/${requestId}/assign`, {
@@ -253,6 +378,7 @@ const RequestDetailPage = () => {
     onSuccess: async () => {
       toast.success("Request cancelled and archived.");
       await refresh();
+      navigate("/app/requests?status=archived");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -293,15 +419,24 @@ const RequestDetailPage = () => {
   const canCustomerCancel =
     user?.role === "customer" &&
     request.customerId === user.id &&
-    request.status !== "resolved" &&
-    request.status !== "closed";
+    ["new", "triaged", "waiting_for_customer"].includes(request.status);
+  const canEditRequest = canEditRequestDetails({ request, user });
+
+  const openEditDialog = () => {
+    setEditForm({
+      subject: request.subject,
+      description: request.description,
+      contactPhone: request.contactPhone,
+      siteLocation: request.siteLocation,
+      serialNumber: request.serialNumber ?? "",
+    });
+    setIsEditOpen(true);
+  };
 
   const submitStatus = (nextStatus: RequestStatus) => {
     if (nextStatus === "closed") {
-      const confirmed = window.confirm(
-        "Archive this service request? It will leave active request lists but remain in history.",
-      );
-      if (!confirmed) return;
+      setConfirmAction({ type: "archive-status", nextStatus });
+      return;
     }
 
     statusMutation.mutate({
@@ -309,6 +444,21 @@ const RequestDetailPage = () => {
       note: statusNote.trim(),
       noteVisibility: statusVisibility,
     });
+  };
+
+  const confirmDestructiveAction = () => {
+    if (!confirmAction) return;
+
+    if (confirmAction.type === "archive-status") {
+      statusMutation.mutate({
+        nextStatus: confirmAction.nextStatus,
+        note: statusNote.trim(),
+        noteVisibility: statusVisibility,
+      });
+    } else {
+      cancelMutation.mutate();
+    }
+    setConfirmAction(null);
   };
 
   return (
@@ -323,6 +473,123 @@ const RequestDetailPage = () => {
           Back to requests
         </Link>
       </Button>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="lp-card border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)] sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="lp-display text-2xl text-[var(--lp-ink)]">
+              Edit request
+            </DialogTitle>
+            <DialogDescription className="text-sm leading-6 text-[var(--lp-ink-soft)]">
+              Update safe service request details. Request number, product, history, and conversation stay unchanged.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              editMutation.mutate();
+            }}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="sm:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                  Subject
+                </span>
+                <Input
+                  required
+                  minLength={4}
+                  value={editForm.subject}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, subject: event.target.value }))
+                  }
+                  className={cn(fieldClassName, "h-11")}
+                />
+              </label>
+
+              <label>
+                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                  Contact phone
+                </span>
+                <Input
+                  required
+                  minLength={7}
+                  value={editForm.contactPhone}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, contactPhone: event.target.value }))
+                  }
+                  className={cn(fieldClassName, "h-11")}
+                />
+              </label>
+
+              <label>
+                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                  Serial number
+                </span>
+                <Input
+                  value={editForm.serialNumber}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, serialNumber: event.target.value }))
+                  }
+                  className={cn(fieldClassName, "h-11")}
+                />
+              </label>
+
+              <label className="sm:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                  Site location
+                </span>
+                <Input
+                  required
+                  minLength={2}
+                  value={editForm.siteLocation}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, siteLocation: event.target.value }))
+                  }
+                  className={cn(fieldClassName, "h-11")}
+                />
+              </label>
+
+              <label className="sm:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-[var(--lp-ink)]">
+                  Description
+                </span>
+                <Textarea
+                  required
+                  minLength={10}
+                  rows={5}
+                  value={editForm.description}
+                  onChange={(event) =>
+                    setEditForm((current) => ({ ...current, description: event.target.value }))
+                  }
+                  className={cn(fieldClassName, "min-h-[132px] resize-y")}
+                />
+              </label>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+                onClick={() => setIsEditOpen(false)}
+                disabled={editMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="rounded-xl bg-[var(--lp-accent)] font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+                disabled={editMutation.isPending}
+              >
+                {editMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PencilLine className="h-4 w-4" />}
+                {editMutation.isPending ? "Saving..." : "Save changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)]">
         <div className="space-y-6">
@@ -376,23 +643,7 @@ const RequestDetailPage = () => {
                 </div>
               ) : (
                 data.messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/55 p-4"
-                  >
-                    <div className="mb-2 flex flex-col gap-1 text-xs uppercase tracking-[0.16em] text-[var(--lp-faint)] sm:flex-row sm:items-center sm:justify-between">
-                      <span className="lp-mono">{message.authorRole.replaceAll("_", " ")}</span>
-                      <span>{fmtDateTime(message.createdAt)}</span>
-                    </div>
-                    <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--lp-ink)]">
-                      {message.body}
-                    </p>
-                    {isStaff && (
-                      <p className="mt-3 text-xs text-[var(--lp-faint)]">
-                        Visibility: {message.visibility.replaceAll("_", " ")}
-                      </p>
-                    )}
-                  </div>
+                  <MessageBubble key={message.id} message={message} isStaff={isStaff} />
                 ))
               )}
             </div>
@@ -456,7 +707,20 @@ const RequestDetailPage = () => {
 
         <aside className="space-y-6">
           <section className={cn("rounded-3xl p-6", cardSurface)}>
-            <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Request details</h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Request details</h2>
+              {canEditRequest && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-3 text-xs font-semibold text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+                  onClick={openEditDialog}
+                >
+                  <PencilLine className="h-3.5 w-3.5" />
+                  Edit
+                </Button>
+              )}
+            </div>
             <div className="mt-5 grid gap-3">
               <DetailItem label="Current status" value={getRequestStatusLabel(request.status)} />
               <DetailItem label="Priority" value={request.priority} />
@@ -532,7 +796,7 @@ const RequestDetailPage = () => {
                             className={cn(
                               "h-auto justify-start rounded-xl border px-4 py-3 text-left font-semibold",
                               isArchive
-                                ? "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)] hover:border-rose-400/40 hover:bg-rose-500/10 hover:text-rose-300"
+                                ? "border-amber-400/30 bg-amber-400/10 text-amber-600 hover:border-amber-400/45 hover:bg-amber-400/15 dark:text-amber-300"
                                 : "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)] hover:border-[var(--lp-accent)]/55 hover:bg-[var(--lp-accent)]/15",
                             )}
                             onClick={() => submitStatus(nextStatus)}
@@ -603,13 +867,8 @@ const RequestDetailPage = () => {
               <Button
                 type="button"
                 variant="outline"
-                className="mt-4 h-11 w-full rounded-xl border-rose-400/30 bg-rose-500/10 text-rose-500 hover:border-rose-400/45 hover:bg-rose-500/15 dark:text-rose-300"
-                onClick={() => {
-                  const confirmed = window.confirm(
-                    "Cancel this service request? It will be archived but kept for history.",
-                  );
-                  if (confirmed) cancelMutation.mutate();
-                }}
+                className="mt-4 h-11 w-full rounded-xl border-amber-400/30 bg-amber-400/10 text-amber-600 hover:border-amber-400/45 hover:bg-amber-400/15 dark:text-amber-300"
+                onClick={() => setConfirmAction({ type: "cancel-request" })}
                 disabled={cancelMutation.isPending}
               >
                 {cancelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
@@ -659,6 +918,40 @@ const RequestDetailPage = () => {
           </section>
         </aside>
       </div>
+
+      <AlertDialog
+        open={Boolean(confirmAction)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmAction(null);
+        }}
+      >
+        <AlertDialogContent className="lp-card border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)]">
+          <AlertDialogHeader>
+            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <AlertDialogTitle className="lp-display text-2xl text-[var(--lp-ink)]">
+              {confirmAction?.type === "cancel-request" ? "Cancel request?" : "Archive request?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-6 text-[var(--lp-ink-soft)]">
+              {confirmAction?.type === "cancel-request"
+                ? "This will cancel the service request and move it out of the active dashboard. The request history and conversation will be kept."
+                : "This will archive the service request and remove it from active request lists. The full history and conversation will be kept for audit."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]">
+              Keep request
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-xl bg-[var(--lp-accent)] font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+              onClick={confirmDestructiveAction}
+            >
+              {confirmAction?.type === "cancel-request" ? "Cancel request" : "Archive request"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

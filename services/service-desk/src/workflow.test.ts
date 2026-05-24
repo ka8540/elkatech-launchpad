@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canClaimRequest,
+  canEditRequestDetails,
   canReplyToRequest,
   canUpdateRequestStatus,
   canViewRequest,
@@ -78,6 +79,31 @@ describe("service desk workflow permissions", () => {
 
     expect(canUpdateRequestStatus(engineer, archivedRequest)).toBe(false);
     expect(canUpdateRequestStatus(admin, archivedRequest)).toBe(true);
+  });
+
+  it("allows detail edits only for safe owners and staff", () => {
+    const openCustomerRequest = {
+      customerId: "customer-1",
+      assignedEngineerId: null,
+      status: "new" as const,
+    };
+    const inProgressRequest = {
+      customerId: "customer-1",
+      assignedEngineerId: "engineer-1",
+      status: "in_progress" as const,
+    };
+    const archivedRequest = {
+      customerId: "customer-1",
+      assignedEngineerId: "engineer-1",
+      status: "closed" as const,
+    };
+
+    expect(canEditRequestDetails(customer, openCustomerRequest)).toBe(true);
+    expect(canEditRequestDetails(customer, inProgressRequest)).toBe(false);
+    expect(canEditRequestDetails(engineer, inProgressRequest)).toBe(true);
+    expect(canEditRequestDetails(otherEngineer, inProgressRequest)).toBe(false);
+    expect(canEditRequestDetails(admin, inProgressRequest)).toBe(true);
+    expect(canEditRequestDetails(admin, archivedRequest)).toBe(false);
   });
 });
 

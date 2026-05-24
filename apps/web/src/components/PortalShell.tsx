@@ -1,12 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  Archive,
   Check,
-  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Clock3,
   Gauge,
   Inbox,
   LogOut,
@@ -15,7 +12,7 @@ import {
   Sun,
   SunMoon,
   Users,
-  Wrench,
+  PlusCircle,
   X,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -32,6 +29,7 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   exact?: boolean;
+  activeWhen?: (pathname: string) => boolean;
 };
 
 /* ── Real ElkaTech SVG logo mark (copper accent, matches premium brand) ──── */
@@ -222,7 +220,9 @@ function SidebarNavItem({
   onClick?: () => void;
 }) {
   const location = useLocation();
-  const isActive = item.exact
+  const isActive = item.activeWhen
+    ? item.activeWhen(location.pathname)
+    : item.exact
     ? location.pathname === item.to
     : location.pathname.startsWith(item.to);
   const Icon = item.icon;
@@ -318,24 +318,25 @@ const PortalShell = () => {
   const user = data?.user;
   const isStaff = user?.role === "engineer" || user?.role === "admin";
 
-  const requestNavItems: NavItem[] = isStaff
-    ? [
-        { to: "/app/requests", icon: ClipboardList, label: "All Requests", exact: true },
-        { to: "/app/requests/open", icon: Inbox, label: "Open", exact: true },
-        { to: "/app/requests/in-progress", icon: Wrench, label: "In Progress", exact: true },
-        { to: "/app/requests/pending", icon: Clock3, label: "Pending", exact: true },
-        { to: "/app/requests/resolved", icon: CheckCircle2, label: "Resolved", exact: true },
-        { to: "/app/requests/archived", icon: Archive, label: "Archived", exact: true },
-      ]
-    : [
-        { to: "/app/requests", icon: ClipboardList, label: "My Requests", exact: true },
-        { to: "/app/requests/open", icon: Inbox, label: "Open", exact: true },
-        { to: "/app/requests/in-progress", icon: Wrench, label: "In Progress", exact: true },
-        { to: "/app/requests/resolved", icon: CheckCircle2, label: "Resolved", exact: true },
-      ];
+  const requestsItem: NavItem = {
+    to: "/app/requests",
+    icon: ClipboardList,
+    label: "Requests",
+    activeWhen: (pathname) =>
+      pathname === "/app/requests" ||
+      (pathname.startsWith("/app/requests/") && pathname !== "/app/requests/new"),
+  };
+
+  const createRequestItem: NavItem = {
+    to: "/app/requests/new",
+    icon: PlusCircle,
+    label: "Create Request",
+    exact: true,
+  };
 
   const navItems: NavItem[] = [
-    ...requestNavItems,
+    requestsItem,
+    createRequestItem,
     ...(isStaff
       ? [{ to: "/app/queue", icon: Inbox, label: "Queue" }]
       : []),

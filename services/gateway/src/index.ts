@@ -15,6 +15,7 @@ import {
   resetPasswordInputSchema,
   roleSchema,
   signUpInputSchema,
+  updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
   verifyEmailInputSchema,
 } from "@elkatech/contracts";
@@ -509,6 +510,20 @@ app.get("/api/requests/:requestId", async (request, reply) => {
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
     headers: userHeaders(session.user),
+  });
+});
+
+app.patch("/api/requests/:requestId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+
+  const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
+  const input = updateServiceRequestInputSchema.parse(request.body);
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
+    method: "PATCH",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input),
   });
 });
 

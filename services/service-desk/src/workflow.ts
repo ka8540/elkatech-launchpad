@@ -81,6 +81,25 @@ export function canUpdateRequestStatus(actor: WorkflowActor, request: WorkflowRe
   return request.assignedEngineerId === actor.id;
 }
 
+export function canEditRequestDetails(actor: WorkflowActor, request: WorkflowRequest) {
+  if (request.status === "closed") {
+    return false;
+  }
+
+  if (actor.role === "admin") {
+    return true;
+  }
+
+  if (actor.role === "engineer") {
+    return request.assignedEngineerId === actor.id;
+  }
+
+  return (
+    request.customerId === actor.id &&
+    ["new", "triaged", "waiting_for_customer"].includes(request.status)
+  );
+}
+
 export function isValidStatusTransition(current: RequestStatus, next: RequestStatus) {
   if (current === next) {
     return true;

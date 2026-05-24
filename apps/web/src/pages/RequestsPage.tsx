@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { RequestStatusGroup, ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
@@ -7,7 +9,6 @@ import {
   getRequestStatusGroup,
   getRequestStatusLabel,
   REQUEST_STATUS_BADGE_CLASSES,
-  REQUEST_STATUS_GROUPS,
 } from "@/lib/request-status";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 import {
   AlertCircle,
   ArrowRight,
+  Archive,
   CheckCircle2,
   ClipboardList,
   ExternalLink,
@@ -24,8 +26,66 @@ import {
   Package2,
   Plus,
   RefreshCw,
+  Search,
   Wrench,
 } from "lucide-react";
+
+type DashboardFilter = Extract<
+  RequestStatusGroup,
+  "all" | "open" | "in_progress" | "resolved" | "archived"
+>;
+
+const dashboardFilters: Array<{
+  value: DashboardFilter;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "all",
+    label: "All",
+    description: "Active service requests across open, in-progress, pending, and resolved states.",
+  },
+  {
+    value: "open",
+    label: "Open",
+    description: "New and triaged service requests waiting for the next action.",
+  },
+  {
+    value: "in_progress",
+    label: "In Progress",
+    description: "Assigned, active, or waiting service requests being handled by the team.",
+  },
+  {
+    value: "resolved",
+    label: "Resolved",
+    description: "Finished service requests that remain visible in the active dashboard.",
+  },
+  {
+    value: "archived",
+    label: "Archived",
+    description: "Cancelled or archived service requests kept for history.",
+  },
+];
+
+function normalizeDashboardFilter(value: string | null): DashboardFilter {
+  return dashboardFilters.some((filter) => filter.value === value)
+    ? (value as DashboardFilter)
+    : "all";
+}
+
+function matchesDashboardFilter(request: ServiceRequest, filter: DashboardFilter) {
+  if (filter === "all") return request.status !== "closed";
+  if (filter === "archived") return request.status === "closed";
+  if (filter === "resolved") return request.status === "resolved";
+  if (filter === "open") {
+    return request.status === "new" || request.status === "triaged";
+  }
+  return (
+    request.status === "assigned" ||
+    request.status === "in_progress" ||
+    request.status === "waiting_for_customer"
+  );
+}
 
 /* ─── helper: format date ──────────────────────────────────────────────────── */
 function fmtDate(iso: string) {
@@ -65,11 +125,15 @@ function StatCard({
   count,
   icon: Icon,
   accent,
+  active = false,
+  onClick,
 }: {
   label: string;
   count: number;
   icon: React.ComponentType<{ className?: string }>;
   accent: "copper" | "emerald" | "amber" | "steel";
+  active?: boolean;
+  onClick?: () => void;
 }) {
   const badgeMap = {
     copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
@@ -79,11 +143,16 @@ function StatCard({
   };
 
   return (
-    <div className={cn(
-      "group relative overflow-hidden rounded-2xl p-5 transition-colors duration-150",
-      cardSurface,
-      "hover:border-[var(--lp-line-strong)]",
-    )}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "group relative w-full overflow-hidden rounded-2xl p-5 text-left transition-colors duration-150",
+        cardSurface,
+        "hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
+        active && "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/[0.08]",
+      )}
+    >
       <div className="relative flex items-start justify-between gap-3">
         <div>
           <p className="lp-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
@@ -102,7 +171,7 @@ function StatCard({
           <Icon className="h-5 w-5" />
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -254,7 +323,7 @@ function RequestCard({ request }: { request: ServiceRequest }) {
             {fmtDate((request as unknown as Record<string, string>)["updatedAt"] ?? (request as unknown as Record<string, string>)["createdAt"] ?? "")}
           </p>
           <span className="flex items-center gap-1 text-xs font-medium text-[var(--lp-faint)] transition-colors group-hover:text-[var(--lp-accent)]">
-            View details
+            View conversation
             <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </span>
         </div>
@@ -285,16 +354,27 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 /* ─── Page ─────────────────────────────────────────────────────────────────── */
-const RequestsPage = ({ filter = "all" }: { filter?: RequestStatusGroup }) => {
+const RequestsPage = () => {
   const { data: session } = useSession();
-  const filterMeta = REQUEST_STATUS_GROUPS[filter];
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["requests", filter],
-    queryFn: () => apiRequest<ServiceRequest[]>(`/api/requests?statusGroup=${filter}`),
-  });
-  const { data: summaryData } = useQuery({
-    queryKey: ["requests", "summary", "all"],
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState("");
+  const activeFilter = normalizeDashboardFilter(searchParams.get("status"));
+  const filterMeta =
+    dashboardFilters.find((filter) => filter.value === activeFilter) ??
+    dashboardFilters[0];
+
+  const { data: activeData, isLoading, isError, refetch } = useQuery({
+    queryKey: ["requests", "active"],
     queryFn: () => apiRequest<ServiceRequest[]>("/api/requests?statusGroup=all"),
+  });
+  const {
+    data: archivedData,
+    isLoading: isArchivedLoading,
+    isError: isArchivedError,
+    refetch: refetchArchived,
+  } = useQuery({
+    queryKey: ["requests", "archived"],
+    queryFn: () => apiRequest<ServiceRequest[]>("/api/requests?statusGroup=archived"),
   });
 
   const isCustomer = session?.user?.role === "customer";
@@ -307,8 +387,29 @@ const RequestsPage = ({ filter = "all" }: { filter?: RequestStatusGroup }) => {
       : null;
 
   /* ── Derive stats ─── */
-  const requests = data ?? [];
-  const summaryRequests = summaryData ?? requests;
+  const activeRequests = activeData ?? [];
+  const sourceRequests = activeFilter === "archived" ? archivedData ?? [] : activeRequests;
+  const requests = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    return sourceRequests.filter((request) => {
+      const matchesFilter = matchesDashboardFilter(request, activeFilter);
+      if (!matchesFilter) return false;
+      if (!normalizedSearch) return true;
+
+      return [
+        request.requestNumber,
+        request.subject,
+        request.description,
+        request.productSnapshot?.name,
+        request.siteLocation,
+        request.contactPhone,
+        request.serialNumber ?? "",
+      ]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+    });
+  }, [activeFilter, searchQuery, sourceRequests]);
+  const summaryRequests = activeRequests;
   const totalCount = summaryRequests.length;
 
   const openCount = summaryRequests.filter((r) => getRequestStatusGroup(r.status) === "open").length;
@@ -316,8 +417,21 @@ const RequestsPage = ({ filter = "all" }: { filter?: RequestStatusGroup }) => {
     getRequestStatusGroup(r.status) === "in_progress" || getRequestStatusGroup(r.status) === "pending"
   ).length;
   const resolvedCount = summaryRequests.filter((r) => getRequestStatusGroup(r.status) === "resolved").length;
+  const archivedCount = archivedData?.length ?? 0;
 
-  if (isLoading) return <LoadingSkeleton />;
+  const setFilter = (nextFilter: DashboardFilter) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextFilter === "all") {
+      nextParams.delete("status");
+    } else {
+      nextParams.set("status", nextFilter);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  if (isLoading || (activeFilter === "archived" && isArchivedLoading)) {
+    return <LoadingSkeleton />;
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -342,11 +456,11 @@ const RequestsPage = ({ filter = "all" }: { filter?: RequestStatusGroup }) => {
               </p>
             </div>
             <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">
-              {filter === "all"
+              {activeFilter === "all"
                 ? isCustomer
-                  ? "Your Service Requests"
-                  : "All Active Requests"
-                : filterMeta.title}
+                  ? "Your Requests Dashboard"
+                  : "Requests Dashboard"
+                : `${filterMeta.label} Requests`}
             </h1>
             <p className="mt-2.5 max-w-xl text-sm leading-7 text-[var(--lp-ink-soft)]">
               {filterMeta.description}
@@ -387,36 +501,132 @@ const RequestsPage = ({ filter = "all" }: { filter?: RequestStatusGroup }) => {
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total Requests" count={totalCount} icon={ClipboardList} accent="copper" />
-        <StatCard label="Open" count={openCount} icon={Inbox} accent="amber" />
-        <StatCard label="In Progress" count={inProgressCount} icon={Wrench} accent="steel" />
-        <StatCard label="Resolved" count={resolvedCount} icon={CheckCircle2} accent="emerald" />
+        <StatCard
+          label="Total Requests"
+          count={totalCount}
+          icon={ClipboardList}
+          accent="copper"
+          active={activeFilter === "all"}
+          onClick={() => setFilter("all")}
+        />
+        <StatCard
+          label="Open"
+          count={openCount}
+          icon={Inbox}
+          accent="amber"
+          active={activeFilter === "open"}
+          onClick={() => setFilter("open")}
+        />
+        <StatCard
+          label="In Progress"
+          count={inProgressCount}
+          icon={Wrench}
+          accent="steel"
+          active={activeFilter === "in_progress"}
+          onClick={() => setFilter("in_progress")}
+        />
+        <StatCard
+          label="Resolved"
+          count={resolvedCount}
+          icon={CheckCircle2}
+          accent="emerald"
+          active={activeFilter === "resolved"}
+          onClick={() => setFilter("resolved")}
+        />
       </div>
 
+      <section className={cn("rounded-3xl p-4 sm:p-5", cardSurface)}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {dashboardFilters.map((filterOption) => {
+              const active = activeFilter === filterOption.value;
+              const Icon =
+                filterOption.value === "archived"
+                  ? Archive
+                  : filterOption.value === "resolved"
+                    ? CheckCircle2
+                    : filterOption.value === "in_progress"
+                      ? Wrench
+                      : filterOption.value === "open"
+                        ? Inbox
+                        : ClipboardList;
+              const count =
+                filterOption.value === "all"
+                  ? totalCount
+                  : filterOption.value === "open"
+                    ? openCount
+                    : filterOption.value === "in_progress"
+                      ? inProgressCount
+                      : filterOption.value === "resolved"
+                        ? resolvedCount
+                        : archivedCount;
+
+              return (
+                <button
+                  key={filterOption.value}
+                  type="button"
+                  onClick={() => setFilter(filterOption.value)}
+                  className={cn(
+                    "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
+                    active
+                      ? "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
+                      : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:text-[var(--lp-ink)]",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{filterOption.label}</span>
+                  <span className="lp-mono text-[10px] text-[var(--lp-faint)]">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <label className="relative block min-w-0 lg:w-80">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)]" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search requests"
+              className="lp-field h-10 w-full rounded-full border px-10 text-sm shadow-none ring-offset-0 focus-visible:ring-0"
+            />
+          </label>
+        </div>
+      </section>
+
       {/* ── Error state ───────────────────────────────────────────────────── */}
-      {isError && <ErrorState onRetry={() => refetch()} />}
+      {(isError || (activeFilter === "archived" && isArchivedError)) && (
+        <ErrorState
+          onRetry={() => {
+            void refetch();
+            if (activeFilter === "archived") void refetchArchived();
+          }}
+        />
+      )}
 
       {/* ── Empty or list ─────────────────────────────────────────────────── */}
-      {!isError && (
+      {!isError && !(activeFilter === "archived" && isArchivedError) && (
         <>
           {requests.length === 0 ? (
             <EmptyState
               title={
-                filter === "all"
+                activeFilter === "all" && !searchQuery.trim()
                   ? "No service requests yet"
-                  : `No ${filterMeta.shortLabel.toLowerCase()} service requests`
+                  : `No ${filterMeta.label.toLowerCase()} service requests found`
               }
               description={
-                filter === "all"
+                activeFilter === "all" && !searchQuery.trim()
                   ? undefined
-                  : `There are no ${filterMeta.shortLabel.toLowerCase()} service requests in this view.`
+                  : "Try another status filter or search term."
               }
             />
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="lp-mono text-xs font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
-                  {requests.length} request{requests.length !== 1 ? "s" : ""}
+                  {requests.length} request{requests.length !== 1 ? "s" : ""} shown
                 </p>
               </div>
               {requests.map((request) => (
