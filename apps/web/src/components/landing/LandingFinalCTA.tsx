@@ -10,6 +10,9 @@ const COPPER = "#d2823f";
 const whatsappHref = `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(
   "Hi ElkaTech, I am interested in your machinery. Please share details.",
 )}`;
+const mapsHref =
+  "https://www.google.com/maps/place/Vandematram+Prime/@23.0950303,72.5426099,17z/" +
+  "data=!3m1!4b1!4m6!3m5!1s0x395e8357a8867d7d:0xb01ec0965d7ac3f!8m2!3d23.0950254!4d72.5451848!16s%2Fg%2F11qmnc9hkd?entry=ttu&g_ep=EgoyMDI2MDUyMC4wIKXMDSoASAFQAw%3D%3D";
 
 const LandingFinalCTA = () => {
   const reduce = useReducedMotion();
@@ -18,7 +21,7 @@ const LandingFinalCTA = () => {
     { icon: Phone, label: "Call us", value: CONTACT.phoneDisplay, href: `tel:${CONTACT.phoneTel}` },
     { icon: MessageCircle, label: "WhatsApp", value: "Chat with our team", href: whatsappHref },
     { icon: Mail, label: "Email", value: CONTACT.email, href: `mailto:${CONTACT.email}` },
-    { icon: MapPin, label: "Visit", value: CONTACT.location, href: undefined },
+    { icon: MapPin, label: "Visit", value: CONTACT.location, href: mapsHref },
   ];
 
   return (
