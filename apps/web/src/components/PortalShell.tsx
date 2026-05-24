@@ -519,20 +519,17 @@ const PortalShell = () => {
             <SidebarContent />
           </div>
 
-          {/* ── Floating collapse / expand control. In the collapsed rail,
-                 move it to the header seam so it does not crowd the logo. */}
+          {/* ── Floating collapse / expand control, centered beside the logo. */}
           <button
             type="button"
             onClick={() => setCollapsed(!collapsed)}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-expanded={!collapsed}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
-              "absolute right-0 z-30 flex h-8 w-8 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full",
+              "absolute right-0 top-[44px] z-30 flex h-8 w-8 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full",
               "border border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/95 text-[var(--lp-ink-soft)] shadow-[0_6px_22px_rgba(0,0,0,0.28)] backdrop-blur-xl transition-all duration-150",
               "hover:border-[var(--lp-accent)] hover:text-[var(--lp-accent)]",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45 focus-visible:ring-offset-0",
-              collapsed ? "top-[84px]" : "top-[44px]",
             )}
           >
             {collapsed ? (
