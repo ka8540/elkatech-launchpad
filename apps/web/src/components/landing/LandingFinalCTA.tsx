@@ -41,7 +41,7 @@ const LandingFinalCTA = () => {
         style={{ "--lp-line": "rgba(255,255,255,0.05)" } as CSSProperties}
       />
 
-      <div className="relative mx-auto max-w-[1100px] px-5 text-center sm:px-8">
+      <div className="relative mx-auto max-w-[1240px] px-5 text-center sm:px-8">
         <motion.span
           initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -101,8 +101,9 @@ const LandingFinalCTA = () => {
           </Link>
         </motion.div>
 
-        <div className="mx-auto mt-12 grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto mt-12 grid max-w-[1180px] gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.28fr_1fr]">
           {methods.map((m) => {
+            const isEmail = m.label === "Email";
             const inner = (
               <>
                 <span
@@ -123,7 +124,7 @@ const LandingFinalCTA = () => {
                     {m.label}
                   </span>
                   <span
-                    className="mt-1 block break-words text-[15px] font-semibold leading-snug"
+                    className={`mt-1 block text-[15px] font-semibold leading-snug ${isEmail ? "break-normal text-[14px] lg:whitespace-nowrap xl:text-[15px]" : "break-words"}`}
                     style={{ color: "#f1efe9" }}
                   >
                     {m.value}
