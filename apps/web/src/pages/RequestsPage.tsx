@@ -61,9 +61,8 @@ function Skeleton({ className }: { className?: string }) {
   );
 }
 
-/* ─── Premium glass card surface ───────────────────────────────────────────── */
-const cardSurface =
-  "border border-[var(--lp-line)] bg-[var(--lp-panel)]/80 backdrop-blur-xl shadow-[0_24px_70px_-50px_rgba(0,0,0,0.55)]";
+/* ─── Matte card surface (shared utility — see index.css `.lp-card`) ──────── */
+const cardSurface = "lp-card border";
 
 /* ─── Stat card ────────────────────────────────────────────────────────────── */
 function StatCard({
@@ -77,30 +76,12 @@ function StatCard({
   icon: React.ComponentType<{ className?: string }>;
   accent: "copper" | "emerald" | "amber" | "steel";
 }) {
-  const accentMap = {
-    copper: {
-      badge: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-      glow: "radial-gradient(120% 90% at 15% 0%, var(--lp-glow), transparent 60%)",
-      count: "text-[var(--lp-ink)]",
-    },
-    emerald: {
-      badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-      glow: "radial-gradient(120% 90% at 15% 0%, rgba(16,185,129,0.12), transparent 60%)",
-      count: "text-[var(--lp-ink)]",
-    },
-    amber: {
-      badge: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-      glow: "radial-gradient(120% 90% at 15% 0%, rgba(245,158,11,0.12), transparent 60%)",
-      count: "text-[var(--lp-ink)]",
-    },
-    steel: {
-      badge: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-      glow: "radial-gradient(120% 90% at 15% 0%, rgba(120,130,150,0.10), transparent 60%)",
-      count: "text-[var(--lp-ink)]",
-    },
+  const badgeMap = {
+    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
+    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
+    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
   };
-
-  const c = accentMap[accent];
 
   return (
     <div className={cn(
@@ -108,24 +89,19 @@ function StatCard({
       cardSurface,
       "hover:border-[var(--lp-line-strong)]",
     )}>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-70"
-        style={{ background: c.glow }}
-      />
       <div className="relative flex items-start justify-between gap-3">
         <div>
           <p className="lp-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
             {label}
           </p>
-          <p className={cn("lp-display mt-2 text-4xl font-bold", c.count)}>
+          <p className="lp-display mt-2 text-4xl font-bold text-[var(--lp-ink)]">
             {count}
           </p>
         </div>
         <div
           className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-            c.badge,
+            badgeMap[accent],
           )}
         >
           <Icon className="h-5 w-5" />
@@ -172,29 +148,20 @@ function LoadingSkeleton() {
 function EmptyState() {
   return (
     <div className={cn("relative overflow-hidden rounded-3xl", cardSurface)}>
-      {/* Subtle blueprint grid */}
+      {/* Very subtle blueprint grid only — no copper glow */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-50"
+        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.22]"
         style={{
           maskImage: "radial-gradient(ellipse at 50% 35%, black 30%, transparent 80%)",
           WebkitMaskImage: "radial-gradient(ellipse at 50% 35%, black 30%, transparent 80%)",
         }}
       />
-      {/* Copper radial glow */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 50% 25%, var(--lp-glow), transparent 60%)",
-        }}
-      />
 
-      <div className="relative flex flex-col items-center px-6 py-16 text-center sm:py-20">
+      <div className="relative flex flex-col items-center px-6 py-14 text-center sm:py-16">
         {/* Icon cluster */}
         <div className="relative mb-7">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)] shadow-[0_0_50px_-10px_var(--lp-accent)]">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
             <ClipboardList className="h-9 w-9" />
           </div>
           <div className="absolute -right-3 -top-2 flex h-9 w-9 items-center justify-center rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)]">
@@ -216,7 +183,7 @@ function EmptyState() {
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
           <Button
             asChild
-            className="h-11 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] shadow-[0_10px_30px_-10px_var(--lp-accent)] transition-colors hover:bg-[var(--lp-accent-2)]"
+            className="h-11 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
           >
             <Link to="/app/requests/new">
               <Plus className="mr-1.5 h-4 w-4" />
@@ -226,7 +193,7 @@ function EmptyState() {
           <Button
             asChild
             variant="outline"
-            className="h-11 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-6 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+            className="h-11 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-6 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
           >
             <Link to="/">
               <Package2 className="mr-1.5 h-4 w-4" />
@@ -245,9 +212,9 @@ function RequestCard({ request }: { request: ServiceRequest }) {
     <Link
       to={`/app/requests/${request.id}`}
       className={cn(
-        "group block overflow-hidden rounded-2xl p-5 transition-all duration-150",
+        "group block overflow-hidden rounded-2xl p-5 transition-colors duration-150",
         cardSurface,
-        "hover:border-[var(--lp-accent)]/45 hover:shadow-[0_18px_50px_-30px_var(--lp-accent)]",
+        "hover:border-[var(--lp-accent)]/45",
       )}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -355,18 +322,10 @@ const RequestsPage = () => {
       <header className={cn("relative overflow-hidden rounded-3xl p-6 sm:p-8", cardSurface)}>
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-40"
+          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
           style={{
             maskImage: "linear-gradient(to right, black, transparent 70%)",
             WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
-          }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(70% 90% at 12% 0%, var(--lp-glow), transparent 45%)",
           }}
         />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
@@ -392,7 +351,7 @@ const RequestsPage = () => {
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-11 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] shadow-[0_10px_30px_-10px_var(--lp-accent)] transition-colors hover:bg-[var(--lp-accent-2)]",
+              "h-11 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >
@@ -453,7 +412,7 @@ const RequestsPage = () => {
 
       {/* ── Help panel ────────────────────────────────────────────────────── */}
       {requests.length > 0 && (
-        <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/55 px-5 py-4 backdrop-blur-xl">
+        <div className={cn("rounded-2xl px-5 py-4 border", cardSurface)}>
           <div className="flex items-start gap-3">
             <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
             <div className="min-w-0 text-sm leading-6 text-[var(--lp-ink-soft)]">

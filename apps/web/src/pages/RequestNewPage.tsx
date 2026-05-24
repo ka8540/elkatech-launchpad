@@ -30,42 +30,38 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-/* ─── Premium glass surfaces (graphite / ivory, copper accent) ──────────────── */
-const cardSurface =
-  "border border-[var(--lp-line)] bg-[var(--lp-panel)]/85 backdrop-blur-xl shadow-[0_28px_80px_-52px_rgba(0,0,0,0.6)]";
+/* ─── Matte card surface ──────────────────────────────────────────────────── */
+const cardSurface = "lp-card";
 
-/* ─── Shared input class strings ────────────────────────────────────────────── */
+/* ─── Form field classes ──────────────────────────────────────────────────── */
 /*
- * Form fields live inside the `.lp` scope (PortalShell), so var(--lp-*) all
- * resolve. We use --lp-panel-2 as the surface (slightly lighter than the
- * portal background, slightly darker than the card) so fields read clearly
- * in both light and dark themes.
+ * The `.lp-field` utility (defined in index.css) sets a solid matte
+ * background, border, text, and placeholder colors via real CSS — not via
+ * `bg-[var(--lp-*)]/opacity` Tailwind classes, which Tailwind v3 drops on
+ * hex-valued CSS vars and which would otherwise leave inputs with no
+ * background at all (rendering as user-agent white in dark mode).
  */
 const inputClassName =
-  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)]/85 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 " +
-  "placeholder:text-[var(--lp-faint)] transition-colors " +
-  "focus-visible:border-[var(--lp-accent)] focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/25 focus-visible:ring-offset-0";
+  "lp-field h-12 min-w-0 rounded-xl border px-4 text-[15px]";
 
 const selectTriggerClassName =
-  "h-12 min-w-0 rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)]/85 px-4 text-[var(--lp-ink)] shadow-inner shadow-black/5 transition-colors " +
-  "data-[placeholder]:text-[var(--lp-faint)] " +
-  "focus:border-[var(--lp-accent)] focus:ring-2 focus:ring-[var(--lp-accent)]/25 focus:ring-offset-0 [&>span]:truncate";
+  "lp-field h-12 min-w-0 rounded-xl border px-4 text-[15px] " +
+  "flex items-center justify-between [&>span]:truncate data-[placeholder]:text-[var(--lp-faint)]";
 
 /*
- * Radix Select portals its content to <body>, OUTSIDE the `.lp` subtree,
- * so var(--lp-*) would collapse to invalid and the popover would fall back
- * to the global electric-blue accent. `lp-portal` re-declares the lp tokens
- * so the portaled menu picks up the graphite/copper palette correctly.
+ * Radix Select portals its content to <body>, OUTSIDE the `.lp` subtree.
+ * The `lp-portal` class (also defined in index.css) re-declares the
+ * lp tokens so the portaled menu still resolves them.
  */
 const selectContentClassName =
-  "lp-portal rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_24px_60px_rgba(0,0,0,0.45)] backdrop-blur-xl";
+  "lp-portal rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_18px_44px_rgba(0,0,0,0.38)]";
 
 /*
- * Override the shadcn SelectItem default `focus:bg-accent focus:text-accent-foreground`
- * (which renders bright electric blue) with the copper accent at low opacity.
+ * Override shadcn SelectItem default `focus:bg-accent focus:text-accent-foreground`
+ * (global electric blue) with the copper accent at low opacity.
  */
 const selectItemClassName =
-  "rounded-xl py-2.5 pl-8 pr-3 text-sm text-[var(--lp-ink)] " +
+  "rounded-lg py-2.5 pl-8 pr-3 text-sm text-[var(--lp-ink)] " +
   "focus:bg-[var(--lp-accent)]/15 focus:text-[var(--lp-accent)] " +
   "data-[state=checked]:text-[var(--lp-accent)]";
 
@@ -161,13 +157,8 @@ function GuidancePanel({
       : "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]";
 
   return (
-    <aside className={cn("min-w-0 overflow-hidden rounded-3xl", cardSurface)}>
+    <aside className={cn("min-w-0 overflow-hidden rounded-3xl border", cardSurface)}>
       <div className="relative p-5 sm:p-6">
-        <div
-          aria-hidden="true"
-          className="absolute right-0 top-0 h-24 w-24"
-          style={{ background: "radial-gradient(circle at 80% 10%, var(--lp-glow), transparent 70%)" }}
-        />
         <div className="relative flex min-w-0 items-start gap-3">
           <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border", accentClass)}>
             <Icon className="h-5 w-5" />
@@ -203,19 +194,14 @@ function PageHero({
   badge?: ReactNode;
 }) {
   return (
-    <header className={cn("relative min-w-0 overflow-hidden rounded-3xl p-6 sm:p-8", cardSurface)}>
+    <header className={cn("relative min-w-0 overflow-hidden rounded-3xl border p-6 sm:p-8", cardSurface)}>
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-40"
+        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
         style={{
           maskImage: "linear-gradient(to right, black, transparent 70%)",
           WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
         }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{ background: "radial-gradient(70% 90% at 14% 0%, var(--lp-glow), transparent 42%)" }}
       />
       <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 max-w-3xl">
@@ -363,7 +349,7 @@ const RequestNewPage = () => {
         title="Request service support"
         description="Tell us what machine needs attention and what problem you are facing. Our team will use this information to triage your request."
         badge={
-          <div className="w-fit max-w-full rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-4 py-2 text-sm font-medium text-[var(--lp-ink-soft)]">
+          <div className="w-fit max-w-full rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-4 py-2 text-sm font-medium text-[var(--lp-ink-soft)]">
             Support team review
           </div>
         }
@@ -372,7 +358,7 @@ const RequestNewPage = () => {
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(320px,1fr)]">
         {/* ── Form card ──────────────────────────────────────────────────────── */}
         <form
-          className={cn("min-w-0 overflow-hidden rounded-3xl", cardSurface)}
+          className={cn("min-w-0 overflow-hidden rounded-3xl border", cardSurface)}
           onSubmit={(event) => {
             event.preventDefault();
             mutation.mutate();
@@ -393,7 +379,7 @@ const RequestNewPage = () => {
             <Button
               asChild
               variant="outline"
-              className="h-10 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-4 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+              className="h-10 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-4 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
             >
               <Link to="/app/requests">
                 <ArrowLeft className="h-4 w-4" />
@@ -584,7 +570,7 @@ const RequestNewPage = () => {
           </FormSection>
 
           {/* Form footer / submit */}
-          <div className="flex min-w-0 flex-col gap-4 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8">
+          <div className="flex min-w-0 flex-col gap-4 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8">
             <div className="flex items-start gap-3 text-sm text-[var(--lp-ink-soft)]">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--lp-accent)]" />
               <span>Your request will be saved to the service portal.</span>
@@ -593,14 +579,14 @@ const RequestNewPage = () => {
               <Button
                 asChild
                 variant="outline"
-                className="h-12 rounded-2xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+                className="h-12 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-ink)]"
               >
                 <Link to="/app/requests">Cancel</Link>
               </Button>
               <Button
                 type="submit"
                 size="lg"
-                className="h-12 rounded-2xl bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] shadow-[0_10px_30px_-10px_var(--lp-accent)] transition-colors hover:bg-[var(--lp-accent-2)]"
+                className="h-12 rounded-xl bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
                 disabled={mutation.isPending}
               >
                 {mutation.isPending ? (
@@ -654,7 +640,7 @@ const RequestNewPage = () => {
               "Return to the portal to track updates",
             ]}
           />
-          <div className="rounded-3xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/55 p-5 text-sm leading-6 text-[var(--lp-ink-soft)] backdrop-blur-xl">
+          <div className={cn("rounded-3xl border p-5 text-sm leading-6 text-[var(--lp-ink-soft)]", cardSurface)}>
             <div className="mb-3 flex items-center gap-2 font-medium text-[var(--lp-ink)]">
               <HelpCircle className="h-4 w-4 text-[var(--lp-accent)]" />
               Request quality check

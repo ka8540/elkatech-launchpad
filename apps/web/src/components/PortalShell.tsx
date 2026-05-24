@@ -132,12 +132,12 @@ function ThemeSelector({
         title={compact ? `Theme: ${current.label}` : undefined}
         aria-label={compact ? `Theme: ${current.label}` : undefined}
         className={cn(
-          "flex items-center rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 text-[var(--lp-ink-soft)] transition-all duration-150",
-          "hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
+          "flex items-center rounded-lg border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] transition-colors duration-150",
+          "hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40",
           compact
-            ? "h-8 w-8 justify-center px-0"
-            : "h-9 w-full justify-between gap-2 px-3 py-2",
+            ? "h-9 w-9 justify-center px-0"
+            : "h-10 w-full justify-between gap-2 px-3 py-2",
         )}
       >
         <span className="flex items-center gap-2">
@@ -164,9 +164,12 @@ function ThemeSelector({
           role="menu"
           aria-label="Select theme"
           className={cn(
-            "absolute z-[60] w-44 overflow-hidden rounded-2xl border border-[var(--lp-line)] p-1.5",
-            "bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-xl",
-            compact && menuSide === "right" && "bottom-0 left-full ml-3",
+            "absolute z-[60] w-44 overflow-hidden rounded-xl border border-[var(--lp-line-strong)] p-1",
+            "bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_16px_36px_-18px_rgba(0,0,0,0.55)]",
+            /* Collapsed-sidebar popover: attach to the right of the trigger,
+               vertically centered, with a clear gap so it reads as part of
+               the sidebar rather than a floating block. */
+            compact && menuSide === "right" && "left-full top-1/2 ml-2 -translate-y-1/2",
             compact && menuSide === "bottom" && "right-0 top-full mt-2",
             !compact && "bottom-full left-0 right-0 mb-2 w-auto",
           )}
@@ -185,10 +188,10 @@ function ThemeSelector({
                   setOpen(false);
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-medium transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
+                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40",
                   active
-                    ? "bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
+                    ? "bg-[var(--lp-accent)]/14 text-[var(--lp-accent)]"
                     : "text-[var(--lp-ink-soft)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
                 )}
               >
@@ -500,24 +503,16 @@ const PortalShell = () => {
         aria-label="Main navigation"
       >
         <div
-          className="fixed flex h-screen flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/92 shadow-[1px_0_28px_rgba(0,0,0,0.18)] backdrop-blur-2xl"
+          className="fixed flex h-screen flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-[1px_0_24px_rgba(0,0,0,0.16)]"
           style={{ width: sidebarWidth }}
         >
-          {/* Subtle copper top glow + blueprint grid for premium glass feel */}
+          {/* Restrained blueprint grid only — no copper glow, no shine */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.35]"
+            className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
             style={{
-              maskImage: "linear-gradient(to bottom, black, transparent 60%)",
-              WebkitMaskImage: "linear-gradient(to bottom, black, transparent 60%)",
-            }}
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 h-32"
-            style={{
-              background:
-                "radial-gradient(120% 80% at 30% 0%, var(--lp-glow), transparent 70%)",
+              maskImage: "linear-gradient(to bottom, black, transparent 70%)",
+              WebkitMaskImage: "linear-gradient(to bottom, black, transparent 70%)",
             }}
           />
           <div className="relative z-10 flex h-full flex-col">
@@ -560,7 +555,7 @@ const PortalShell = () => {
       )}
       <div
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-[276px] flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/95 shadow-[2px_0_30px_rgba(0,0,0,0.32)] backdrop-blur-2xl transition-transform duration-200 ease-in-out lg:hidden",
+          "fixed inset-y-0 left-0 z-50 w-[276px] flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-[2px_0_24px_rgba(0,0,0,0.28)] transition-transform duration-200 ease-in-out lg:hidden",
           mobileOpen ? "flex translate-x-0" : "-translate-x-full",
         )}
         aria-label="Mobile navigation"
@@ -570,21 +565,13 @@ const PortalShell = () => {
 
       {/* ── Main content area ────────────────────────────────────────────── */}
       <div className="relative flex min-w-0 flex-1 flex-col">
-        {/* Ambient industrial backdrop for the content column */}
+        {/* Restrained blueprint grid only — no copper top glow */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 lp-grid opacity-[0.5]"
+          className="pointer-events-none absolute inset-0 lp-grid opacity-[0.22]"
           style={{
-            maskImage: "linear-gradient(to bottom, black, transparent 85%)",
-            WebkitMaskImage: "linear-gradient(to bottom, black, transparent 85%)",
-          }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-64"
-          style={{
-            background:
-              "radial-gradient(80% 60% at 85% 0%, var(--lp-glow), transparent 65%)",
+            maskImage: "linear-gradient(to bottom, black, transparent 75%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black, transparent 75%)",
           }}
         />
 
