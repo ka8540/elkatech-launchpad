@@ -40,10 +40,10 @@ const cardSurface = "lp-card";
  * background at all (rendering as user-agent white in dark mode).
  */
 const inputClassName =
-  "lp-field h-12 min-w-0 rounded-xl border px-4 text-[15px]";
+  "lp-field h-10 min-w-0 rounded-xl border px-4 text-sm";
 
 const selectTriggerClassName =
-  "lp-field h-12 min-w-0 rounded-xl border px-4 text-[15px] " +
+  "lp-field h-10 min-w-0 rounded-xl border px-4 text-sm " +
   "flex items-center justify-between [&>span]:truncate data-[placeholder]:text-[var(--lp-faint)]";
 
 /*
@@ -118,16 +118,14 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 border-t border-[var(--lp-line)] px-5 py-7 sm:px-7 lg:px-8">
-      <div className="mb-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">{title}</h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--lp-ink-soft)]">{description}</p>
-          </div>
+    <section className="min-w-0 border-t border-[var(--lp-line)] px-5 py-5 sm:px-6 lg:px-7">
+      <div className="mb-4 flex min-w-0 items-start gap-2.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="lp-display text-base font-semibold text-[var(--lp-ink)]">{title}</h3>
+          <p className="mt-0.5 text-xs leading-5 text-[var(--lp-ink-soft)]">{description}</p>
         </div>
       </div>
       {children}
@@ -155,21 +153,21 @@ function GuidancePanel({
       : "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]";
 
   return (
-    <aside className={cn("min-w-0 overflow-hidden rounded-3xl border", cardSurface)}>
-      <div className="relative p-5 sm:p-6">
-        <div className="relative flex min-w-0 items-start gap-3">
-          <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border", accentClass)}>
-            <Icon className="h-5 w-5" />
+    <aside className={cn("min-w-0 overflow-hidden rounded-2xl border", cardSurface)}>
+      <div className="relative p-4 sm:p-5">
+        <div className="relative flex min-w-0 items-start gap-2.5">
+          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border", accentClass)}>
+            <Icon className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h3 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">{title}</h3>
-            {description && <p className="mt-1 text-sm leading-6 text-[var(--lp-ink-soft)]">{description}</p>}
+            <h3 className="lp-display text-sm font-semibold text-[var(--lp-ink)]">{title}</h3>
+            {description && <p className="mt-0.5 text-xs leading-5 text-[var(--lp-ink-soft)]">{description}</p>}
           </div>
         </div>
-        <ul className="relative mt-5 space-y-3">
+        <ul className="relative mt-4 space-y-2">
           {items.map((item) => (
-            <li key={item} className="flex min-w-0 gap-3 text-sm leading-6 text-[var(--lp-ink-soft)]">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
+            <li key={item} className="flex min-w-0 gap-2.5 text-xs leading-5 text-[var(--lp-ink-soft)]">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-accent)]" />
               <span>{item}</span>
             </li>
           ))}
@@ -192,7 +190,7 @@ function PageHero({
   badge?: ReactNode;
 }) {
   return (
-    <header className={cn("relative min-w-0 overflow-hidden rounded-3xl border p-6 sm:p-8", cardSurface)}>
+    <header className={cn("relative min-w-0 overflow-hidden rounded-2xl border p-5 sm:p-6", cardSurface)}>
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
@@ -201,20 +199,20 @@ function PageHero({
           WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
         }}
       />
-      <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 max-w-3xl">
-          <div className="mb-5 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-              <Icon className="h-5 w-5" />
+      <div className="relative flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+              <Icon className="h-4 w-4" />
             </div>
-            <p className="lp-mono text-xs font-semibold uppercase tracking-[0.32em] text-[var(--lp-accent)]">
+            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
               Create Request
             </p>
           </div>
-          <h1 className="lp-display text-3xl font-bold leading-tight text-[var(--lp-ink)] sm:text-4xl">
+          <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">
             {title}
           </h1>
-          <p className="mt-4 max-w-3xl text-sm leading-6 text-[var(--lp-ink-soft)] sm:text-base">
+          <p className="mt-1.5 text-sm leading-6 text-[var(--lp-ink-soft)]">
             {description}
           </p>
         </div>
@@ -230,7 +228,7 @@ function BackToRequests() {
     <Button
       asChild
       variant="outline"
-      className="h-11 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+      className="h-10 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-5 text-sm text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
     >
       <Link to="/app/requests">
         <ArrowLeft className="h-4 w-4" />
@@ -294,7 +292,7 @@ const RequestNewPage = () => {
   const approvalBlocked = isCustomerActionBlocked(session?.user);
   if (approvalBlocked && session?.user && session.user.approvalStatus !== "approved") {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-6 overflow-x-hidden">
+      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
         <PageHero
           icon={ShieldCheck}
           title={
@@ -325,7 +323,7 @@ const RequestNewPage = () => {
 
   if (unverifiedUser) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-6 overflow-x-hidden">
+      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
         <PageHero
           icon={ShieldCheck}
           title="Verify your email first"
@@ -340,7 +338,7 @@ const RequestNewPage = () => {
   }
 
   return (
-    <div className="mx-auto max-w-7xl min-w-0 space-y-8 overflow-x-hidden">
+    <div className="mx-auto max-w-7xl min-w-0 space-y-4 overflow-x-hidden">
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <PageHero
         icon={Wrench}
@@ -348,10 +346,10 @@ const RequestNewPage = () => {
         description="Tell us the machine, issue, and best contact details."
       />
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(320px,1fr)]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.95fr)_minmax(280px,1fr)]">
         {/* ── Form card ──────────────────────────────────────────────────────── */}
         <form
-          className={cn("min-w-0 overflow-hidden rounded-3xl border", cardSurface)}
+          className={cn("min-w-0 overflow-hidden rounded-2xl border", cardSurface)}
           onSubmit={(event) => {
             event.preventDefault();
             mutation.mutate();
@@ -359,7 +357,7 @@ const RequestNewPage = () => {
         >
           {/* Error banner */}
           {mutation.isError && (
-            <div className="mx-5 mb-2 mt-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-600 dark:text-rose-100 sm:mx-7 lg:mx-8">
+            <div className="mx-5 mb-2 mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3.5 text-sm text-rose-600 dark:text-rose-100 sm:mx-6 lg:mx-7">
               <div className="flex gap-3">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500 dark:text-rose-300" />
                 <div>
@@ -400,7 +398,7 @@ const RequestNewPage = () => {
               </div>
             )}
 
-            <div className="grid min-w-0 gap-5 md:grid-cols-2">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
               <Field
                 label="Product"
                 required
@@ -426,21 +424,19 @@ const RequestNewPage = () => {
               </Field>
 
               {selectedProduct && (
-                <div className="min-w-0 rounded-2xl border border-[var(--lp-accent)]/25 bg-[var(--lp-accent)]/[0.07] p-4 md:col-span-2">
-                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex min-w-0 gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/15 text-[var(--lp-accent)]">
-                        <PackageCheck className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="lp-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
-                          Selected product
-                        </p>
-                        <p className="mt-1 break-words font-medium text-[var(--lp-ink)]">{selectedProduct.name}</p>
-                        <p className="mt-1 text-xs text-[var(--lp-faint)]">
-                          Category: {formatCategorySlug(selectedProduct.categorySlug)}
-                        </p>
-                      </div>
+                <div className="min-w-0 rounded-xl border border-[var(--lp-accent)]/25 bg-[var(--lp-accent)]/[0.07] p-3 md:col-span-2">
+                  <div className="flex min-w-0 gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/15 text-[var(--lp-accent)]">
+                      <PackageCheck className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
+                        Selected product
+                      </p>
+                      <p className="mt-0.5 break-words text-sm font-medium text-[var(--lp-ink)]">{selectedProduct.name}</p>
+                      <p className="mt-0.5 text-xs text-[var(--lp-faint)]">
+                        {formatCategorySlug(selectedProduct.categorySlug)}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -473,7 +469,7 @@ const RequestNewPage = () => {
             title="Issue details"
             description="Describe what happened and when it started."
           >
-            <div className="grid min-w-0 gap-5 md:grid-cols-2">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
               <Field label="Priority" required helper="Use urgent only for blocked production.">
                 <Select
                   value={form.priority}
@@ -509,7 +505,7 @@ const RequestNewPage = () => {
                   value={form.description}
                   onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
                   placeholder="Describe the problem, when it started, and what you already tried."
-                  className={cn(inputClassName, "min-h-[170px] resize-y py-4")}
+                  className={cn(inputClassName, "min-h-[130px] resize-y py-3")}
                 />
               </Field>
             </div>
@@ -521,7 +517,7 @@ const RequestNewPage = () => {
             title="Contact"
             description="Add the best phone number for follow-up."
           >
-            <div className="grid min-w-0 gap-5 md:grid-cols-2">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
               <Field label="Contact Phone" required helper="Best number during service hours.">
                 <Input
                   required
@@ -535,23 +531,22 @@ const RequestNewPage = () => {
           </FormSection>
 
           {/* Form footer / submit */}
-          <div className="flex min-w-0 flex-col gap-4 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-5 sm:px-7 md:flex-row md:flex-wrap md:items-center md:justify-between lg:px-8">
-            <div className="flex min-w-0 items-start gap-3 text-sm text-[var(--lp-ink-soft)]">
-              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--lp-accent)]" />
-              <span className="min-w-0">Your request will be saved to the service portal.</span>
+          <div className="flex min-w-0 flex-col gap-3 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-4 sm:px-6 md:flex-row md:flex-wrap md:items-center md:justify-between lg:px-7">
+            <div className="flex min-w-0 items-center gap-2.5 text-xs text-[var(--lp-ink-soft)]">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
+              <span className="min-w-0">Saved to the service portal on submit.</span>
             </div>
-            <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex shrink-0 flex-col gap-2.5 sm:flex-row sm:items-center">
               <Button
                 asChild
                 variant="outline"
-                className="h-12 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-ink)]"
+                className="h-10 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-5 text-sm text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-ink)]"
               >
                 <Link to="/app/requests">Cancel</Link>
               </Button>
               <Button
                 type="submit"
-                size="lg"
-                className="h-12 rounded-xl bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
+                className="h-10 rounded-full bg-[var(--lp-accent)] px-5 text-sm font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
                 disabled={mutation.isPending}
               >
                 {mutation.isPending ? (
@@ -572,7 +567,7 @@ const RequestNewPage = () => {
         </form>
 
         {/* ── Guidance sidebar ────────────────────────────────────────────────── */}
-        <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
+        <div className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           <GuidancePanel
             icon={ClipboardCheck}
             title="Before you submit"
