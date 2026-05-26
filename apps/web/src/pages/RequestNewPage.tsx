@@ -7,8 +7,6 @@ import {
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
-  Headphones,
-  HelpCircle,
   Loader2,
   PackageCheck,
   Phone,
@@ -346,13 +344,8 @@ const RequestNewPage = () => {
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <PageHero
         icon={Wrench}
-        title="Request service support"
-        description="Tell us what machine needs attention and what problem you are facing. Our team will use this information to triage your request."
-        badge={
-          <div className="w-fit max-w-full rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-4 py-2 text-sm font-medium text-[var(--lp-ink-soft)]">
-            Support team review
-          </div>
-        }
+        title="Create service request"
+        description="Tell us the machine, issue, and best contact details."
       />
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(320px,1fr)]">
@@ -364,33 +357,9 @@ const RequestNewPage = () => {
             mutation.mutate();
           }}
         >
-          {/* Form header */}
-          <div className="flex min-w-0 flex-col gap-4 px-5 py-6 sm:px-7 lg:flex-row lg:items-start lg:justify-between lg:px-8">
-            <div className="min-w-0">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
-                <ClipboardCheck className="h-3.5 w-3.5" />
-                Required details
-              </div>
-              <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Service details</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--lp-ink-soft)]">
-                Choose the affected product and describe the issue clearly.
-              </p>
-            </div>
-            <Button
-              asChild
-              variant="outline"
-              className="h-10 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-4 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
-            >
-              <Link to="/app/requests">
-                <ArrowLeft className="h-4 w-4" />
-                Back to requests
-              </Link>
-            </Button>
-          </div>
-
           {/* Error banner */}
           {mutation.isError && (
-            <div className="mx-5 mb-2 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-600 dark:text-rose-100 sm:mx-7 lg:mx-8">
+            <div className="mx-5 mb-2 mt-5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-600 dark:text-rose-100 sm:mx-7 lg:mx-8">
               <div className="flex gap-3">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500 dark:text-rose-300" />
                 <div>
@@ -401,11 +370,11 @@ const RequestNewPage = () => {
             </div>
           )}
 
-          {/* Section: Machine information */}
+          {/* Section: Machine details */}
           <FormSection
             icon={PackageCheck}
-            title="Machine information"
-            description="Select the product and provide any machine identifiers that can help us locate the issue faster."
+            title="Machine details"
+            description="Select the affected product and add location details."
           >
             {productsQuery.isError && (
               <div className="mb-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-700 dark:text-amber-50">
@@ -435,11 +404,7 @@ const RequestNewPage = () => {
               <Field
                 label="Product"
                 required
-                helper={
-                  selectedProduct
-                    ? "This product will be attached to the service request."
-                    : "Choose the affected machine or product."
-                }
+                helper={selectedProduct ? "Attached to this service request." : undefined}
                 className="md:col-span-2"
               >
                 <Select
@@ -481,35 +446,35 @@ const RequestNewPage = () => {
                 </div>
               )}
 
-              <Field label="Serial Number" helper="Optional machine serial number.">
+              <Field label="Serial Number">
                 <Input
                   value={form.serialNumber}
                   onChange={(event) => setForm((current) => ({ ...current, serialNumber: event.target.value }))}
-                  placeholder="Optional machine serial number"
+                  placeholder="Optional serial number"
                   className={inputClassName}
                 />
               </Field>
 
-              <Field label="Site Location" required helper="Workshop, branch, or machine location.">
+              <Field label="Site Location" required helper="Workshop, branch, or city.">
                 <Input
                   required
                   value={form.siteLocation}
                   onChange={(event) => setForm((current) => ({ ...current, siteLocation: event.target.value }))}
-                  placeholder="Workshop / branch / machine location"
+                  placeholder="Workshop / branch / city"
                   className={inputClassName}
                 />
               </Field>
             </div>
           </FormSection>
 
-          {/* Section: Issue information */}
+          {/* Section: Issue details */}
           <FormSection
             icon={Sparkles}
-            title="Issue information"
-            description="Summarize the problem and include what you already tried."
+            title="Issue details"
+            description="Describe what happened and when it started."
           >
             <div className="grid min-w-0 gap-5 md:grid-cols-2">
-              <Field label="Priority" required helper="Choose urgent only for issues blocking active production.">
+              <Field label="Priority" required helper="Use urgent only for blocked production.">
                 <Select
                   value={form.priority}
                   onValueChange={(value) => setForm((current) => ({ ...current, priority: value as RequestPriority }))}
@@ -527,12 +492,12 @@ const RequestNewPage = () => {
                 </Select>
               </Field>
 
-              <Field label="Subject" required helper="Use a short summary that is easy to scan.">
+              <Field label="Subject" required helper="Short, scannable summary.">
                 <Input
                   required
                   value={form.subject}
                   onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
-                  placeholder="Short summary, e.g. Printer not feeding media"
+                  placeholder="Short issue summary"
                   className={inputClassName}
                 />
               </Field>
@@ -543,26 +508,26 @@ const RequestNewPage = () => {
                   rows={7}
                   value={form.description}
                   onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  placeholder="Example: Printer stops feeding media after 10-15 minutes. We checked the rollers and restarted the machine, but the issue returns."
+                  placeholder="Describe the problem, when it started, and what you already tried."
                   className={cn(inputClassName, "min-h-[170px] resize-y py-4")}
                 />
               </Field>
             </div>
           </FormSection>
 
-          {/* Section: Contact details */}
+          {/* Section: Contact */}
           <FormSection
             icon={Phone}
-            title="Contact details"
-            description="Add the best phone number for follow-up if our team needs clarification."
+            title="Contact"
+            description="Add the best phone number for follow-up."
           >
             <div className="grid min-w-0 gap-5 md:grid-cols-2">
-              <Field label="Contact Phone" required helper="Use the number your team can answer during service follow-up.">
+              <Field label="Contact Phone" required helper="Best number during service hours.">
                 <Input
                   required
                   value={form.contactPhone}
                   onChange={(event) => setForm((current) => ({ ...current, contactPhone: event.target.value }))}
-                  placeholder="+91 98765 43210"
+                  placeholder="Best follow-up number"
                   className={inputClassName}
                 />
               </Field>
@@ -610,13 +575,12 @@ const RequestNewPage = () => {
         <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
           <GuidancePanel
             icon={ClipboardCheck}
-            title="What to include"
-            description="Clear details help the service team route your request."
+            title="Before you submit"
             items={[
-              "Machine model or selected product",
-              "Short issue summary",
-              "When the issue started",
-              "Any troubleshooting already tried",
+              "Select the correct machine or product.",
+              "Add the site location.",
+              "Describe the issue and what you already tried.",
+              "Include the best phone number for follow-up.",
             ]}
           />
           <GuidancePanel
@@ -624,30 +588,12 @@ const RequestNewPage = () => {
             title="What happens next"
             accent="emerald"
             items={[
-              "Request submitted to the portal",
-              "Team reviews the details",
-              "You receive updates in the portal",
-              "Engineer or admin follows up if needed",
+              "Your request is saved in the portal.",
+              "The support team reviews it.",
+              "Updates appear in the request thread.",
+              "An engineer or admin follows up.",
             ]}
           />
-          <GuidancePanel
-            icon={Headphones}
-            title="Need help?"
-            description="Keep the request factual and include the best follow-up number."
-            items={[
-              "Use priority to signal production impact",
-              "Add location details for the affected machine",
-              "Return to the portal to track updates",
-            ]}
-          />
-          <div className={cn("rounded-3xl border p-5 text-sm leading-6 text-[var(--lp-ink-soft)]", cardSurface)}>
-            <div className="mb-3 flex items-center gap-2 font-medium text-[var(--lp-ink)]">
-              <HelpCircle className="h-4 w-4 text-[var(--lp-accent)]" />
-              Request quality check
-            </div>
-            A concise subject, accurate product, and clear troubleshooting notes help the team understand the issue
-            before follow-up.
-          </div>
         </div>
       </div>
     </div>
