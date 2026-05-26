@@ -526,11 +526,19 @@
   }
 
   /*
-   * Portal shell background — warm graphite gradient with a soft copper
-   * highlight, so the protected app pages never collapse to pure black.
-   * Theme-aware via .lp tokens.
+   * Portal shell background — warm, theme-aware.
+   * Light: a soft ivory wash that stays in the warm palette so the page
+   *        never collapses into a jarring dark-to-white gradient.
+   * Dark:  warm graphite at the top fading to the base, with a soft copper
+   *        highlight, so the protected app pages never collapse to pure black.
    */
   .lp-portal-bg {
+    background:
+      radial-gradient(80% 55% at 88% -8%, color-mix(in srgb, var(--lp-accent) 5%, transparent), transparent 60%),
+      linear-gradient(180deg, var(--lp-bg-2) 0%, var(--lp-bg) 45%, var(--lp-bg) 100%);
+  }
+
+  .dark .lp-portal-bg {
     background:
       radial-gradient(80% 55% at 88% -8%, color-mix(in srgb, var(--lp-accent) 3%, transparent), transparent 60%),
       linear-gradient(180deg, var(--lp-graphite-2) 0%, var(--lp-bg) 55%, var(--lp-bg) 100%);
