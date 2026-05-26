@@ -570,12 +570,12 @@ const RequestNewPage = () => {
           </FormSection>
 
           {/* Form footer / submit */}
-          <div className="flex min-w-0 flex-col gap-4 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8">
-            <div className="flex items-start gap-3 text-sm text-[var(--lp-ink-soft)]">
+          <div className="flex min-w-0 flex-col gap-4 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-5 sm:px-7 md:flex-row md:flex-wrap md:items-center md:justify-between lg:px-8">
+            <div className="flex min-w-0 items-start gap-3 text-sm text-[var(--lp-ink-soft)]">
               <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--lp-accent)]" />
-              <span>Your request will be saved to the service portal.</span>
+              <span className="min-w-0">Your request will be saved to the service portal.</span>
             </div>
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
               <Button
                 asChild
                 variant="outline"
