@@ -147,28 +147,28 @@ function StatCard({
       type="button"
       onClick={onClick}
       className={cn(
-        "group relative w-full overflow-hidden rounded-2xl p-5 text-left transition-colors duration-150",
+        "group relative w-full overflow-hidden rounded-xl p-4 text-left transition-colors duration-150",
         cardSurface,
         "hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
         active && "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/[0.08]",
       )}
     >
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="relative flex items-center justify-between gap-3">
         <div>
-          <p className="lp-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
+          <p className="lp-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
             {label}
           </p>
-          <p className="lp-display mt-2 text-4xl font-bold text-[var(--lp-ink)]">
+          <p className="lp-display mt-1.5 text-3xl font-bold text-[var(--lp-ink)]">
             {count}
           </p>
         </div>
         <div
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
             badgeMap[accent],
           )}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className="h-4 w-4" />
         </div>
       </div>
     </button>
@@ -178,30 +178,33 @@ function StatCard({
 /* ─── Loading skeleton ─────────────────────────────────────────────────────── */
 function LoadingSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-4">
       {/* Header skeleton */}
-      <div className={cn("rounded-3xl p-6 sm:p-8", cardSurface)}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-8 w-72" />
-            <Skeleton className="h-4 w-96" />
+      <div className={cn("rounded-2xl p-5 sm:p-6", cardSurface)}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-2.5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-56" />
+            <Skeleton className="h-3.5 w-80" />
           </div>
-          <Skeleton className="h-11 w-48 rounded-full" />
+          <Skeleton className="h-10 w-44 rounded-full" />
         </div>
       </div>
 
       {/* Stat skeletons */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[100px] rounded-2xl" />
+          <Skeleton key={i} className="h-[76px] rounded-xl" />
         ))}
       </div>
 
+      {/* Filter skeleton */}
+      <Skeleton className="h-[52px] rounded-xl" />
+
       {/* List skeletons */}
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-[88px] rounded-2xl" />
+          <Skeleton key={i} className="h-[76px] rounded-2xl" />
         ))}
       </div>
     </div>
@@ -228,29 +231,29 @@ function EmptyState({
         }}
       />
 
-      <div className="relative flex flex-col items-center px-6 py-14 text-center sm:py-16">
+      <div className="relative flex flex-col items-center px-6 py-10 text-center">
         {/* Icon cluster */}
-        <div className="relative mb-7">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-            <ClipboardList className="h-9 w-9" />
+        <div className="relative mb-5">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+            <ClipboardList className="h-6 w-6" />
           </div>
-          <div className="absolute -right-3 -top-2 flex h-9 w-9 items-center justify-center rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)]">
-            <Wrench className="h-4 w-4" />
+          <div className="absolute -right-2 -top-1.5 flex h-7 w-7 items-center justify-center rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)]">
+            <Wrench className="h-3.5 w-3.5" />
           </div>
-          <div className="absolute -bottom-1 -left-3 flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-faint)]">
-            <LifeBuoy className="h-4 w-4" />
+          <div className="absolute -bottom-1 -left-2 flex h-6 w-6 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-faint)]">
+            <LifeBuoy className="h-3 w-3" />
           </div>
         </div>
 
-        <h3 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">{title}</h3>
-        <p className="mt-3 max-w-md text-sm leading-7 text-[var(--lp-ink-soft)]">
+        <h3 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">{title}</h3>
+        <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--lp-ink-soft)]">
           {description}
         </p>
 
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
+        <div className="mt-6 flex flex-col items-center gap-2.5 sm:flex-row">
           <Button
             asChild
-            className="h-11 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
+            className="h-10 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
           >
             <Link to="/app/requests/new">
               <Plus className="mr-1.5 h-4 w-4" />
@@ -260,7 +263,7 @@ function EmptyState({
           <Button
             asChild
             variant="outline"
-            className="h-11 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-6 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+            className="h-10 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
           >
             <Link to="/">
               <Package2 className="mr-1.5 h-4 w-4" />
@@ -434,9 +437,9 @@ const RequestsPage = () => {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-4">
       {/* ── Header card ───────────────────────────────────────────────────── */}
-      <header className={cn("relative overflow-hidden rounded-3xl p-6 sm:p-8", cardSurface)}>
+      <header className={cn("relative overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
@@ -445,24 +448,24 @@ const RequestsPage = () => {
             WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
           }}
         />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-                <ClipboardList className="h-5 w-5" />
+            <div className="mb-3 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+                <ClipboardList className="h-4 w-4" />
               </div>
-              <p className="lp-mono text-xs font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
+              <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
                 Service Requests
               </p>
             </div>
-            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">
+            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">
               {activeFilter === "all"
                 ? isCustomer
-                  ? "Your Requests Dashboard"
-                  : "Requests Dashboard"
+                  ? "Your Requests"
+                  : "Requests"
                 : `${filterMeta.label} Requests`}
             </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-7 text-[var(--lp-ink-soft)]">
+            <p className="mt-1.5 max-w-xl text-sm leading-6 text-[var(--lp-ink-soft)]">
               {filterMeta.description}
             </p>
           </div>
@@ -471,7 +474,7 @@ const RequestsPage = () => {
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-11 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-6 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
+              "h-10 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >
@@ -500,7 +503,7 @@ const RequestsPage = () => {
       )}
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           label="Total Requests"
           count={totalCount}
@@ -535,9 +538,9 @@ const RequestsPage = () => {
         />
       </div>
 
-      <section className={cn("rounded-3xl p-4 sm:p-5", cardSurface)}>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-2">
+      <section className={cn("rounded-xl p-3 sm:p-4", cardSurface)}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-1.5">
             {dashboardFilters.map((filterOption) => {
               const active = activeFilter === filterOption.value;
               const Icon =
@@ -567,16 +570,16 @@ const RequestsPage = () => {
                   type="button"
                   onClick={() => setFilter(filterOption.value)}
                   className={cn(
-                    "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors",
+                    "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
                     active
                       ? "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
                       : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:text-[var(--lp-ink)]",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5" />
                   <span>{filterOption.label}</span>
-                  <span className="lp-mono text-[10px] text-[var(--lp-faint)]">
+                  <span className="lp-mono text-[9px] text-[var(--lp-faint)]">
                     {count}
                   </span>
                 </button>
@@ -584,13 +587,13 @@ const RequestsPage = () => {
             })}
           </div>
 
-          <label className="relative block min-w-0 lg:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)]" />
+          <label className="relative block min-w-0 lg:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--lp-faint)]" />
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search requests"
-              className="lp-field h-10 w-full rounded-full border px-10 text-sm shadow-none ring-offset-0 focus-visible:ring-0"
+              className="lp-field h-8 w-full rounded-full border px-9 text-xs shadow-none ring-offset-0 focus-visible:ring-0"
             />
           </label>
         </div>
