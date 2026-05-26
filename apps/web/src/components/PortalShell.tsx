@@ -520,7 +520,7 @@ const PortalShell = () => {
         aria-label="Main navigation"
       >
         <div
-          className="fixed z-30 flex h-screen overflow-visible flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-[1px_0_24px_rgba(0,0,0,0.16)]"
+          className="fixed z-30 flex h-screen overflow-visible flex-col border-r border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-[1px_0_24px_rgba(0,0,0,0.16)] transition-[width] duration-200 ease-in-out"
           style={{ width: sidebarWidth }}
         >
           {/* Restrained blueprint grid only — no copper glow, no shine */}
