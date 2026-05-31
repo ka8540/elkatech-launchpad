@@ -22,7 +22,8 @@
     "lint": "npm run lint --workspaces --if-present",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx scripts/db-seed.ts",
-    "db:bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
+    "db:bootstrap-admin": "tsx scripts/bootstrap-admin.ts",
+    "db:cleanup-test-data": "tsx scripts/cleanup-test-data.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
