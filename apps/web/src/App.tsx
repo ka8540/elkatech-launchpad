@@ -27,6 +27,7 @@ import RequestDetailPage from "@/pages/RequestDetailPage";
 import QueuePage from "@/pages/QueuePage";
 import UsersPage from "@/pages/UsersPage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
+import AccountPage from "@/pages/AccountPage";
 
 const queryClient = new QueryClient();
 
@@ -91,6 +92,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              <Route path="account" element={<AccountPage />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

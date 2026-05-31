@@ -99236,6 +99236,9 @@ var loginInputSchema = external_exports.object({
 var forgotPasswordInputSchema = external_exports.object({
   email: external_exports.string().email()
 });
+var updateProfileInputSchema = external_exports.object({
+  displayName: external_exports.string().trim().min(2).max(80)
+});
 var resetPasswordInputSchema = external_exports.object({
   token: external_exports.string().min(20),
   password: external_exports.string().min(8)
@@ -101805,6 +101808,60 @@ app.post("/api/auth/logout", async (request, reply) => {
   clearSessionCookies(reply);
   return { ok: true };
 });
+app.patch("/api/me/profile", async (request, reply) => {
+  const session = await requireSession(request, reply, [
+    "customer",
+    "engineer",
+    "admin"
+  ]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const input = external_exports.object({ displayName: external_exports.string().trim().min(2).max(80) }).parse(request.body);
+  try {
+    return await fetchJson(
+      `${env.AUTH_SERVICE_URL}/internal/users/${session.user.id}/profile`,
+      {
+        method: "PATCH",
+        headers: internalHeaders({ "x-user-id": session.user.id }),
+        body: JSON.stringify(input)
+      }
+    );
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "profile update failed");
+        return reply.code(502).send({ message: "Could not update profile. Please try again." });
+      }
+      return reply.code(error.status).send(
+        error.body && typeof error.body === "object" ? error.body : { message: error.message }
+      );
+    }
+    throw error;
+  }
+});
+app.post(
+  "/api/me/password-reset",
+  { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+  async (request, reply) => {
+    const session = await requireSession(request, reply, [
+      "customer",
+      "engineer",
+      "admin"
+    ]);
+    if (!session) return;
+    if (!assertCsrf(request, reply)) return;
+    try {
+      await fetchJson(`${env.AUTH_SERVICE_URL}/forgot-password`, {
+        method: "POST",
+        headers: internalHeaders(),
+        body: JSON.stringify({ email: session.user.email })
+      });
+    } catch (error) {
+      request.log.error({ err: error }, "self password reset failed");
+    }
+    return { message: "Password reset email sent." };
+  }
+);
 app.get("/api/auth/me", async (request, reply) => {
   const sessionToken = getSessionCookie(request);
   if (!sessionToken) {
