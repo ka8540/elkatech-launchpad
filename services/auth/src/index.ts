@@ -65,6 +65,31 @@ async function findUserById(userId: string): Promise<UserRow | null> {
   return rows[0] ?? null;
 }
 
+// Detect whether migration 005 (auth.users.removed_at) has been applied on
+// the connected database. Probed once and cached so subsequent calls are
+// free. Lets the service work cleanly on un-migrated databases (the
+// remove-user flow degrades to plain suspend instead of crashing).
+let removedAtColumnPromise: Promise<boolean> | null = null;
+async function hasRemovedAtColumn(): Promise<boolean> {
+  if (!removedAtColumnPromise) {
+    removedAtColumnPromise = (async () => {
+      const rows = await sql<{ exists: boolean }[]>`
+        select true as exists
+        from information_schema.columns
+        where table_schema = 'auth'
+          and table_name = 'users'
+          and column_name = 'removed_at'
+        limit 1
+      `;
+      return rows.length > 0;
+    })().catch((error) => {
+      removedAtColumnPromise = null;
+      throw error;
+    });
+  }
+  return removedAtColumnPromise;
+}
+
 // Best-effort tagging of how the account was created. Wrapped in a guard so
 // that the auth service still works on databases that haven't had migration
 // 004 applied yet — Postgres error code 42703 ("undefined column") is the
@@ -530,26 +555,24 @@ app.get("/internal/users", async (request, reply) => {
   });
   const query = querySchema.parse(request.query);
 
-  // Use removed_at to soft-delete users; fall back if migration 005 hasn't
-  // been applied yet so the admin page keeps working during rollout.
+  // Use removed_at as a soft-delete marker when migration 005 is in place.
+  // On databases without the column we still return the full list — the
+  // admin page is never broken by an un-migrated environment.
+  const supportsRemovedAt = await hasRemovedAtColumn();
   let rows: UserRow[];
-  try {
+  if (supportsRemovedAt) {
     rows = query.role
       ? await sql<UserRow[]>`
-          select *
-          from auth.users
-          where role = ${query.role}
-            and removed_at is null
+          select * from auth.users
+          where role = ${query.role} and removed_at is null
           order by created_at desc
         `
       : await sql<UserRow[]>`
-          select *
-          from auth.users
+          select * from auth.users
           where removed_at is null
           order by created_at desc
         `;
-  } catch (error) {
-    if ((error as { code?: string } | null)?.code !== "42703") throw error;
+  } else {
     rows = query.role
       ? await sql<UserRow[]>`
           select * from auth.users where role = ${query.role} order by created_at desc
@@ -1197,8 +1220,13 @@ app.delete("/internal/users/:id", async (request, reply) => {
     }
   }
 
+  // Probe BEFORE entering the transaction — a failed statement inside
+  // `sql.begin` aborts the whole tx in Postgres, so an in-tx fallback is
+  // unsafe. Doing the column check first lets us pick the right UPDATE
+  // up front.
+  const supportsRemovedAt = await hasRemovedAtColumn();
   await sql.begin(async (tx) => {
-    try {
+    if (supportsRemovedAt) {
       await tx`
         update auth.users
         set approval_status = 'suspended',
@@ -1209,9 +1237,7 @@ app.delete("/internal/users/:id", async (request, reply) => {
             updated_at = now()
         where id = ${user.id}
       `;
-    } catch (error) {
-      // removed_at column may not exist yet on un-migrated environments.
-      if ((error as { code?: string } | null)?.code !== "42703") throw error;
+    } else {
       await tx`
         update auth.users
         set approval_status = 'suspended',
@@ -1239,30 +1265,27 @@ app.get("/internal/users/summary", async (request, reply) => {
     suspended: string;
     total: string;
   };
-  let rows: SummaryRow[];
-  try {
-    rows = await sql<SummaryRow[]>`
-      select
-        count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-        count(*) filter (where approval_status = 'approved')         as approved,
-        count(*) filter (where approval_status = 'rejected')         as rejected,
-        count(*) filter (where approval_status = 'suspended')        as suspended,
-        count(*)                                                     as total
-      from auth.users
-      where removed_at is null
-    `;
-  } catch (error) {
-    if ((error as { code?: string } | null)?.code !== "42703") throw error;
-    rows = await sql<SummaryRow[]>`
-      select
-        count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-        count(*) filter (where approval_status = 'approved')         as approved,
-        count(*) filter (where approval_status = 'rejected')         as rejected,
-        count(*) filter (where approval_status = 'suspended')        as suspended,
-        count(*)                                                     as total
-      from auth.users
-    `;
-  }
+  const supportsRemovedAt = await hasRemovedAtColumn();
+  const rows = supportsRemovedAt
+    ? await sql<SummaryRow[]>`
+        select
+          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where approval_status = 'approved')         as approved,
+          count(*) filter (where approval_status = 'rejected')         as rejected,
+          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*)                                                     as total
+        from auth.users
+        where removed_at is null
+      `
+    : await sql<SummaryRow[]>`
+        select
+          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where approval_status = 'approved')         as approved,
+          count(*) filter (where approval_status = 'rejected')         as rejected,
+          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*)                                                     as total
+        from auth.users
+      `;
   const [summary] = rows;
 
   return {

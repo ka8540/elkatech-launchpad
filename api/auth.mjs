@@ -64819,6 +64819,26 @@ async function findUserById(userId) {
   `;
   return rows[0] ?? null;
 }
+var removedAtColumnPromise = null;
+async function hasRemovedAtColumn() {
+  if (!removedAtColumnPromise) {
+    removedAtColumnPromise = (async () => {
+      const rows = await sql`
+        select true as exists
+        from information_schema.columns
+        where table_schema = 'auth'
+          and table_name = 'users'
+          and column_name = 'removed_at'
+        limit 1
+      `;
+      return rows.length > 0;
+    })().catch((error) => {
+      removedAtColumnPromise = null;
+      throw error;
+    });
+  }
+  return removedAtColumnPromise;
+}
 async function setAccountOrigin(userId, origin) {
   try {
     await sql`
@@ -65198,22 +65218,19 @@ app.get("/internal/users", async (request, reply) => {
     role: roleSchema.optional()
   });
   const query = querySchema.parse(request.query);
+  const supportsRemovedAt = await hasRemovedAtColumn();
   let rows;
-  try {
+  if (supportsRemovedAt) {
     rows = query.role ? await sql`
-          select *
-          from auth.users
-          where role = ${query.role}
-            and removed_at is null
+          select * from auth.users
+          where role = ${query.role} and removed_at is null
           order by created_at desc
         ` : await sql`
-          select *
-          from auth.users
+          select * from auth.users
           where removed_at is null
           order by created_at desc
         `;
-  } catch (error) {
-    if (error?.code !== "42703") throw error;
+  } else {
     rows = query.role ? await sql`
           select * from auth.users where role = ${query.role} order by created_at desc
         ` : await sql`
@@ -65746,8 +65763,9 @@ app.delete("/internal/users/:id", async (request, reply) => {
       });
     }
   }
+  const supportsRemovedAt = await hasRemovedAtColumn();
   await sql.begin(async (tx) => {
-    try {
+    if (supportsRemovedAt) {
       await tx`
         update auth.users
         set approval_status = 'suspended',
@@ -65758,8 +65776,7 @@ app.delete("/internal/users/:id", async (request, reply) => {
             updated_at = now()
         where id = ${user.id}
       `;
-    } catch (error) {
-      if (error?.code !== "42703") throw error;
+    } else {
       await tx`
         update auth.users
         set approval_status = 'suspended',
@@ -65777,30 +65794,25 @@ app.get("/internal/users/summary", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });
   }
-  let rows;
-  try {
-    rows = await sql`
-      select
-        count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-        count(*) filter (where approval_status = 'approved')         as approved,
-        count(*) filter (where approval_status = 'rejected')         as rejected,
-        count(*) filter (where approval_status = 'suspended')        as suspended,
-        count(*)                                                     as total
-      from auth.users
-      where removed_at is null
-    `;
-  } catch (error) {
-    if (error?.code !== "42703") throw error;
-    rows = await sql`
-      select
-        count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-        count(*) filter (where approval_status = 'approved')         as approved,
-        count(*) filter (where approval_status = 'rejected')         as rejected,
-        count(*) filter (where approval_status = 'suspended')        as suspended,
-        count(*)                                                     as total
-      from auth.users
-    `;
-  }
+  const supportsRemovedAt = await hasRemovedAtColumn();
+  const rows = supportsRemovedAt ? await sql`
+        select
+          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where approval_status = 'approved')         as approved,
+          count(*) filter (where approval_status = 'rejected')         as rejected,
+          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*)                                                     as total
+        from auth.users
+        where removed_at is null
+      ` : await sql`
+        select
+          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where approval_status = 'approved')         as approved,
+          count(*) filter (where approval_status = 'rejected')         as rejected,
+          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*)                                                     as total
+        from auth.users
+      `;
   const [summary] = rows;
   return {
     pendingApproval: Number(summary?.pending_approval ?? 0),

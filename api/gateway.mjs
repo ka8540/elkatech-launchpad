@@ -102196,6 +102196,10 @@ app.delete("/api/admin/users/:userId", async (request, reply) => {
     });
   } catch (error) {
     if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "remove user failed");
+        return reply.code(502).send({ message: "Could not remove user. Please try again." });
+      }
       const body = error.body && typeof error.body === "object" ? error.body : { message: error.message };
       return reply.code(error.status).send(body);
     }
