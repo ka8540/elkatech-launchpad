@@ -7,8 +7,6 @@ import {
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
-  Headphones,
-  HelpCircle,
   Loader2,
   PackageCheck,
   Phone,
@@ -30,23 +28,40 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-/* ─── Shared input class strings ────────────────────────────────────────────── */
+/* ─── Matte card surface ──────────────────────────────────────────────────── */
+const cardSurface = "lp-card";
+
+/* ─── Form field classes ──────────────────────────────────────────────────── */
+/*
+ * The `.lp-field` utility (defined in index.css) sets a solid matte
+ * background, border, text, and placeholder colors via real CSS — not via
+ * `bg-[var(--lp-*)]/opacity` Tailwind classes, which Tailwind v3 drops on
+ * hex-valued CSS vars and which would otherwise leave inputs with no
+ * background at all (rendering as user-agent white in dark mode).
+ */
 const inputClassName =
-  "h-12 min-w-0 rounded-2xl px-4 shadow-inner shadow-black/5 placeholder:text-slate-400 transition-colors " +
-  "border-slate-200 bg-white text-slate-950 focus-visible:border-blue-400 focus-visible:ring-2 focus-visible:ring-blue-500/15 focus-visible:ring-offset-0 " +
-  "dark:border-white/10 dark:bg-[#050b14]/80 dark:text-white dark:placeholder:text-slate-500 dark:focus-visible:border-blue-400/60 dark:shadow-black/10";
+  "lp-field h-10 min-w-0 rounded-xl border px-4 text-sm";
 
 const selectTriggerClassName =
-  "h-12 min-w-0 rounded-2xl px-4 shadow-inner shadow-black/5 transition-colors " +
-  "border-slate-200 bg-white text-slate-950 data-[placeholder]:text-slate-400 " +
-  "dark:border-white/10 dark:bg-[#050b14]/80 dark:text-white dark:data-[placeholder]:text-slate-500 " +
-  "focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 focus:ring-offset-0 " +
-  "dark:focus:border-blue-400/60 dark:shadow-black/10 [&>span]:truncate";
+  "lp-field h-10 min-w-0 rounded-xl border px-4 text-sm " +
+  "flex items-center justify-between [&>span]:truncate data-[placeholder]:text-[var(--lp-faint)]";
 
+/*
+ * Radix Select portals its content to <body>, OUTSIDE the `.lp` subtree.
+ * The `lp-portal` class (also defined in index.css) re-declares the
+ * lp tokens so the portaled menu still resolves them.
+ */
 const selectContentClassName =
-  "rounded-2xl border shadow-2xl " +
-  "border-slate-200 bg-white text-slate-900 shadow-black/10 " +
-  "dark:border-white/10 dark:bg-[#07111f] dark:text-slate-100 dark:shadow-black/40";
+  "lp-portal rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_18px_44px_rgba(0,0,0,0.38)]";
+
+/*
+ * Override shadcn SelectItem default `focus:bg-accent focus:text-accent-foreground`
+ * (global electric blue) with the copper accent at low opacity.
+ */
+const selectItemClassName =
+  "rounded-lg py-2.5 pl-8 pr-3 text-sm text-[var(--lp-ink)] " +
+  "focus:bg-[var(--lp-accent)]/15 focus:text-[var(--lp-accent)] " +
+  "data-[state=checked]:text-[var(--lp-accent)]";
 
 /* ─── Form config ───────────────────────────────────────────────────────────── */
 const priorityOptions: Array<{ value: RequestPriority; label: string }> = [
@@ -80,12 +95,12 @@ function Field({
 }) {
   return (
     <div className={cn("min-w-0 space-y-2.5", className)}>
-      <label className="flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-[var(--lp-ink)]">
         {label}
-        {required && <span className="text-blue-500 dark:text-blue-300" aria-hidden="true">*</span>}
+        {required && <span className="text-[var(--lp-accent)]" aria-hidden="true">*</span>}
       </label>
       {children}
-      {helper && <p className="text-xs leading-relaxed text-slate-400 dark:text-slate-500">{helper}</p>}
+      {helper && <p className="text-xs leading-relaxed text-[var(--lp-faint)]">{helper}</p>}
     </div>
   );
 }
@@ -103,22 +118,14 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className={cn(
-      "min-w-0 border-t px-5 py-7 sm:px-7 lg:px-8",
-      "border-slate-200 dark:border-white/10",
-    )}>
-      <div className="mb-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-3">
-          <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
-            "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-          )}>
-            <Icon className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-display text-xl font-semibold text-slate-900 dark:text-white">{title}</h3>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
-          </div>
+    <section className="min-w-0 border-t border-[var(--lp-line)] px-5 py-5 sm:px-6 lg:px-7">
+      <div className="mb-4 flex min-w-0 items-start gap-2.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="lp-display text-base font-semibold text-[var(--lp-ink)]">{title}</h3>
+          <p className="mt-0.5 text-xs leading-5 text-[var(--lp-ink-soft)]">{description}</p>
         </div>
       </div>
       {children}
@@ -132,45 +139,102 @@ function GuidancePanel({
   title,
   description,
   items,
-  accent = "blue",
+  accent = "copper",
 }: {
   icon: LucideIcon;
   title: string;
   description?: string;
   items: string[];
-  accent?: "blue" | "emerald";
+  accent?: "copper" | "emerald";
 }) {
   const accentClass =
     accent === "emerald"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300"
-      : "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300";
+      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300"
+      : "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]";
 
   return (
-    <aside className={cn(
-      "min-w-0 overflow-hidden rounded-3xl border shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl",
-      "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/70 dark:shadow-[0_24px_80px_rgba(0,0,0,0.18)]",
-    )}>
-      <div className="relative p-5 sm:p-6">
-        <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-blue-500/5 blur-3xl dark:bg-blue-500/10" />
-        <div className="relative flex min-w-0 items-start gap-3">
-          <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border", accentClass)}>
-            <Icon className="h-5 w-5" />
+    <aside className={cn("min-w-0 overflow-hidden rounded-2xl border", cardSurface)}>
+      <div className="relative p-4 sm:p-5">
+        <div className="relative flex min-w-0 items-start gap-2.5">
+          <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border", accentClass)}>
+            <Icon className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-white">{title}</h3>
-            {description && <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>}
+            <h3 className="lp-display text-sm font-semibold text-[var(--lp-ink)]">{title}</h3>
+            {description && <p className="mt-0.5 text-xs leading-5 text-[var(--lp-ink-soft)]">{description}</p>}
           </div>
         </div>
-        <ul className="relative mt-5 space-y-3">
+        <ul className="relative mt-4 space-y-2">
           {items.map((item) => (
-            <li key={item} className="flex min-w-0 gap-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500 dark:text-emerald-300" />
+            <li key={item} className="flex min-w-0 gap-2.5 text-xs leading-5 text-[var(--lp-ink-soft)]">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-accent)]" />
               <span>{item}</span>
             </li>
           ))}
         </ul>
       </div>
     </aside>
+  );
+}
+
+/* ─── Page hero (shared across gated + main states) ──────────────────────────── */
+function PageHero({
+  icon: Icon,
+  title,
+  description,
+  badge,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  badge?: ReactNode;
+}) {
+  return (
+    <header className={cn("relative min-w-0 overflow-hidden rounded-2xl border p-5 sm:p-6", cardSurface)}>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
+        style={{
+          maskImage: "linear-gradient(to right, black, transparent 70%)",
+          WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
+        }}
+      />
+      <div className="relative flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <div className="mb-3 flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+              <Icon className="h-4 w-4" />
+            </div>
+            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
+              Create Request
+            </p>
+          </div>
+          <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">
+            {title}
+          </h1>
+          <p className="mt-1.5 text-sm leading-6 text-[var(--lp-ink-soft)]">
+            {description}
+          </p>
+        </div>
+        {badge}
+      </div>
+    </header>
+  );
+}
+
+/* ─── Back to requests button ────────────────────────────────────────────────── */
+function BackToRequests() {
+  return (
+    <Button
+      asChild
+      variant="outline"
+      className="h-10 w-fit rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-5 text-sm text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+    >
+      <Link to="/app/requests">
+        <ArrowLeft className="h-4 w-4" />
+        Back to requests
+      </Link>
+    </Button>
   );
 }
 
@@ -228,55 +292,25 @@ const RequestNewPage = () => {
   const approvalBlocked = isCustomerActionBlocked(session?.user);
   if (approvalBlocked && session?.user && session.user.approvalStatus !== "approved") {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-6 overflow-x-hidden">
-        <header className={cn(
-          "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
-          "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
-        )}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%)]" />
-          <div className="relative min-w-0">
-            <div className="mb-5 flex items-center gap-3">
-              <div className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
-            </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white">
-              {session.user.approvalStatus === "pending_approval"
-                ? "Waiting for admin approval"
-                : session.user.approvalStatus === "rejected"
-                  ? "Account not approved"
-                  : "Account suspended"}
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Service request creation unlocks once an ElkaTech administrator activates
-              your account. We&apos;ll have you up and running shortly.
-            </p>
-          </div>
-        </header>
+      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+        <PageHero
+          icon={ShieldCheck}
+          title={
+            session.user.approvalStatus === "pending_approval"
+              ? "Waiting for admin approval"
+              : session.user.approvalStatus === "rejected"
+                ? "Account not approved"
+                : "Account suspended"
+          }
+          description="Service request creation unlocks once an ElkaTech administrator activates your account. We'll have you up and running shortly."
+        />
 
         <ApprovalStateCard
           status={session.user.approvalStatus}
           showBackToRequests={false}
         />
 
-        <Button
-          asChild
-          variant="outline"
-          className={cn(
-            "h-11 w-fit rounded-full px-5",
-            "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-            "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-          )}
-        >
-          <Link to="/app/requests">
-            <ArrowLeft className="h-4 w-4" />
-            Back to requests
-          </Link>
-        </Button>
+        <BackToRequests />
       </div>
     );
   }
@@ -289,174 +323,71 @@ const RequestNewPage = () => {
 
   if (unverifiedUser) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-6 overflow-x-hidden">
-        <header className={cn(
-          "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
-          "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
-        )}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%)]" />
-          <div className="relative min-w-0">
-            <div className="mb-5 flex items-center gap-3">
-              <div className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
-            </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white">
-              Verify your email first
-            </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-              For your account&apos;s security, service requests can only be created once your
-              email address is verified. It takes less than a minute.
-            </p>
-          </div>
-        </header>
+      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+        <PageHero
+          icon={ShieldCheck}
+          title="Verify your email first"
+          description="For your account's security, service requests can only be created once your email address is verified. It takes less than a minute."
+        />
 
         <VerifyEmailNotice email={unverifiedUser.email} />
 
-        <Button
-          asChild
-          variant="outline"
-          className={cn(
-            "h-11 w-fit rounded-full px-5",
-            "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-            "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-          )}
-        >
-          <Link to="/app/requests">
-            <ArrowLeft className="h-4 w-4" />
-            Back to requests
-          </Link>
-        </Button>
+        <BackToRequests />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-7xl min-w-0 space-y-8 overflow-x-hidden">
+    <div className="mx-auto max-w-7xl min-w-0 space-y-4 overflow-x-hidden">
       {/* ── Page header ──────────────────────────────────────────────────────── */}
-      <header className={cn(
-        "relative min-w-0 overflow-hidden rounded-3xl border p-6 shadow-[0_24px_80px_rgba(0,0,0,0.08)] backdrop-blur-xl sm:p-8",
-        "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/80 dark:shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
-      )}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.07),transparent_34%),radial-gradient(circle_at_92%_20%,rgba(16,185,129,0.05),transparent_30%)] dark:bg-[radial-gradient(circle_at_16%_0%,rgba(59,130,246,0.18),transparent_34%),radial-gradient(circle_at_92%_20%,rgba(16,185,129,0.12),transparent_30%)]" />
-        <div className="relative flex min-w-0 flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0 max-w-3xl">
-            <div className="mb-5 flex items-center gap-3">
-              <div className={cn(
-                "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
-                <Wrench className="h-5 w-5" />
-              </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">Create Request</p>
-            </div>
-            <h1 className="font-display text-3xl font-bold leading-tight text-slate-900 dark:text-white sm:text-4xl">
-              Request service support
-            </h1>
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400 sm:text-base">
-              Tell us what machine needs attention and what problem you are facing. Our team will use this information
-              to triage your request.
-            </p>
-          </div>
-          <div className={cn(
-            "w-fit max-w-full rounded-full border px-4 py-2 text-sm font-medium",
-            "border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300",
-          )}>
-            Support team review
-          </div>
-        </div>
-      </header>
+      <PageHero
+        icon={Wrench}
+        title="Create service request"
+        description="Tell us the machine, issue, and best contact details."
+      />
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.95fr)_minmax(320px,1fr)]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.95fr)_minmax(280px,1fr)]">
         {/* ── Form card ──────────────────────────────────────────────────────── */}
         <form
-          className={cn(
-            "min-w-0 overflow-hidden rounded-3xl border shadow-[0_24px_80px_rgba(0,0,0,0.06)] backdrop-blur-xl",
-            "border-slate-200 bg-white dark:border-white/10 dark:bg-[#0b1626]/85 dark:shadow-[0_24px_80px_rgba(0,0,0,0.25)]",
-          )}
+          className={cn("min-w-0 overflow-hidden rounded-2xl border", cardSurface)}
           onSubmit={(event) => {
             event.preventDefault();
             mutation.mutate();
           }}
         >
-          {/* Form header */}
-          <div className="flex min-w-0 flex-col gap-4 px-5 py-6 sm:px-7 lg:flex-row lg:items-start lg:justify-between lg:px-8">
-            <div className="min-w-0">
-              <div className={cn(
-                "mb-3 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]",
-                "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300",
-              )}>
-                <ClipboardCheck className="h-3.5 w-3.5" />
-                Required details
-              </div>
-              <h2 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">Service details</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-                Choose the affected product and describe the issue clearly.
-              </p>
-            </div>
-            <Button
-              asChild
-              variant="outline"
-              className={cn(
-                "h-10 w-fit rounded-full px-4",
-                "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-              )}
-            >
-              <Link to="/app/requests">
-                <ArrowLeft className="h-4 w-4" />
-                Back to requests
-              </Link>
-            </Button>
-          </div>
-
           {/* Error banner */}
           {mutation.isError && (
-            <div className={cn(
-              "mx-5 mb-2 rounded-2xl border p-4 text-sm sm:mx-7 lg:mx-8",
-              "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-100",
-            )}>
+            <div className="mx-5 mb-2 mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3.5 text-sm text-rose-600 dark:text-rose-100 sm:mx-6 lg:mx-7">
               <div className="flex gap-3">
                 <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500 dark:text-rose-300" />
                 <div>
                   <p className="font-semibold">We couldn't create the request.</p>
-                  <p className="mt-1 text-rose-600/75 dark:text-rose-100/75">Please check the details and try again.</p>
+                  <p className="mt-1 opacity-75">Please check the details and try again.</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Section: Machine information */}
+          {/* Section: Machine details */}
           <FormSection
             icon={PackageCheck}
-            title="Machine information"
-            description="Select the product and provide any machine identifiers that can help us locate the issue faster."
+            title="Machine details"
+            description="Select the affected product and add location details."
           >
             {productsQuery.isError && (
-              <div className={cn(
-                "mb-5 rounded-2xl border p-4 text-sm",
-                "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-300/20 dark:bg-amber-300/10 dark:text-amber-50",
-              )}>
+              <div className="mb-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-700 dark:text-amber-50">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex gap-3">
                     <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 dark:text-amber-200" />
                     <div>
                       <p className="font-semibold">Unable to load products</p>
-                      <p className="mt-1 text-amber-700/70 dark:text-amber-50/70">Try again before selecting the affected machine.</p>
+                      <p className="mt-1 opacity-70">Try again before selecting the affected machine.</p>
                     </div>
                   </div>
                   <Button
                     type="button"
                     variant="outline"
-                    className={cn(
-                      "h-10 rounded-xl",
-                      "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200",
-                      "dark:border-amber-200/20 dark:bg-amber-200/10 dark:text-amber-50 dark:hover:bg-amber-200/15 dark:hover:text-white",
-                    )}
+                    className="h-10 rounded-xl border-amber-400/40 bg-amber-400/15 text-amber-700 hover:bg-amber-400/25 dark:text-amber-50"
                     onClick={() => productsQuery.refetch()}
                     disabled={productsQuery.isFetching}
                   >
@@ -467,15 +398,11 @@ const RequestNewPage = () => {
               </div>
             )}
 
-            <div className="grid min-w-0 gap-5 md:grid-cols-2">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
               <Field
                 label="Product"
                 required
-                helper={
-                  selectedProduct
-                    ? "This product will be attached to the service request."
-                    : "Choose the affected machine or product."
-                }
+                helper={selectedProduct ? "Attached to this service request." : undefined}
                 className="md:col-span-2"
               >
                 <Select
@@ -488,7 +415,7 @@ const RequestNewPage = () => {
                   </SelectTrigger>
                   <SelectContent className={selectContentClassName}>
                     {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id} className="rounded-xl py-2.5 text-sm">
+                      <SelectItem key={product.id} value={product.id} className={selectItemClassName}>
                         <span className="block truncate">{product.name}</span>
                       </SelectItem>
                     ))}
@@ -497,61 +424,53 @@ const RequestNewPage = () => {
               </Field>
 
               {selectedProduct && (
-                <div className={cn(
-                  "min-w-0 rounded-2xl border p-4 md:col-span-2",
-                  "border-blue-200 bg-blue-50 dark:border-blue-400/15 dark:bg-blue-500/[0.08]",
-                )}>
-                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex min-w-0 gap-3">
-                      <div className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border",
-                        "border-blue-200 bg-blue-100 text-blue-600 dark:border-blue-300/20 dark:bg-blue-300/10 dark:text-blue-200",
-                      )}>
-                        <PackageCheck className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-200">
-                          Selected product
-                        </p>
-                        <p className="mt-1 break-words font-medium text-slate-900 dark:text-white">{selectedProduct.name}</p>
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          Category: {formatCategorySlug(selectedProduct.categorySlug)}
-                        </p>
-                      </div>
+                <div className="min-w-0 rounded-xl border border-[var(--lp-accent)]/25 bg-[var(--lp-accent)]/[0.07] p-3 md:col-span-2">
+                  <div className="flex min-w-0 gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/15 text-[var(--lp-accent)]">
+                      <PackageCheck className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
+                        Selected product
+                      </p>
+                      <p className="mt-0.5 break-words text-sm font-medium text-[var(--lp-ink)]">{selectedProduct.name}</p>
+                      <p className="mt-0.5 text-xs text-[var(--lp-faint)]">
+                        {formatCategorySlug(selectedProduct.categorySlug)}
+                      </p>
                     </div>
                   </div>
                 </div>
               )}
 
-              <Field label="Serial Number" helper="Optional machine serial number.">
+              <Field label="Serial Number">
                 <Input
                   value={form.serialNumber}
                   onChange={(event) => setForm((current) => ({ ...current, serialNumber: event.target.value }))}
-                  placeholder="Optional machine serial number"
+                  placeholder="Optional serial number"
                   className={inputClassName}
                 />
               </Field>
 
-              <Field label="Site Location" required helper="Workshop, branch, or machine location.">
+              <Field label="Site Location" required helper="Workshop, branch, or city.">
                 <Input
                   required
                   value={form.siteLocation}
                   onChange={(event) => setForm((current) => ({ ...current, siteLocation: event.target.value }))}
-                  placeholder="Workshop / branch / machine location"
+                  placeholder="Workshop / branch / city"
                   className={inputClassName}
                 />
               </Field>
             </div>
           </FormSection>
 
-          {/* Section: Issue information */}
+          {/* Section: Issue details */}
           <FormSection
             icon={Sparkles}
-            title="Issue information"
-            description="Summarize the problem and include what you already tried."
+            title="Issue details"
+            description="Describe what happened and when it started."
           >
-            <div className="grid min-w-0 gap-5 md:grid-cols-2">
-              <Field label="Priority" required helper="Choose urgent only for issues blocking active production.">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
+              <Field label="Priority" required helper="Use urgent only for blocked production.">
                 <Select
                   value={form.priority}
                   onValueChange={(value) => setForm((current) => ({ ...current, priority: value as RequestPriority }))}
@@ -561,7 +480,7 @@ const RequestNewPage = () => {
                   </SelectTrigger>
                   <SelectContent className={selectContentClassName}>
                     {priorityOptions.map((priority) => (
-                      <SelectItem key={priority.value} value={priority.value} className="rounded-xl py-2.5">
+                      <SelectItem key={priority.value} value={priority.value} className={selectItemClassName}>
                         {priority.label}
                       </SelectItem>
                     ))}
@@ -569,12 +488,12 @@ const RequestNewPage = () => {
                 </Select>
               </Field>
 
-              <Field label="Subject" required helper="Use a short summary that is easy to scan.">
+              <Field label="Subject" required helper="Short, scannable summary.">
                 <Input
                   required
                   value={form.subject}
                   onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
-                  placeholder="Short summary, e.g. Printer not feeding media"
+                  placeholder="Short issue summary"
                   className={inputClassName}
                 />
               </Field>
@@ -585,26 +504,26 @@ const RequestNewPage = () => {
                   rows={7}
                   value={form.description}
                   onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  placeholder="Example: Printer stops feeding media after 10-15 minutes. We checked the rollers and restarted the machine, but the issue returns."
-                  className={cn(inputClassName, "min-h-[170px] resize-y py-4")}
+                  placeholder="Describe the problem, when it started, and what you already tried."
+                  className={cn(inputClassName, "min-h-[130px] resize-y py-3")}
                 />
               </Field>
             </div>
           </FormSection>
 
-          {/* Section: Contact details */}
+          {/* Section: Contact */}
           <FormSection
             icon={Phone}
-            title="Contact details"
-            description="Add the best phone number for follow-up if our team needs clarification."
+            title="Contact"
+            description="Add the best phone number for follow-up."
           >
-            <div className="grid min-w-0 gap-5 md:grid-cols-2">
-              <Field label="Contact Phone" required helper="Use the number your team can answer during service follow-up.">
+            <div className="grid min-w-0 gap-4 md:grid-cols-2">
+              <Field label="Contact Phone" required helper="Best number during service hours.">
                 <Input
                   required
                   value={form.contactPhone}
                   onChange={(event) => setForm((current) => ({ ...current, contactPhone: event.target.value }))}
-                  placeholder="+91 98765 43210"
+                  placeholder="Best follow-up number"
                   className={inputClassName}
                 />
               </Field>
@@ -612,30 +531,22 @@ const RequestNewPage = () => {
           </FormSection>
 
           {/* Form footer / submit */}
-          <div className={cn(
-            "flex min-w-0 flex-col gap-4 border-t px-5 py-5 sm:px-7 md:flex-row md:items-center md:justify-between lg:px-8",
-            "border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-[#07111f]/70",
-          )}>
-            <div className="flex items-start gap-3 text-sm text-slate-500 dark:text-slate-400">
-              <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500 dark:text-emerald-300" />
-              <span>Your request will be saved to the service portal.</span>
+          <div className="flex min-w-0 flex-col gap-3 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-4 sm:px-6 md:flex-row md:flex-wrap md:items-center md:justify-between lg:px-7">
+            <div className="flex min-w-0 items-center gap-2.5 text-xs text-[var(--lp-ink-soft)]">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
+              <span className="min-w-0">Saved to the service portal on submit.</span>
             </div>
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex shrink-0 flex-col gap-2.5 sm:flex-row sm:items-center">
               <Button
                 asChild
                 variant="outline"
-                className={cn(
-                  "h-12 rounded-2xl px-5",
-                  "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                  "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-                )}
+                className="h-10 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-5 text-sm text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-ink)]"
               >
                 <Link to="/app/requests">Cancel</Link>
               </Button>
               <Button
                 type="submit"
-                size="lg"
-                className="h-12 rounded-2xl bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700"
+                className="h-10 rounded-full bg-[var(--lp-accent)] px-5 text-sm font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
                 disabled={mutation.isPending}
               >
                 {mutation.isPending ? (
@@ -656,16 +567,15 @@ const RequestNewPage = () => {
         </form>
 
         {/* ── Guidance sidebar ────────────────────────────────────────────────── */}
-        <div className="space-y-5 lg:sticky lg:top-28 lg:self-start">
+        <div className="space-y-3 lg:sticky lg:top-24 lg:self-start">
           <GuidancePanel
             icon={ClipboardCheck}
-            title="What to include"
-            description="Clear details help the service team route your request."
+            title="Before you submit"
             items={[
-              "Machine model or selected product",
-              "Short issue summary",
-              "When the issue started",
-              "Any troubleshooting already tried",
+              "Select the correct machine or product.",
+              "Add the site location.",
+              "Describe the issue and what you already tried.",
+              "Include the best phone number for follow-up.",
             ]}
           />
           <GuidancePanel
@@ -673,33 +583,12 @@ const RequestNewPage = () => {
             title="What happens next"
             accent="emerald"
             items={[
-              "Request submitted to the portal",
-              "Team reviews the details",
-              "You receive updates in the portal",
-              "Engineer or admin follows up if needed",
+              "Your request is saved in the portal.",
+              "The support team reviews it.",
+              "Updates appear in the request thread.",
+              "An engineer or admin follows up.",
             ]}
           />
-          <GuidancePanel
-            icon={Headphones}
-            title="Need help?"
-            description="Keep the request factual and include the best follow-up number."
-            items={[
-              "Use priority to signal production impact",
-              "Add location details for the affected machine",
-              "Return to the portal to track updates",
-            ]}
-          />
-          <div className={cn(
-            "rounded-3xl border p-5 text-sm leading-6",
-            "border-slate-200 bg-white text-slate-500 dark:border-white/10 dark:bg-[#07111f]/75 dark:text-slate-400",
-          )}>
-            <div className="mb-3 flex items-center gap-2 font-medium text-slate-700 dark:text-slate-200">
-              <HelpCircle className="h-4 w-4 text-blue-500 dark:text-blue-300" />
-              Request quality check
-            </div>
-            A concise subject, accurate product, and clear troubleshooting notes help the team understand the issue
-            before follow-up.
-          </div>
         </div>
       </div>
     </div>

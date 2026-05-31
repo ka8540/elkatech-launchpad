@@ -65,6 +65,31 @@ async function findUserById(userId: string): Promise<UserRow | null> {
   return rows[0] ?? null;
 }
 
+// Detect whether migration 005 (auth.users.removed_at) has been applied on
+// the connected database. Probed once and cached so subsequent calls are
+// free. Lets the service work cleanly on un-migrated databases (the
+// remove-user flow degrades to plain suspend instead of crashing).
+let removedAtColumnPromise: Promise<boolean> | null = null;
+async function hasRemovedAtColumn(): Promise<boolean> {
+  if (!removedAtColumnPromise) {
+    removedAtColumnPromise = (async () => {
+      const rows = await sql<{ exists: boolean }[]>`
+        select true as exists
+        from information_schema.columns
+        where table_schema = 'auth'
+          and table_name = 'users'
+          and column_name = 'removed_at'
+        limit 1
+      `;
+      return rows.length > 0;
+    })().catch((error) => {
+      removedAtColumnPromise = null;
+      throw error;
+    });
+  }
+  return removedAtColumnPromise;
+}
+
 // Best-effort tagging of how the account was created. Wrapped in a guard so
 // that the auth service still works on databases that haven't had migration
 // 004 applied yet — Postgres error code 42703 ("undefined column") is the
@@ -530,18 +555,32 @@ app.get("/internal/users", async (request, reply) => {
   });
   const query = querySchema.parse(request.query);
 
-  const rows = query.role
-    ? await sql<UserRow[]>`
-        select *
-        from auth.users
-        where role = ${query.role}
-        order by created_at desc
-      `
-    : await sql<UserRow[]>`
-        select *
-        from auth.users
-        order by created_at desc
-      `;
+  // Use removed_at as a soft-delete marker when migration 005 is in place.
+  // On databases without the column we still return the full list — the
+  // admin page is never broken by an un-migrated environment.
+  const supportsRemovedAt = await hasRemovedAtColumn();
+  let rows: UserRow[];
+  if (supportsRemovedAt) {
+    rows = query.role
+      ? await sql<UserRow[]>`
+          select * from auth.users
+          where role = ${query.role} and removed_at is null
+          order by created_at desc
+        `
+      : await sql<UserRow[]>`
+          select * from auth.users
+          where removed_at is null
+          order by created_at desc
+        `;
+  } else {
+    rows = query.role
+      ? await sql<UserRow[]>`
+          select * from auth.users where role = ${query.role} order by created_at desc
+        `
+      : await sql<UserRow[]>`
+          select * from auth.users order by created_at desc
+        `;
+  }
 
   return rows.map(mapUser);
 });
@@ -1181,19 +1220,36 @@ app.delete("/internal/users/:id", async (request, reply) => {
     }
   }
 
+  // Probe BEFORE entering the transaction — a failed statement inside
+  // `sql.begin` aborts the whole tx in Postgres, so an in-tx fallback is
+  // unsafe. Doing the column check first lets us pick the right UPDATE
+  // up front.
+  const supportsRemovedAt = await hasRemovedAtColumn();
   await sql.begin(async (tx) => {
-    await tx`
-      update auth.users
-      set approval_status = 'suspended',
-          suspended_at = now(),
-          suspended_by = ${actor},
-          updated_at = now()
-      where id = ${user.id}
-    `;
+    if (supportsRemovedAt) {
+      await tx`
+        update auth.users
+        set approval_status = 'suspended',
+            suspended_at = now(),
+            suspended_by = ${actor},
+            removed_at = now(),
+            removed_by = ${actor},
+            updated_at = now()
+        where id = ${user.id}
+      `;
+    } else {
+      await tx`
+        update auth.users
+        set approval_status = 'suspended',
+            suspended_at = now(),
+            suspended_by = ${actor},
+            updated_at = now()
+        where id = ${user.id}
+      `;
+    }
     await tx`delete from auth.sessions where user_id = ${user.id}`;
   });
-  const updated = await findUserById(user.id);
-  return reply.send({ user: updated ? mapUser(updated) : null });
+  return reply.send({ user: null });
 });
 
 // Health: counts for admin dashboard.
@@ -1202,30 +1258,42 @@ app.get("/internal/users/summary", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
 
-  const [rows] = await sql<
-    Array<{
-      pending_approval: string;
-      approved: string;
-      rejected: string;
-      suspended: string;
-      total: string;
-    }>
-  >`
-    select
-      count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-      count(*) filter (where approval_status = 'approved')         as approved,
-      count(*) filter (where approval_status = 'rejected')         as rejected,
-      count(*) filter (where approval_status = 'suspended')        as suspended,
-      count(*)                                                     as total
-    from auth.users
-  `;
+  type SummaryRow = {
+    pending_approval: string;
+    approved: string;
+    rejected: string;
+    suspended: string;
+    total: string;
+  };
+  const supportsRemovedAt = await hasRemovedAtColumn();
+  const rows = supportsRemovedAt
+    ? await sql<SummaryRow[]>`
+        select
+          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where approval_status = 'approved')         as approved,
+          count(*) filter (where approval_status = 'rejected')         as rejected,
+          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*)                                                     as total
+        from auth.users
+        where removed_at is null
+      `
+    : await sql<SummaryRow[]>`
+        select
+          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where approval_status = 'approved')         as approved,
+          count(*) filter (where approval_status = 'rejected')         as rejected,
+          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*)                                                     as total
+        from auth.users
+      `;
+  const [summary] = rows;
 
   return {
-    pendingApproval: Number(rows.pending_approval ?? 0),
-    approved: Number(rows.approved ?? 0),
-    rejected: Number(rows.rejected ?? 0),
-    suspended: Number(rows.suspended ?? 0),
-    total: Number(rows.total ?? 0),
+    pendingApproval: Number(summary?.pending_approval ?? 0),
+    approved: Number(summary?.approved ?? 0),
+    rejected: Number(summary?.rejected ?? 0),
+    suspended: Number(summary?.suspended ?? 0),
+    total: Number(summary?.total ?? 0),
   };
 });
 

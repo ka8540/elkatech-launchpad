@@ -1,9 +1,15 @@
 import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import type { ServiceRequest } from "@elkatech/contracts";
+import type { RequestStatusGroup, ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
-import StatusBadge from "@/components/StatusBadge";
+import {
+  getRequestStatusGroup,
+  getRequestStatusLabel,
+  REQUEST_STATUS_BADGE_CLASSES,
+} from "@/lib/request-status";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
 import { Button } from "@/components/ui/button";
@@ -11,17 +17,75 @@ import { cn } from "@/lib/utils";
 import {
   AlertCircle,
   ArrowRight,
+  Archive,
   CheckCircle2,
   ClipboardList,
   ExternalLink,
   Inbox,
   LifeBuoy,
-  Loader2,
   Package2,
   Plus,
   RefreshCw,
+  Search,
   Wrench,
 } from "lucide-react";
+
+type DashboardFilter = Extract<
+  RequestStatusGroup,
+  "all" | "open" | "in_progress" | "resolved" | "archived"
+>;
+
+const dashboardFilters: Array<{
+  value: DashboardFilter;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "all",
+    label: "All",
+    description: "Active service requests across open, in-progress, pending, and resolved states.",
+  },
+  {
+    value: "open",
+    label: "Open",
+    description: "New and triaged service requests waiting for the next action.",
+  },
+  {
+    value: "in_progress",
+    label: "In Progress",
+    description: "Assigned, active, or waiting service requests being handled by the team.",
+  },
+  {
+    value: "resolved",
+    label: "Resolved",
+    description: "Finished service requests that remain visible in the active dashboard.",
+  },
+  {
+    value: "archived",
+    label: "Archived",
+    description: "Cancelled or archived service requests kept for history.",
+  },
+];
+
+function normalizeDashboardFilter(value: string | null): DashboardFilter {
+  return dashboardFilters.some((filter) => filter.value === value)
+    ? (value as DashboardFilter)
+    : "all";
+}
+
+function matchesDashboardFilter(request: ServiceRequest, filter: DashboardFilter) {
+  if (filter === "all") return request.status !== "closed";
+  if (filter === "archived") return request.status === "closed";
+  if (filter === "resolved") return request.status === "resolved";
+  if (filter === "open") {
+    return request.status === "new" || request.status === "triaged";
+  }
+  return (
+    request.status === "assigned" ||
+    request.status === "in_progress" ||
+    request.status === "waiting_for_customer"
+  );
+}
 
 /* ─── helper: format date ──────────────────────────────────────────────────── */
 function fmtDate(iso: string) {
@@ -32,23 +96,12 @@ function fmtDate(iso: string) {
   });
 }
 
-/* ─── Status color mapping ─────────────────────────────────────────────────── */
-const statusColors: Record<string, string> = {
-  new: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-300",
-  triaged: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-300",
-  assigned: "border-cyan-300 bg-cyan-50 text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-500/10 dark:text-cyan-300",
-  in_progress: "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300",
-  waiting_for_customer: "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-400/30 dark:bg-orange-500/10 dark:text-orange-300",
-  resolved: "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300",
-  closed: "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-};
-
 /* ─── Priority badge ───────────────────────────────────────────────────────── */
 const priorityColors: Record<string, string> = {
-  low: "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-  normal: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-  high: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-300",
-  urgent: "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300",
+  low: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
+  normal: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
+  high: "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+  urgent: "border-rose-400/35 bg-rose-400/10 text-rose-600 dark:text-rose-300",
 };
 
 /* ─── Skeleton shimmer ─────────────────────────────────────────────────────── */
@@ -56,12 +109,15 @@ function Skeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded-xl bg-slate-200 dark:bg-white/[0.05]",
+        "animate-pulse rounded-xl bg-[var(--lp-panel-2)]",
         className,
       )}
     />
   );
 }
+
+/* ─── Matte card surface (shared utility — see index.css `.lp-card`) ──────── */
+const cardSurface = "lp-card border";
 
 /* ─── Stat card ────────────────────────────────────────────────────────────── */
 function StatCard({
@@ -69,101 +125,86 @@ function StatCard({
   count,
   icon: Icon,
   accent,
+  active = false,
+  onClick,
 }: {
   label: string;
   count: number;
   icon: React.ComponentType<{ className?: string }>;
-  accent: "blue" | "emerald" | "amber" | "slate";
+  accent: "copper" | "emerald" | "amber" | "steel";
+  active?: boolean;
+  onClick?: () => void;
 }) {
-  const accentMap = {
-    blue: {
-      badge: "border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-      glow: "from-blue-500/5 to-transparent",
-      count: "text-blue-700 dark:text-blue-100",
-    },
-    emerald: {
-      badge: "border-emerald-300 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-      glow: "from-emerald-500/5 to-transparent",
-      count: "text-emerald-700 dark:text-emerald-100",
-    },
-    amber: {
-      badge: "border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300",
-      glow: "from-amber-500/5 to-transparent",
-      count: "text-amber-700 dark:text-amber-100",
-    },
-    slate: {
-      badge: "border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-      glow: "from-slate-500/5 to-transparent",
-      count: "text-slate-700 dark:text-slate-200",
-    },
+  const badgeMap = {
+    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
+    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
+    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
   };
 
-  const c = accentMap[accent];
-
   return (
-    <div className={cn(
-      "relative overflow-hidden rounded-2xl border p-5 transition-colors duration-150",
-      "border-slate-200 bg-white hover:border-slate-300",
-      "dark:border-white/[0.08] dark:bg-[#0b1626]/80 dark:hover:border-white/[0.14] dark:backdrop-blur-sm",
-    )}>
-      <div
-        className={cn(
-          "absolute inset-0 bg-gradient-to-br opacity-60",
-          c.glow,
-        )}
-      />
-      <div className="relative flex items-start justify-between gap-3">
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "group relative w-full overflow-hidden rounded-xl p-4 text-left transition-colors duration-150",
+        cardSurface,
+        "hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
+        active && "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/[0.08]",
+      )}
+    >
+      <div className="relative flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+          <p className="lp-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
             {label}
           </p>
-          <p className={cn("mt-2 font-display text-4xl font-bold", c.count)}>
+          <p className="lp-display mt-1.5 text-3xl font-bold text-[var(--lp-ink)]">
             {count}
           </p>
         </div>
         <div
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-            c.badge,
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
+            badgeMap[accent],
           )}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className="h-4 w-4" />
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
 /* ─── Loading skeleton ─────────────────────────────────────────────────────── */
 function LoadingSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-4">
       {/* Header skeleton */}
-      <div className={cn(
-        "rounded-3xl border p-6 sm:p-8",
-        "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80",
-      )}>
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-8 w-72" />
-            <Skeleton className="h-4 w-96" />
+      <div className={cn("rounded-2xl p-5 sm:p-6", cardSurface)}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-2.5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-7 w-56" />
+            <Skeleton className="h-3.5 w-80" />
           </div>
-          <Skeleton className="h-11 w-48 rounded-full" />
+          <Skeleton className="h-10 w-44 rounded-full" />
         </div>
       </div>
 
       {/* Stat skeletons */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-[100px] rounded-2xl" />
+          <Skeleton key={i} className="h-[76px] rounded-xl" />
         ))}
       </div>
 
+      {/* Filter skeleton */}
+      <Skeleton className="h-[52px] rounded-xl" />
+
       {/* List skeletons */}
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-[88px] rounded-2xl" />
+          <Skeleton key={i} className="h-[76px] rounded-2xl" />
         ))}
       </div>
     </div>
@@ -171,59 +212,48 @@ function LoadingSkeleton() {
 }
 
 /* ─── Premium empty state ──────────────────────────────────────────────────── */
-function EmptyState() {
+function EmptyState({
+  title = "No service requests yet",
+  description = "Create your first request to get support for a machine, installation, maintenance, or troubleshooting issue.",
+}: {
+  title?: string;
+  description?: string;
+}) {
   return (
-    <div className={cn(
-      "relative overflow-hidden rounded-3xl border",
-      "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80 dark:backdrop-blur-sm",
-    )}>
-      {/* Subtle grid pattern */}
+    <div className={cn("relative overflow-hidden rounded-3xl", cardSurface)}>
+      {/* Very subtle blueprint grid only — no copper glow */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-40"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.22]"
         style={{
-          backgroundImage:
-            "linear-gradient(rgba(148,163,184,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.07) 1px, transparent 1px)",
-          backgroundSize: "32px 32px",
+          maskImage: "radial-gradient(ellipse at 50% 35%, black 30%, transparent 80%)",
+          WebkitMaskImage: "radial-gradient(ellipse at 50% 35%, black 30%, transparent 80%)",
         }}
       />
-      {/* Radial glow */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(59,130,246,0.06),transparent_55%),radial-gradient(circle_at_70%_80%,rgba(16,185,129,0.04),transparent_40%)]" />
 
-      <div className="relative flex flex-col items-center px-6 py-20 text-center sm:py-24">
+      <div className="relative flex flex-col items-center px-6 py-10 text-center">
         {/* Icon cluster */}
-        <div className="relative mb-8">
-          <div className={cn(
-            "flex h-20 w-20 items-center justify-center rounded-3xl border shadow-[0_0_40px_rgba(59,130,246,0.10)]",
-            "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-          )}>
-            <ClipboardList className="h-9 w-9" />
+        <div className="relative mb-5">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+            <ClipboardList className="h-6 w-6" />
           </div>
-          <div className={cn(
-            "absolute -right-3 -top-2 flex h-9 w-9 items-center justify-center rounded-2xl border",
-            "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-          )}>
-            <Wrench className="h-4 w-4" />
+          <div className="absolute -right-2 -top-1.5 flex h-7 w-7 items-center justify-center rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)]">
+            <Wrench className="h-3.5 w-3.5" />
           </div>
-          <div className={cn(
-            "absolute -bottom-1 -left-3 flex h-8 w-8 items-center justify-center rounded-xl border",
-            "border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-          )}>
-            <LifeBuoy className="h-4 w-4" />
+          <div className="absolute -bottom-1 -left-2 flex h-6 w-6 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-faint)]">
+            <LifeBuoy className="h-3 w-3" />
           </div>
         </div>
 
-        <h3 className="font-display text-2xl font-semibold text-slate-900 dark:text-white">
-          No service requests yet
-        </h3>
-        <p className="mt-3 max-w-md text-sm leading-7 text-slate-500 dark:text-slate-400">
-          Create your first request to get support for a machine, installation,
-          maintenance, or troubleshooting issue.
+        <h3 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">{title}</h3>
+        <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--lp-ink-soft)]">
+          {description}
         </p>
 
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
+        <div className="mt-6 flex flex-col items-center gap-2.5 sm:flex-row">
           <Button
             asChild
-            className="h-11 rounded-full bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700"
+            className="h-10 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]"
           >
             <Link to="/app/requests/new">
               <Plus className="mr-1.5 h-4 w-4" />
@@ -233,11 +263,7 @@ function EmptyState() {
           <Button
             asChild
             variant="outline"
-            className={cn(
-              "h-11 rounded-full px-6",
-              "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-              "dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-            )}
+            className="h-10 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-5 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
           >
             <Link to="/">
               <Package2 className="mr-1.5 h-4 w-4" />
@@ -256,50 +282,51 @@ function RequestCard({ request }: { request: ServiceRequest }) {
     <Link
       to={`/app/requests/${request.id}`}
       className={cn(
-        "group block overflow-hidden rounded-2xl border p-5 transition-all duration-150",
-        "border-slate-200 bg-white hover:border-blue-300 hover:shadow-[0_4px_16px_rgba(59,130,246,0.08)]",
-        "dark:border-white/[0.07] dark:bg-[#0b1626]/70 dark:backdrop-blur-sm dark:hover:border-blue-400/20 dark:hover:bg-[#0d1c30]/80 dark:hover:shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_8px_32px_rgba(0,0,0,0.18)]",
+        "group block overflow-hidden rounded-2xl p-5 transition-colors duration-150",
+        cardSurface,
+        "hover:border-[var(--lp-accent)]/45",
       )}
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            <span className="lp-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
               {request.requestNumber}
             </span>
             <span
               className={cn(
                 "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                statusColors[request.status] ?? "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
+                REQUEST_STATUS_BADGE_CLASSES[request.status] ??
+                  "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
               )}
             >
-              {request.status.replace(/_/g, " ")}
+              {getRequestStatusLabel(request.status)}
             </span>
             <span
               className={cn(
                 "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                priorityColors[request.priority] ?? "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
+                priorityColors[request.priority] ?? "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
               )}
             >
               {request.priority}
             </span>
           </div>
-          <h3 className="truncate font-display text-[15px] font-semibold text-slate-900 group-hover:text-slate-950 dark:text-slate-100 dark:group-hover:text-white">
+          <h3 className="truncate lp-display text-[15px] font-semibold text-[var(--lp-ink)]">
             {request.subject}
           </h3>
           {request.productSnapshot?.name && (
-            <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            <p className="mt-1 text-xs text-[var(--lp-faint)]">
               {request.productSnapshot.name}
             </p>
           )}
         </div>
 
         <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end">
-          <p className="text-xs text-slate-400 dark:text-slate-600">
+          <p className="text-xs text-[var(--lp-faint)]">
             {fmtDate((request as unknown as Record<string, string>)["updatedAt"] ?? (request as unknown as Record<string, string>)["createdAt"] ?? "")}
           </p>
-          <span className="flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors group-hover:text-blue-500 dark:text-slate-500 dark:group-hover:text-blue-400">
-            View details
+          <span className="flex items-center gap-1 text-xs font-medium text-[var(--lp-faint)] transition-colors group-hover:text-[var(--lp-accent)]">
+            View conversation
             <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </span>
         </div>
@@ -311,19 +338,15 @@ function RequestCard({ request }: { request: ServiceRequest }) {
 /* ─── Error state ──────────────────────────────────────────────────────────── */
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-rose-200 bg-rose-50 px-6 py-12 text-center dark:border-rose-500/20 dark:bg-rose-500/[0.06]">
+    <div className="flex flex-col items-center rounded-2xl border border-rose-400/30 bg-rose-500/[0.07] px-6 py-12 text-center">
       <AlertCircle className="mb-4 h-10 w-10 text-rose-500 dark:text-rose-400" />
-      <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-white">
+      <h3 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">
         Could not load service requests
       </h3>
-      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Please try again.</p>
+      <p className="mt-2 text-sm text-[var(--lp-ink-soft)]">Please try again.</p>
       <Button
         variant="outline"
-        className={cn(
-          "mt-6 rounded-full",
-          "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-          "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.08]",
-        )}
+        className="mt-6 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
         onClick={onRetry}
       >
         <RefreshCw className="mr-2 h-4 w-4" />
@@ -336,9 +359,25 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 /* ─── Page ─────────────────────────────────────────────────────────────────── */
 const RequestsPage = () => {
   const { data: session } = useSession();
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["requests", "mine"],
-    queryFn: () => apiRequest<ServiceRequest[]>("/api/requests"),
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState("");
+  const activeFilter = normalizeDashboardFilter(searchParams.get("status"));
+  const filterMeta =
+    dashboardFilters.find((filter) => filter.value === activeFilter) ??
+    dashboardFilters[0];
+
+  const { data: activeData, isLoading, isError, refetch } = useQuery({
+    queryKey: ["requests", "active"],
+    queryFn: () => apiRequest<ServiceRequest[]>("/api/requests?statusGroup=all"),
+  });
+  const {
+    data: archivedData,
+    isLoading: isArchivedLoading,
+    isError: isArchivedError,
+    refetch: refetchArchived,
+  } = useQuery({
+    queryKey: ["requests", "archived"],
+    queryFn: () => apiRequest<ServiceRequest[]>("/api/requests?statusGroup=archived"),
   });
 
   const isCustomer = session?.user?.role === "customer";
@@ -351,52 +390,83 @@ const RequestsPage = () => {
       : null;
 
   /* ── Derive stats ─── */
-  const requests = data ?? [];
-  const totalCount = requests.length;
+  const activeRequests = activeData ?? [];
+  const sourceRequests = activeFilter === "archived" ? archivedData ?? [] : activeRequests;
+  const requests = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+    return sourceRequests.filter((request) => {
+      const matchesFilter = matchesDashboardFilter(request, activeFilter);
+      if (!matchesFilter) return false;
+      if (!normalizedSearch) return true;
 
-  const openStatuses = new Set(["new", "triaged"]);
-  const inProgressStatuses = new Set(["assigned", "in_progress", "waiting_for_customer"]);
-  const resolvedStatuses = new Set(["resolved", "closed"]);
+      return [
+        request.requestNumber,
+        request.subject,
+        request.description,
+        request.productSnapshot?.name,
+        request.siteLocation,
+        request.contactPhone,
+        request.serialNumber ?? "",
+      ]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => value.toLowerCase().includes(normalizedSearch));
+    });
+  }, [activeFilter, searchQuery, sourceRequests]);
+  const summaryRequests = activeRequests;
+  const totalCount = summaryRequests.length;
 
-  const openCount = requests.filter((r) => openStatuses.has(r.status)).length;
-  const inProgressCount = requests.filter((r) => inProgressStatuses.has(r.status)).length;
-  const resolvedCount = requests.filter((r) => resolvedStatuses.has(r.status)).length;
+  const openCount = summaryRequests.filter((r) => getRequestStatusGroup(r.status) === "open").length;
+  const inProgressCount = summaryRequests.filter((r) =>
+    getRequestStatusGroup(r.status) === "in_progress" || getRequestStatusGroup(r.status) === "pending"
+  ).length;
+  const resolvedCount = summaryRequests.filter((r) => getRequestStatusGroup(r.status) === "resolved").length;
+  const archivedCount = archivedData?.length ?? 0;
 
-  if (isLoading) return <LoadingSkeleton />;
+  const setFilter = (nextFilter: DashboardFilter) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextFilter === "all") {
+      nextParams.delete("status");
+    } else {
+      nextParams.set("status", nextFilter);
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  if (isLoading || (activeFilter === "archived" && isArchivedLoading)) {
+    return <LoadingSkeleton />;
+  }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      {/* ── Ambient glow (subtle in light, stronger in dark) ───────────────── */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute left-[-20%] top-[-10%] h-[600px] w-[600px] rounded-full bg-blue-500/[0.03] blur-[120px] dark:bg-blue-500/[0.04]" />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[400px] w-[400px] rounded-full bg-emerald-500/[0.03] blur-[100px] dark:bg-emerald-500/[0.04]" />
-      </div>
-
+    <div className="mx-auto max-w-5xl space-y-4">
       {/* ── Header card ───────────────────────────────────────────────────── */}
-      <header className={cn(
-        "relative overflow-hidden rounded-3xl border p-6 backdrop-blur-xl sm:p-8",
-        "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80",
-      )}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.08),transparent_32%),radial-gradient(circle_at_88%_22%,rgba(16,185,129,0.05),transparent_30%)] dark:bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.14),transparent_32%),radial-gradient(circle_at_88%_22%,rgba(16,185,129,0.09),transparent_30%)]" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <header className={cn("relative overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
+          style={{
+            maskImage: "linear-gradient(to right, black, transparent 70%)",
+            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
+          }}
+        />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="mb-4 flex items-center gap-3">
-              <div className={cn(
-                "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}>
-                <ClipboardList className="h-5 w-5" />
+            <div className="mb-3 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+                <ClipboardList className="h-4 w-4" />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600 dark:text-blue-300">
+              <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
                 Service Requests
               </p>
             </div>
-            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
-              {isCustomer ? "Your Service Requests" : "Assigned Work"}
+            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">
+              {activeFilter === "all"
+                ? isCustomer
+                  ? "Your Requests"
+                  : "Requests"
+                : `${filterMeta.label} Requests`}
             </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-7 text-slate-500 dark:text-slate-400">
-              Track your machinery service requests, updates, and support activity in
-              one place.
+            <p className="mt-1.5 max-w-xl text-sm leading-6 text-[var(--lp-ink-soft)]">
+              {filterMeta.description}
             </p>
           </div>
 
@@ -404,7 +474,7 @@ const RequestsPage = () => {
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-11 w-fit shrink-0 rounded-full bg-blue-600 px-6 font-semibold text-white shadow-sm hover:bg-blue-700",
+              "h-10 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >
@@ -433,26 +503,133 @@ const RequestsPage = () => {
       )}
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total Requests" count={totalCount} icon={ClipboardList} accent="blue" />
-        <StatCard label="Open" count={openCount} icon={Inbox} accent="amber" />
-        <StatCard label="In Progress" count={inProgressCount} icon={Wrench} accent="slate" />
-        <StatCard label="Resolved" count={resolvedCount} icon={CheckCircle2} accent="emerald" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Total Requests"
+          count={totalCount}
+          icon={ClipboardList}
+          accent="copper"
+          active={activeFilter === "all"}
+          onClick={() => setFilter("all")}
+        />
+        <StatCard
+          label="Open"
+          count={openCount}
+          icon={Inbox}
+          accent="amber"
+          active={activeFilter === "open"}
+          onClick={() => setFilter("open")}
+        />
+        <StatCard
+          label="In Progress"
+          count={inProgressCount}
+          icon={Wrench}
+          accent="steel"
+          active={activeFilter === "in_progress"}
+          onClick={() => setFilter("in_progress")}
+        />
+        <StatCard
+          label="Resolved"
+          count={resolvedCount}
+          icon={CheckCircle2}
+          accent="emerald"
+          active={activeFilter === "resolved"}
+          onClick={() => setFilter("resolved")}
+        />
       </div>
 
+      <section className={cn("rounded-xl p-3 sm:p-4", cardSurface)}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            {dashboardFilters.map((filterOption) => {
+              const active = activeFilter === filterOption.value;
+              const Icon =
+                filterOption.value === "archived"
+                  ? Archive
+                  : filterOption.value === "resolved"
+                    ? CheckCircle2
+                    : filterOption.value === "in_progress"
+                      ? Wrench
+                      : filterOption.value === "open"
+                        ? Inbox
+                        : ClipboardList;
+              const count =
+                filterOption.value === "all"
+                  ? totalCount
+                  : filterOption.value === "open"
+                    ? openCount
+                    : filterOption.value === "in_progress"
+                      ? inProgressCount
+                      : filterOption.value === "resolved"
+                        ? resolvedCount
+                        : archivedCount;
+
+              return (
+                <button
+                  key={filterOption.value}
+                  type="button"
+                  onClick={() => setFilter(filterOption.value)}
+                  className={cn(
+                    "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
+                    active
+                      ? "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
+                      : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:text-[var(--lp-ink)]",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span>{filterOption.label}</span>
+                  <span className="lp-mono text-[9px] text-[var(--lp-faint)]">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <label className="relative block min-w-0 lg:w-64">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--lp-faint)]" />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search requests"
+              className="lp-field h-8 w-full rounded-full border px-9 text-xs shadow-none ring-offset-0 focus-visible:ring-0"
+            />
+          </label>
+        </div>
+      </section>
+
       {/* ── Error state ───────────────────────────────────────────────────── */}
-      {isError && <ErrorState onRetry={() => refetch()} />}
+      {(isError || (activeFilter === "archived" && isArchivedError)) && (
+        <ErrorState
+          onRetry={() => {
+            void refetch();
+            if (activeFilter === "archived") void refetchArchived();
+          }}
+        />
+      )}
 
       {/* ── Empty or list ─────────────────────────────────────────────────── */}
-      {!isError && (
+      {!isError && !(activeFilter === "archived" && isArchivedError) && (
         <>
           {requests.length === 0 ? (
-            <EmptyState />
+            <EmptyState
+              title={
+                activeFilter === "all" && !searchQuery.trim()
+                  ? "No service requests yet"
+                  : `No ${filterMeta.label.toLowerCase()} service requests found`
+              }
+              description={
+                activeFilter === "all" && !searchQuery.trim()
+                  ? undefined
+                  : "Try another status filter or search term."
+              }
+            />
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-400 dark:text-slate-500">
-                  {requests.length} request{requests.length !== 1 ? "s" : ""}
+                <p className="lp-mono text-xs font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
+                  {requests.length} request{requests.length !== 1 ? "s" : ""} shown
                 </p>
               </div>
               {requests.map((request) => (
@@ -465,18 +642,15 @@ const RequestsPage = () => {
 
       {/* ── Help panel ────────────────────────────────────────────────────── */}
       {requests.length > 0 && (
-        <div className={cn(
-          "rounded-2xl border px-5 py-4",
-          "border-slate-200 bg-slate-50 dark:border-white/[0.06] dark:bg-[#0b1626]/60",
-        )}>
+        <div className={cn("rounded-2xl px-5 py-4 border", cardSurface)}>
           <div className="flex items-start gap-3">
-            <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
-            <div className="min-w-0 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              <span className="font-medium text-slate-700 dark:text-slate-300">Need to report a new issue?</span>{" "}
+            <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
+            <div className="min-w-0 text-sm leading-6 text-[var(--lp-ink-soft)]">
+              <span className="font-medium text-[var(--lp-ink)]">Need to report a new issue?</span>{" "}
               You can also start a request directly from a{" "}
               <Link
                 to="/"
-                className="inline-flex items-center gap-1 text-blue-500 underline-offset-2 hover:underline dark:text-blue-400"
+                className="inline-flex items-center gap-1 text-[var(--lp-accent)] underline-offset-2 hover:underline"
               >
                 product page
                 <ExternalLink className="h-3 w-3" />

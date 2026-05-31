@@ -60760,6 +60760,15 @@ var createServiceRequestInputSchema = external_exports.object({
   serialNumber: external_exports.string().optional(),
   priority: requestPrioritySchema.default("normal")
 });
+var updateServiceRequestInputSchema = external_exports.object({
+  subject: external_exports.string().trim().min(4).optional(),
+  description: external_exports.string().trim().min(10).optional(),
+  contactPhone: external_exports.string().trim().min(7).optional(),
+  siteLocation: external_exports.string().trim().min(2).optional(),
+  serialNumber: external_exports.string().trim().max(100).nullable().optional()
+}).refine((input) => Object.values(input).some((value) => value !== void 0), {
+  message: "At least one request detail must be provided."
+});
 var createRequestMessageInputSchema = external_exports.object({
   body: external_exports.string().min(1),
   visibility: messageVisibilitySchema
@@ -60768,8 +60777,21 @@ var assignRequestInputSchema = external_exports.object({
   engineerId: external_exports.string()
 });
 var updateRequestStatusInputSchema = external_exports.object({
-  status: requestStatusSchema
+  status: requestStatusSchema,
+  note: external_exports.string().max(1e3).optional(),
+  visibility: messageVisibilitySchema.optional()
 });
+var cancelRequestInputSchema = external_exports.object({
+  reason: external_exports.string().max(1e3).optional()
+});
+var requestStatusGroupSchema = external_exports.enum([
+  "all",
+  "open",
+  "in_progress",
+  "pending",
+  "resolved",
+  "archived"
+]);
 var sessionResponseSchema = external_exports.object({
   sessionToken: external_exports.string(),
   csrfToken: external_exports.string(),
@@ -63042,6 +63064,16 @@ function getDb() {
 }
 
 // packages/config/src/http.ts
+var InternalFetchError = class extends Error {
+  status;
+  body;
+  constructor(message, status, body) {
+    super(message);
+    this.name = "InternalFetchError";
+    this.status = status;
+    this.body = body;
+  }
+};
 function internalHeaders(extra = {}) {
   return {
     "content-type": "application/json",
@@ -63050,10 +63082,24 @@ function internalHeaders(extra = {}) {
   };
 }
 async function fetchJson(input, init = {}) {
-  const response = await fetch(input, init);
+  let safeInit = init;
+  if (init.body == null && init.headers) {
+    const headers = new Headers(init.headers);
+    if (headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+      headers.delete("content-type");
+      safeInit = { ...init, headers };
+    }
+  }
+  const response = await fetch(input, safeInit);
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`${response.status} ${response.statusText}: ${errorText}`);
+    let parsed = errorText;
+    try {
+      parsed = JSON.parse(errorText);
+    } catch {
+    }
+    const message = (parsed && typeof parsed === "object" && "message" in parsed ? String(parsed.message ?? "") : "") || `${response.status} ${response.statusText}`;
+    throw new InternalFetchError(message, response.status, parsed);
   }
   if (response.status === 204) {
     return void 0;
@@ -63066,13 +63112,13 @@ var import_ioredis = __toESM(require_built3(), 1);
 
 // services/service-desk/src/workflow.ts
 var statusTransitions = {
-  new: ["triaged", "assigned", "closed"],
-  triaged: ["assigned", "waiting_for_customer", "closed"],
-  assigned: ["in_progress", "waiting_for_customer", "resolved", "closed"],
-  in_progress: ["waiting_for_customer", "resolved", "closed"],
-  waiting_for_customer: ["in_progress", "resolved", "closed"],
-  resolved: ["in_progress", "closed"],
-  closed: []
+  new: ["triaged", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  triaged: ["new", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  assigned: ["new", "triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  in_progress: ["new", "triaged", "waiting_for_customer", "resolved", "closed"],
+  waiting_for_customer: ["new", "triaged", "assigned", "in_progress", "resolved", "closed"],
+  resolved: ["new", "in_progress", "closed"],
+  closed: ["new"]
 };
 function canViewRequest(actor, request) {
   if (actor.role === "admin") {
@@ -63114,7 +63160,22 @@ function canUpdateRequestStatus(actor, request) {
   if (actor.role !== "engineer") {
     return false;
   }
+  if (request.status === "closed") {
+    return false;
+  }
   return request.assignedEngineerId === actor.id;
+}
+function canEditRequestDetails(actor, request) {
+  if (request.status === "closed") {
+    return false;
+  }
+  if (actor.role === "admin") {
+    return true;
+  }
+  if (actor.role === "engineer") {
+    return request.assignedEngineerId === actor.id;
+  }
+  return request.customerId === actor.id && ["new", "triaged", "waiting_for_customer"].includes(request.status);
 }
 function isValidStatusTransition(current, next) {
   if (current === next) {
@@ -63171,6 +63232,35 @@ async function addHistory(requestId, actor, eventType, metadata = {}) {
 }
 function buildRequestNumber() {
   return `SRV-${Date.now().toString().slice(-8)}-${Math.floor(100 + Math.random() * 900)}`;
+}
+function statusBelongsToGroup(status, group, actorRole) {
+  if (group === "archived") return status === "closed";
+  if (group === "resolved") return status === "resolved";
+  if (group === "pending") return status === "waiting_for_customer";
+  if (group === "in_progress") return status === "assigned" || status === "in_progress";
+  if (group === "open") {
+    return status === "new" || status === "triaged" || actorRole === "customer" && status === "waiting_for_customer";
+  }
+  return status !== "closed";
+}
+function mapRequestRow(row) {
+  return serviceRequestSchema.parse({
+    id: row.id,
+    requestNumber: row.request_number,
+    customerId: row.customer_id,
+    productId: row.product_id,
+    productSnapshot: row.product_snapshot,
+    subject: row.subject,
+    description: row.description,
+    contactPhone: row.contact_phone,
+    siteLocation: row.site_location,
+    serialNumber: row.serial_number,
+    priority: row.priority,
+    status: row.status,
+    assignedEngineerId: row.assigned_engineer_id,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString()
+  });
 }
 async function getCatalogProduct(productId) {
   return fetchJson(
@@ -63276,7 +63366,8 @@ app.get("/requests", async (request, reply) => {
   }
   const actor = getUserContext(request.headers);
   const querySchema = external_exports.object({
-    scope: external_exports.enum(["mine", "queue"]).optional()
+    scope: external_exports.enum(["mine", "queue"]).optional(),
+    statusGroup: requestStatusGroupSchema.default("all")
   });
   const query = querySchema.parse(request.query);
   let rows;
@@ -63303,6 +63394,10 @@ app.get("/requests", async (request, reply) => {
       select *
       from service_desk.requests
       where assigned_engineer_id = ${actor.id}
+        or (
+          assigned_engineer_id is null
+          and status != 'closed'
+        )
       order by created_at desc
     `;
   } else {
@@ -63312,25 +63407,7 @@ app.get("/requests", async (request, reply) => {
       order by created_at desc
     `;
   }
-  return rows.map(
-    (row) => serviceRequestSchema.parse({
-      id: row.id,
-      requestNumber: row.request_number,
-      customerId: row.customer_id,
-      productId: row.product_id,
-      productSnapshot: row.product_snapshot,
-      subject: row.subject,
-      description: row.description,
-      contactPhone: row.contact_phone,
-      siteLocation: row.site_location,
-      serialNumber: row.serial_number,
-      priority: row.priority,
-      status: row.status,
-      assignedEngineerId: row.assigned_engineer_id,
-      createdAt: new Date(row.created_at).toISOString(),
-      updatedAt: new Date(row.updated_at).toISOString()
-    })
-  );
+  return rows.filter((row) => statusBelongsToGroup(row.status, query.statusGroup, actor.role)).map(mapRequestRow);
 });
 app.get("/requests/:requestId", async (request, reply) => {
   if (!ensureInternal(request.headers)) {
@@ -63414,6 +63491,64 @@ app.get("/requests/:requestId", async (request, reply) => {
       createdAt: new Date(row.created_at).toISOString()
     }))
   };
+});
+app.patch("/requests/:requestId", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  const paramsSchema = external_exports.object({ requestId: external_exports.string().uuid() });
+  const params = paramsSchema.parse(request.params);
+  const input = updateServiceRequestInputSchema.parse(request.body);
+  const rows = await sql`
+    select *
+    from service_desk.requests
+    where id = ${params.requestId}
+    limit 1
+  `;
+  const current = rows[0];
+  if (!current) {
+    return reply.code(404).send({ message: "Request not found." });
+  }
+  if (!canEditRequestDetails(toWorkflowActor(actor), {
+    customerId: current.customer_id,
+    assignedEngineerId: current.assigned_engineer_id,
+    status: current.status
+  })) {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+  const nextDetails = {
+    subject: input.subject ?? current.subject,
+    description: input.description ?? current.description,
+    contactPhone: input.contactPhone ?? current.contact_phone,
+    siteLocation: input.siteLocation ?? current.site_location,
+    serialNumber: input.serialNumber === void 0 ? current.serial_number : input.serialNumber?.trim() || null
+  };
+  const changedFields = [
+    current.subject !== nextDetails.subject ? "subject" : null,
+    current.description !== nextDetails.description ? "description" : null,
+    current.contact_phone !== nextDetails.contactPhone ? "contactPhone" : null,
+    current.site_location !== nextDetails.siteLocation ? "siteLocation" : null,
+    (current.serial_number ?? null) !== (nextDetails.serialNumber ?? null) ? "serialNumber" : null
+  ].filter((field) => Boolean(field));
+  if (changedFields.length === 0) {
+    return mapRequestRow(current);
+  }
+  const updatedRows = await sql`
+    update service_desk.requests
+    set subject = ${nextDetails.subject},
+        description = ${nextDetails.description},
+        contact_phone = ${nextDetails.contactPhone},
+        site_location = ${nextDetails.siteLocation},
+        serial_number = ${nextDetails.serialNumber},
+        updated_at = now()
+    where id = ${params.requestId}
+    returning *
+  `;
+  await addHistory(params.requestId, actor, "request_updated", {
+    fields: changedFields
+  });
+  return mapRequestRow(updatedRows[0]);
 });
 app.post("/requests/:requestId/messages", async (request, reply) => {
   if (!ensureInternal(request.headers)) {
@@ -63625,16 +63760,109 @@ app.post("/requests/:requestId/status", async (request, reply) => {
         updated_at = now()
     where id = ${params.requestId}
   `;
-  await addHistory(params.requestId, actor, "status_changed", {
-    from: current.status,
-    to: nextStatus
-  });
+  const noteBody = input.note?.trim();
+  const noteVisibility = input.visibility ?? "customer_visible";
+  if (noteBody) {
+    await sql`
+      insert into service_desk.request_messages (
+        id,
+        request_id,
+        author_id,
+        author_role,
+        visibility,
+        body
+      )
+      values (
+        ${randomUUID()},
+        ${params.requestId},
+        ${actor.id},
+        ${actor.role},
+        ${noteVisibility},
+        ${noteBody}
+      )
+    `;
+  }
+  await addHistory(
+    params.requestId,
+    actor,
+    "status_changed",
+    noteBody ? { from: current.status, to: nextStatus, noteVisibility } : { from: current.status, to: nextStatus }
+  );
   await emitOutbox("request.status_changed", params.requestId, {
     requestId: params.requestId,
     requestNumber: current.request_number,
     customerEmail: current.customer_email,
     previousStatus: current.status,
     status: nextStatus,
+    actorName: actor.displayName
+  });
+  if (noteBody && noteVisibility === "customer_visible") {
+    await emitOutbox("request.staff_reply_posted", params.requestId, {
+      requestId: params.requestId,
+      requestNumber: current.request_number,
+      customerEmail: current.customer_email,
+      body: noteBody,
+      authorName: actor.displayName
+    });
+  }
+  return { ok: true };
+});
+app.post("/requests/:requestId/cancel", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  const paramsSchema = external_exports.object({ requestId: external_exports.string().uuid() });
+  const params = paramsSchema.parse(request.params);
+  const input = cancelRequestInputSchema.parse(request.body ?? {});
+  const currentRows = await sql`
+    select *
+    from service_desk.requests
+    where id = ${params.requestId}
+    limit 1
+  `;
+  const current = currentRows[0];
+  if (!current) {
+    return reply.code(404).send({ message: "Request not found." });
+  }
+  if (current.status === "closed") {
+    return { ok: true };
+  }
+  if (actor.role === "customer") {
+    if (current.customer_id !== actor.id) {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+    if (!["new", "triaged", "waiting_for_customer"].includes(current.status)) {
+      return reply.code(400).send({
+        message: "Only open or pending requests can be cancelled by customers."
+      });
+    }
+  } else if (!canUpdateRequestStatus(toWorkflowActor(actor), {
+    customerId: current.customer_id,
+    assignedEngineerId: current.assigned_engineer_id,
+    status: current.status
+  })) {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+  await sql`
+    update service_desk.requests
+    set status = ${"closed"},
+        updated_at = now()
+    where id = ${params.requestId}
+  `;
+  const reason = input.reason?.trim();
+  await addHistory(
+    params.requestId,
+    actor,
+    actor.role === "customer" ? "request_cancelled" : "request_archived",
+    reason ? { from: current.status, to: "closed", reason } : { from: current.status, to: "closed" }
+  );
+  await emitOutbox("request.status_changed", params.requestId, {
+    requestId: params.requestId,
+    requestNumber: current.request_number,
+    customerEmail: current.customer_email,
+    previousStatus: current.status,
+    status: "closed",
     actorName: actor.displayName
   });
   return { ok: true };

@@ -158,6 +158,18 @@ export const createServiceRequestInputSchema = z.object({
   priority: requestPrioritySchema.default("normal"),
 });
 
+export const updateServiceRequestInputSchema = z
+  .object({
+    subject: z.string().trim().min(4).optional(),
+    description: z.string().trim().min(10).optional(),
+    contactPhone: z.string().trim().min(7).optional(),
+    siteLocation: z.string().trim().min(2).optional(),
+    serialNumber: z.string().trim().max(100).nullable().optional(),
+  })
+  .refine((input) => Object.values(input).some((value) => value !== undefined), {
+    message: "At least one request detail must be provided.",
+  });
+
 export const createRequestMessageInputSchema = z.object({
   body: z.string().min(1),
   visibility: messageVisibilitySchema,
@@ -169,7 +181,23 @@ export const assignRequestInputSchema = z.object({
 
 export const updateRequestStatusInputSchema = z.object({
   status: requestStatusSchema,
+  note: z.string().max(1000).optional(),
+  visibility: messageVisibilitySchema.optional(),
 });
+
+export const cancelRequestInputSchema = z.object({
+  reason: z.string().max(1000).optional(),
+});
+
+export const requestStatusGroupSchema = z.enum([
+  "all",
+  "open",
+  "in_progress",
+  "pending",
+  "resolved",
+  "archived",
+]);
+export type RequestStatusGroup = z.infer<typeof requestStatusGroupSchema>;
 
 export const sessionResponseSchema = z.object({
   sessionToken: z.string(),

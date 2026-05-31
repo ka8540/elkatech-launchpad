@@ -9,6 +9,7 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     /* Core Brand Colors */
     --background: 210 20% 98%;
     --foreground: 215 35% 10%;
@@ -79,6 +80,7 @@
   }
 
   .dark {
+    color-scheme: dark;
     --background: 215 60% 6%;
     --foreground: 210 40% 98%;
     --primary: 210 40% 98%;
@@ -470,6 +472,47 @@
     --lp-on-graphite-soft: rgba(241, 239, 233, 0.66);
     --lp-glow: rgba(219, 138, 79, 0.16);
   }
+
+  /*
+   * Re-declare the lp tokens so Radix-portaled UI (Select/Popover/Dropdown
+   * content) that lives OUTSIDE the `.lp` subtree still resolves the
+   * graphite/copper palette. Without this, var(--lp-*) collapses to invalid
+   * and portaled menus render with transparent backgrounds and the global
+   * electric-blue accent.
+   */
+  .lp-portal {
+    --lp-bg: #ece8e0;
+    --lp-bg-2: #e4dfd4;
+    --lp-panel: #fbfaf6;
+    --lp-panel-2: #f3f0e8;
+    --lp-ink: #181a1d;
+    --lp-ink-soft: #45484e;
+    --lp-faint: #6c6f76;
+    --lp-line: rgba(24, 26, 29, 0.12);
+    --lp-line-strong: rgba(24, 26, 29, 0.22);
+    --lp-accent: #ac531c;
+    --lp-accent-2: #c4743b;
+    --lp-graphite: #15171b;
+    --lp-graphite-2: #1d2026;
+    --lp-glow: rgba(172, 83, 28, 0.18);
+  }
+
+  .dark .lp-portal {
+    --lp-bg: #0b0c0e;
+    --lp-bg-2: #101216;
+    --lp-panel: #16181d;
+    --lp-panel-2: #1b1e24;
+    --lp-ink: #eceae3;
+    --lp-ink-soft: rgba(236, 234, 227, 0.74);
+    --lp-faint: rgba(236, 234, 227, 0.5);
+    --lp-line: rgba(255, 255, 255, 0.09);
+    --lp-line-strong: rgba(255, 255, 255, 0.17);
+    --lp-accent: #db8a4f;
+    --lp-accent-2: #e7a16a;
+    --lp-graphite: #08090b;
+    --lp-graphite-2: #111317;
+    --lp-glow: rgba(219, 138, 79, 0.16);
+  }
 }
 
 @layer utilities {
@@ -480,6 +523,72 @@
 
   .lp-mono {
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  /*
+   * Portal shell background — warm, theme-aware.
+   * Light: a soft ivory wash that stays in the warm palette so the page
+   *        never collapses into a jarring dark-to-white gradient.
+   * Dark:  warm graphite at the top fading to the base, with a soft copper
+   *        highlight, so the protected app pages never collapse to pure black.
+   */
+  .lp-portal-bg {
+    background:
+      radial-gradient(80% 55% at 88% -8%, color-mix(in srgb, var(--lp-accent) 5%, transparent), transparent 60%),
+      linear-gradient(180deg, var(--lp-bg-2) 0%, var(--lp-bg) 45%, var(--lp-bg) 100%);
+  }
+
+  .dark .lp-portal-bg {
+    background:
+      radial-gradient(80% 55% at 88% -8%, color-mix(in srgb, var(--lp-accent) 3%, transparent), transparent 60%),
+      linear-gradient(180deg, var(--lp-graphite-2) 0%, var(--lp-bg) 55%, var(--lp-bg) 100%);
+  }
+
+  /*
+   * Matte form-field surface. Tailwind v3 silently drops the opacity
+   * modifier on arbitrary CSS-var backgrounds with hex values
+   * (`bg-[var(--lp-panel-2)]/85` produces no rule), which combined with
+   * `tailwind-merge` stripping the shadcn default `bg-background` leaves
+   * the `<input>` with no background and falls back to the user-agent
+   * white. We use a real utility class so the surface always paints.
+   */
+  .lp-field {
+    background-color: var(--lp-panel-2);
+    border-color: var(--lp-line-strong);
+    color: var(--lp-ink);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .lp-field::placeholder {
+    color: var(--lp-faint);
+    opacity: 1;
+  }
+  .lp-field:focus,
+  .lp-field:focus-visible,
+  .lp-field[data-state="open"] {
+    outline: none;
+    border-color: var(--lp-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--lp-accent) 22%, transparent);
+  }
+  .lp-field:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  /* Neutralize browser autofill flash to white-on-white in dark mode */
+  .lp-field:-webkit-autofill {
+    -webkit-text-fill-color: var(--lp-ink);
+    box-shadow: 0 0 0 1000px var(--lp-panel-2) inset;
+    caret-color: var(--lp-ink);
+    transition: background-color 9999s ease-in-out 0s;
+  }
+
+  /*
+   * Matte card surface for portal panels. Slightly lighter than the page
+   * graphite, calm border, restrained shadow — no glow, no neon.
+   */
+  .lp-card {
+    background-color: var(--lp-panel);
+    border-color: var(--lp-line);
+    box-shadow: 0 14px 36px -28px rgba(0, 0, 0, 0.55);
   }
 
   /* Engineering blueprint grid (theme-aware via --lp-line) */

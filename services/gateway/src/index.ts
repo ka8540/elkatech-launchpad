@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import {
   approvalActionInputSchema,
+  cancelRequestInputSchema,
   createRequestMessageInputSchema,
   createServiceRequestInputSchema,
   firebaseSessionInputSchema,
@@ -14,6 +15,7 @@ import {
   resetPasswordInputSchema,
   roleSchema,
   signUpInputSchema,
+  updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
   verifyEmailInputSchema,
 } from "@elkatech/contracts";
@@ -21,6 +23,7 @@ import {
   fetchJson,
   getEnv,
   internalHeaders,
+  InternalFetchError,
   verifyFirebaseIdTokenForRequest,
 } from "@elkatech/config";
 import { evaluateApprovalGate } from "./approval";
@@ -511,6 +514,20 @@ app.get("/api/requests/:requestId", async (request, reply) => {
   });
 });
 
+app.patch("/api/requests/:requestId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+
+  const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
+  const input = updateServiceRequestInputSchema.parse(request.body);
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
+    method: "PATCH",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input),
+  });
+});
+
 app.post("/api/requests/:requestId/messages", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
   if (!session) return;
@@ -560,6 +577,20 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
   return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+    method: "POST",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input),
+  });
+});
+
+app.post("/api/requests/:requestId/cancel", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+
+  const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
+  const input = cancelRequestInputSchema.parse(request.body ?? {});
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/cancel`, {
     method: "POST",
     headers: userHeaders(session.user),
     body: JSON.stringify(input),
@@ -646,10 +677,29 @@ app.delete("/api/admin/users/:userId", async (request: any, reply: any) => {
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
-    method: "DELETE",
-    headers: internalHeaders({ "x-user-id": session.user.id }),
-  });
+  try {
+    return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
+      method: "DELETE",
+      headers: internalHeaders({ "x-user-id": session.user.id }),
+    });
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      // Forward business-rule rejections (4xx) verbatim, but never leak raw
+      // 5xx messages (DB errors, stack details, etc.) to the admin UI.
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "remove user failed");
+        return reply
+          .code(502)
+          .send({ message: "Could not remove user. Please try again." });
+      }
+      const body =
+        error.body && typeof error.body === "object"
+          ? (error.body as Record<string, unknown>)
+          : { message: error.message };
+      return reply.code(error.status).send(body);
+    }
+    throw error;
+  }
 });
 
 // ─── Admin: heartbeat / health dashboard ───────────────────────────────────

@@ -33,6 +33,9 @@ type HealthResponse = {
   services: ServiceHeartbeat[];
 };
 
+/* ─── Shared surface helper ───────────────────────────────────────────────── */
+const cardSurface = "lp-card border";
+
 /* ─── Stat card ────────────────────────────────────────────────────────────── */
 function StatCard({
   label,
@@ -44,56 +47,33 @@ function StatCard({
   label: string;
   count: number | string;
   icon: LucideIcon;
-  accent: "blue" | "emerald" | "amber" | "slate" | "rose";
+  accent: "copper" | "emerald" | "amber" | "steel" | "rose";
   hint?: string;
 }) {
-  const accentMap = {
-    blue: {
-      badge: "border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-      glow: "from-blue-500/5 to-transparent",
-      count: "text-blue-700 dark:text-blue-100",
-    },
-    emerald: {
-      badge: "border-emerald-300 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-      glow: "from-emerald-500/5 to-transparent",
-      count: "text-emerald-700 dark:text-emerald-100",
-    },
-    amber: {
-      badge: "border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-300",
-      glow: "from-amber-500/5 to-transparent",
-      count: "text-amber-700 dark:text-amber-100",
-    },
-    slate: {
-      badge: "border-slate-200 bg-slate-100 text-slate-500 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-400",
-      glow: "from-slate-500/5 to-transparent",
-      count: "text-slate-700 dark:text-slate-200",
-    },
-    rose: {
-      badge: "border-rose-300 bg-rose-50 text-rose-600 dark:border-rose-400/20 dark:bg-rose-500/10 dark:text-rose-300",
-      glow: "from-rose-500/5 to-transparent",
-      count: "text-rose-700 dark:text-rose-100",
-    },
+  const badgeMap: Record<typeof accent, string> = {
+    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
+    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
+    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
+    rose: "border-rose-400/30 bg-rose-400/10 text-rose-600 dark:text-rose-300",
   };
-
-  const c = accentMap[accent];
 
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-2xl border p-5 transition-colors duration-150",
-        "border-slate-200 bg-white hover:border-slate-300",
-        "dark:border-white/[0.08] dark:bg-[#0b1626]/80 dark:hover:border-white/[0.14] dark:backdrop-blur-sm",
+        "relative overflow-hidden rounded-2xl p-5 transition-colors duration-150",
+        cardSurface,
+        "hover:border-[var(--lp-line-strong)]",
       )}
     >
-      <div className={cn("absolute inset-0 bg-gradient-to-br opacity-60", c.glow)} />
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-500">
+          <p className="lp-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
             {label}
           </p>
-          <p className={cn("mt-2 font-display text-4xl font-bold", c.count)}>{count}</p>
+          <p className="lp-display mt-2 text-4xl font-bold text-[var(--lp-ink)]">{count}</p>
           {hint && (
-            <p className="mt-1.5 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+            <p className="mt-1.5 text-[11px] font-medium text-[var(--lp-faint)]">
               {hint}
             </p>
           )}
@@ -101,7 +81,7 @@ function StatCard({
         <div
           className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-            c.badge,
+            badgeMap[accent],
           )}
         >
           <Icon className="h-5 w-5" />
@@ -126,11 +106,11 @@ function statusColor(status: ServiceHeartbeat["status"]): string {
 function statusBadge(status: ServiceHeartbeat["status"]): string {
   switch (status) {
     case "healthy":
-      return "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300";
     case "degraded":
-      return "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-300";
+      return "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300";
     case "down":
-      return "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300";
+      return "border-rose-400/35 bg-rose-400/10 text-rose-600 dark:text-rose-300";
   }
 }
 
@@ -212,39 +192,40 @@ const AdminDashboardPage = () => {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* Ambient glow background */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute left-[-20%] top-[-10%] h-[600px] w-[600px] rounded-full bg-blue-500/[0.03] blur-[120px] dark:bg-blue-500/[0.04]" />
-        <div className="absolute bottom-[-10%] right-[-10%] h-[400px] w-[400px] rounded-full bg-emerald-500/[0.03] blur-[100px] dark:bg-emerald-500/[0.04]" />
-      </div>
-
       {/* Header */}
       <header
         className={cn(
-          "relative overflow-hidden rounded-3xl border p-6 backdrop-blur-xl sm:p-8",
-          "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80",
+          "relative overflow-hidden rounded-3xl p-6 sm:p-8",
+          cardSurface,
         )}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.08),transparent_32%),radial-gradient(circle_at_88%_22%,rgba(16,185,129,0.05),transparent_30%)] dark:bg-[radial-gradient(circle_at_14%_0%,rgba(59,130,246,0.14),transparent_32%),radial-gradient(circle_at_88%_22%,rgba(16,185,129,0.09),transparent_30%)]" />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
+          style={{
+            maskImage: "linear-gradient(to right, black, transparent 70%)",
+            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
+          }}
+        />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="mb-4 flex items-center gap-3">
               <div
                 className={cn(
                   "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                  "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
+                  "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
                 )}
               >
                 <Gauge className="h-5 w-5" />
               </div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-blue-600 dark:text-blue-300">
+              <p className="lp-mono text-xs font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
                 Admin Dashboard
               </p>
             </div>
-            <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white sm:text-3xl">
+            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">
               Operations overview
             </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-7 text-slate-500 dark:text-slate-400">
+            <p className="mt-2.5 max-w-xl text-sm leading-7 text-[var(--lp-ink-soft)]">
               Account approvals, service request load, and live service health for the
               ElkaTech platform.
             </p>
@@ -253,7 +234,7 @@ const AdminDashboardPage = () => {
           <div className="flex w-fit shrink-0 items-center gap-2">
             <Button
               asChild
-              className="h-11 rounded-full bg-blue-600 px-5 font-semibold text-white shadow-sm hover:bg-blue-700"
+              className="h-11 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]"
             >
               <Link to="/app/users">
                 <UserPlus className="mr-1.5 h-4 w-4" />
@@ -267,10 +248,7 @@ const AdminDashboardPage = () => {
       {/* Pending banner if work to do */}
       {pendingCount > 0 && (
         <div
-          className={cn(
-            "flex items-center gap-3 rounded-2xl border p-4 text-sm shadow-soft",
-            "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200",
-          )}
+          className="flex items-center gap-3 rounded-2xl border border-amber-400/35 bg-amber-400/10 p-4 text-sm text-amber-700 dark:text-amber-200"
           role="status"
         >
           <Clock className="h-5 w-5 flex-shrink-0" />
@@ -290,7 +268,7 @@ const AdminDashboardPage = () => {
           label="Pending approvals"
           count={summaryQuery.data?.pendingApproval ?? "—"}
           icon={Clock}
-          accent={pendingCount > 0 ? "amber" : "slate"}
+          accent={pendingCount > 0 ? "amber" : "steel"}
           hint="Awaiting admin review"
         />
         <StatCard
@@ -304,14 +282,14 @@ const AdminDashboardPage = () => {
           label="Suspended"
           count={summaryQuery.data?.suspended ?? "—"}
           icon={ShieldOff}
-          accent={(summaryQuery.data?.suspended ?? 0) > 0 ? "rose" : "slate"}
+          accent={(summaryQuery.data?.suspended ?? 0) > 0 ? "rose" : "steel"}
           hint="Access revoked"
         />
         <StatCard
           label="Rejected"
           count={summaryQuery.data?.rejected ?? "—"}
           icon={XCircle}
-          accent="slate"
+          accent="steel"
           hint="Not approved"
         />
       </div>
@@ -322,7 +300,7 @@ const AdminDashboardPage = () => {
           label="Open requests"
           count={requestStats.open}
           icon={Ticket}
-          accent="blue"
+          accent="copper"
           hint="New, triaged, or waiting"
         />
         <StatCard
@@ -343,7 +321,7 @@ const AdminDashboardPage = () => {
           label="Total users"
           count={summaryQuery.data?.total ?? "—"}
           icon={UserPlus}
-          accent="slate"
+          accent="steel"
           hint="All accounts"
         />
       </div>
@@ -351,31 +329,25 @@ const AdminDashboardPage = () => {
       {/* Service heartbeats */}
       <section
         className={cn(
-          "relative overflow-hidden rounded-3xl border p-6 backdrop-blur-xl sm:p-7",
-          "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80",
+          "relative overflow-hidden rounded-3xl p-6 sm:p-7",
+          cardSurface,
         )}
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_84%_18%,rgba(16,185,129,0.06),transparent_30%)] dark:bg-[radial-gradient(circle_at_84%_18%,rgba(16,185,129,0.09),transparent_30%)]" />
         <div className="relative">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="mb-3 flex items-center gap-3">
-                <div
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-2xl border",
-                    "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-                  )}
-                >
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300">
                   <Activity className="h-5 w-5" />
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-600 dark:text-emerald-300">
+                <p className="lp-mono text-xs font-semibold uppercase tracking-[0.28em] text-emerald-600 dark:text-emerald-300">
                   Service Heartbeat
                 </p>
               </div>
-              <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white">
+              <h2 className="lp-display text-xl font-bold text-[var(--lp-ink)]">
                 Live service health
               </h2>
-              <p className="mt-1.5 text-sm leading-6 text-slate-500 dark:text-slate-400">
+              <p className="mt-1.5 text-sm leading-6 text-[var(--lp-ink-soft)]">
                 Each internal service is probed every minute. Latency above 1.5s is
                 flagged as degraded.
               </p>
@@ -384,11 +356,7 @@ const AdminDashboardPage = () => {
               type="button"
               variant="outline"
               size="sm"
-              className={cn(
-                "h-9 shrink-0 rounded-full",
-                "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                "dark:border-white/10 dark:bg-white/[0.04] dark:text-slate-300 dark:hover:bg-white/[0.07] dark:hover:text-white",
-              )}
+              className="h-9 shrink-0 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
               onClick={() => healthQuery.refetch()}
               disabled={healthQuery.isFetching}
             >
@@ -401,10 +369,7 @@ const AdminDashboardPage = () => {
             {(healthQuery.data?.services ?? []).map((service) => (
               <div
                 key={service.service}
-                className={cn(
-                  "relative overflow-hidden rounded-2xl border p-4",
-                  "border-slate-200 bg-slate-50 dark:border-white/[0.06] dark:bg-[#070f1d]/60",
-                )}
+                className="relative overflow-hidden rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -416,11 +381,11 @@ const AdminDashboardPage = () => {
                         )}
                         aria-hidden
                       />
-                      <p className="font-display font-semibold capitalize text-slate-900 dark:text-white">
+                      <p className="lp-display font-semibold capitalize text-[var(--lp-ink)]">
                         {service.service}
                       </p>
                     </div>
-                    <p className="mt-1.5 text-[11px] uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                    <p className="mt-1.5 lp-mono text-[11px] uppercase tracking-[0.16em] text-[var(--lp-faint)]">
                       checked {formatRelativeShort(service.checkedAt)}
                     </p>
                   </div>
@@ -434,15 +399,15 @@ const AdminDashboardPage = () => {
                   </span>
                 </div>
                 <div className="mt-3 flex items-center justify-between text-xs">
-                  <span className="text-slate-500 dark:text-slate-400">Latency</span>
-                  <span className="font-medium text-slate-700 dark:text-slate-200">
+                  <span className="text-[var(--lp-ink-soft)]">Latency</span>
+                  <span className="font-medium text-[var(--lp-ink)]">
                     {service.latencyMs !== null ? `${service.latencyMs} ms` : "unreachable"}
                   </span>
                 </div>
               </div>
             ))}
             {!healthQuery.data && (
-              <p className="text-sm text-slate-400 dark:text-slate-500">
+              <p className="text-sm text-[var(--lp-faint)]">
                 Loading service heartbeats…
               </p>
             )}
@@ -453,33 +418,23 @@ const AdminDashboardPage = () => {
       {/* Two-column activity */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Recent signups */}
-        <section
-          className={cn(
-            "rounded-3xl border p-6 sm:p-7",
-            "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80 dark:backdrop-blur-sm",
-          )}
-        >
+        <section className={cn("rounded-3xl p-6 sm:p-7", cardSurface)}>
           <div className="mb-4 flex items-center gap-3">
-            <div
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-xl border",
-                "border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300",
-              )}
-            >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
               <UserPlus className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">
+              <p className="lp-mono text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--lp-accent)]">
                 Recent signups
               </p>
-              <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+              <h3 className="lp-display text-lg font-bold text-[var(--lp-ink)]">
                 Latest accounts
               </h3>
             </div>
           </div>
 
           {recentSignups.length === 0 ? (
-            <p className="text-sm text-slate-400 dark:text-slate-500">
+            <p className="text-sm text-[var(--lp-faint)]">
               No accounts yet.
             </p>
           ) : (
@@ -487,16 +442,13 @@ const AdminDashboardPage = () => {
               {recentSignups.map((user) => (
                 <li
                   key={user.id}
-                  className={cn(
-                    "flex items-center justify-between gap-3 rounded-2xl border p-3.5",
-                    "border-slate-200 bg-slate-50 dark:border-white/[0.06] dark:bg-[#070f1d]/60",
-                  )}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-3.5"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-slate-800 dark:text-slate-100">
+                    <p className="truncate font-medium text-[var(--lp-ink)]">
                       {user.displayName}
                     </p>
-                    <p className="truncate text-xs text-slate-400 dark:text-slate-500">
+                    <p className="truncate text-xs text-[var(--lp-faint)]">
                       {user.email}
                     </p>
                   </div>
@@ -504,12 +456,12 @@ const AdminDashboardPage = () => {
                     className={cn(
                       "inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
                       user.approvalStatus === "approved"
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300"
+                        ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300"
                         : user.approvalStatus === "pending_approval"
-                          ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-300"
+                          ? "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300"
                           : user.approvalStatus === "rejected"
-                            ? "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300"
-                            : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-300",
+                            ? "border-rose-400/35 bg-rose-400/10 text-rose-600 dark:text-rose-300"
+                            : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
                     )}
                   >
                     {user.approvalStatus.replace("_", " ")}
@@ -521,7 +473,7 @@ const AdminDashboardPage = () => {
 
           <Link
             to="/app/users"
-            className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-[var(--lp-accent)] underline-offset-2 hover:underline"
           >
             Manage all users
             <ArrowRight className="h-4 w-4" />
@@ -529,33 +481,23 @@ const AdminDashboardPage = () => {
         </section>
 
         {/* Recent requests */}
-        <section
-          className={cn(
-            "rounded-3xl border p-6 sm:p-7",
-            "border-slate-200 bg-white dark:border-white/[0.08] dark:bg-[#0b1626]/80 dark:backdrop-blur-sm",
-          )}
-        >
+        <section className={cn("rounded-3xl p-6 sm:p-7", cardSurface)}>
           <div className="mb-4 flex items-center gap-3">
-            <div
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-xl border",
-                "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-300",
-              )}
-            >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300">
               <Wrench className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-300">
+              <p className="lp-mono text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-300">
                 Recent activity
               </p>
-              <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+              <h3 className="lp-display text-lg font-bold text-[var(--lp-ink)]">
                 Latest service requests
               </h3>
             </div>
           </div>
 
           {recentRequests.length === 0 ? (
-            <p className="text-sm text-slate-400 dark:text-slate-500">
+            <p className="text-sm text-[var(--lp-faint)]">
               No recent service requests.
             </p>
           ) : (
@@ -564,20 +506,17 @@ const AdminDashboardPage = () => {
                 <li key={request.id}>
                   <Link
                     to={`/app/requests/${request.id}`}
-                    className={cn(
-                      "flex items-start justify-between gap-3 rounded-2xl border p-3.5 transition-colors",
-                      "border-slate-200 bg-slate-50 hover:border-blue-300 dark:border-white/[0.06] dark:bg-[#070f1d]/60 dark:hover:border-blue-400/30",
-                    )}
+                    className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-3.5 transition-colors hover:border-[var(--lp-accent)]/45"
                   >
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+                      <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
                         {request.requestNumber}
                       </p>
-                      <p className="mt-1 truncate font-medium text-slate-800 dark:text-slate-100">
+                      <p className="mt-1 truncate font-medium text-[var(--lp-ink)]">
                         {request.subject}
                       </p>
                     </div>
-                    <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">
+                    <span className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--lp-faint)]">
                       {request.status.replace(/_/g, " ")}
                     </span>
                   </Link>
@@ -588,7 +527,7 @@ const AdminDashboardPage = () => {
 
           <Link
             to="/app/queue"
-            className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-[var(--lp-accent)] underline-offset-2 hover:underline"
           >
             Open queue
             <ArrowRight className="h-4 w-4" />
@@ -597,23 +536,18 @@ const AdminDashboardPage = () => {
       </div>
 
       {/* Footer help */}
-      <div
-        className={cn(
-          "rounded-2xl border px-5 py-4",
-          "border-slate-200 bg-slate-50 dark:border-white/[0.06] dark:bg-[#0b1626]/60",
-        )}
-      >
+      <div className={cn("rounded-2xl px-5 py-4", cardSurface)}>
         <div className="flex items-start gap-3">
-          <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
-          <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">
-            <span className="font-medium text-slate-700 dark:text-slate-300">
+          <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
+          <p className="text-sm leading-6 text-[var(--lp-ink-soft)]">
+            <span className="font-medium text-[var(--lp-ink)]">
               Approve a customer:
             </span>{" "}
             new signups land in <em>pending_approval</em> and cannot create service
             requests until you approve them on the{" "}
             <Link
               to="/app/users"
-              className="text-blue-500 underline-offset-2 hover:underline dark:text-blue-400"
+              className="text-[var(--lp-accent)] underline-offset-2 hover:underline"
             >
               Users page
             </Link>

@@ -99260,6 +99260,15 @@ var createServiceRequestInputSchema = external_exports.object({
   serialNumber: external_exports.string().optional(),
   priority: requestPrioritySchema.default("normal")
 });
+var updateServiceRequestInputSchema = external_exports.object({
+  subject: external_exports.string().trim().min(4).optional(),
+  description: external_exports.string().trim().min(10).optional(),
+  contactPhone: external_exports.string().trim().min(7).optional(),
+  siteLocation: external_exports.string().trim().min(2).optional(),
+  serialNumber: external_exports.string().trim().max(100).nullable().optional()
+}).refine((input) => Object.values(input).some((value) => value !== void 0), {
+  message: "At least one request detail must be provided."
+});
 var createRequestMessageInputSchema = external_exports.object({
   body: external_exports.string().min(1),
   visibility: messageVisibilitySchema
@@ -99268,8 +99277,21 @@ var assignRequestInputSchema = external_exports.object({
   engineerId: external_exports.string()
 });
 var updateRequestStatusInputSchema = external_exports.object({
-  status: requestStatusSchema
+  status: requestStatusSchema,
+  note: external_exports.string().max(1e3).optional(),
+  visibility: messageVisibilitySchema.optional()
 });
+var cancelRequestInputSchema = external_exports.object({
+  reason: external_exports.string().max(1e3).optional()
+});
+var requestStatusGroupSchema = external_exports.enum([
+  "all",
+  "open",
+  "in_progress",
+  "pending",
+  "resolved",
+  "archived"
+]);
 var sessionResponseSchema = external_exports.object({
   sessionToken: external_exports.string(),
   csrfToken: external_exports.string(),
@@ -101585,6 +101607,16 @@ async function verifyFirebaseIdTokenForRequest(idToken) {
 }
 
 // packages/config/src/http.ts
+var InternalFetchError = class extends Error {
+  status;
+  body;
+  constructor(message, status, body) {
+    super(message);
+    this.name = "InternalFetchError";
+    this.status = status;
+    this.body = body;
+  }
+};
 function internalHeaders(extra = {}) {
   return {
     "content-type": "application/json",
@@ -101593,10 +101625,24 @@ function internalHeaders(extra = {}) {
   };
 }
 async function fetchJson(input, init = {}) {
-  const response = await fetch(input, init);
+  let safeInit = init;
+  if (init.body == null && init.headers) {
+    const headers = new Headers(init.headers);
+    if (headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+      headers.delete("content-type");
+      safeInit = { ...init, headers };
+    }
+  }
+  const response = await fetch(input, safeInit);
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`${response.status} ${response.statusText}: ${errorText}`);
+    let parsed = errorText;
+    try {
+      parsed = JSON.parse(errorText);
+    } catch {
+    }
+    const message = (parsed && typeof parsed === "object" && "message" in parsed ? String(parsed.message ?? "") : "") || `${response.status} ${response.statusText}`;
+    throw new InternalFetchError(message, response.status, parsed);
   }
   if (response.status === 204) {
     return void 0;
@@ -102006,6 +102052,18 @@ app.get("/api/requests/:requestId", async (request, reply) => {
     headers: userHeaders(session.user)
   });
 });
+app.patch("/api/requests/:requestId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
+  const input = updateServiceRequestInputSchema.parse(request.body);
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
+    method: "PATCH",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input)
+  });
+});
 app.post("/api/requests/:requestId/messages", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
   if (!session) return;
@@ -102047,6 +102105,18 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
   return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+    method: "POST",
+    headers: userHeaders(session.user),
+    body: JSON.stringify(input)
+  });
+});
+app.post("/api/requests/:requestId/cancel", async (request, reply) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
+  const input = cancelRequestInputSchema.parse(request.body ?? {});
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/cancel`, {
     method: "POST",
     headers: userHeaders(session.user),
     body: JSON.stringify(input)
@@ -102119,10 +102189,22 @@ app.delete("/api/admin/users/:userId", async (request, reply) => {
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
-    method: "DELETE",
-    headers: internalHeaders({ "x-user-id": session.user.id })
-  });
+  try {
+    return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
+      method: "DELETE",
+      headers: internalHeaders({ "x-user-id": session.user.id })
+    });
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "remove user failed");
+        return reply.code(502).send({ message: "Could not remove user. Please try again." });
+      }
+      const body = error.body && typeof error.body === "object" ? error.body : { message: error.message };
+      return reply.code(error.status).send(body);
+    }
+    throw error;
+  }
 });
 async function probeService(name, url) {
   const checkedAt = (/* @__PURE__ */ new Date()).toISOString();

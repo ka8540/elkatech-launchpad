@@ -10,6 +10,9 @@ const COPPER = "#d2823f";
 const whatsappHref = `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(
   "Hi ElkaTech, I am interested in your machinery. Please share details.",
 )}`;
+const mapsHref =
+  "https://www.google.com/maps/place/Vandematram+Prime/@23.0950303,72.5426099,17z/" +
+  "data=!3m1!4b1!4m6!3m5!1s0x395e8357a8867d7d:0xb01ec0965d7ac3f!8m2!3d23.0950254!4d72.5451848!16s%2Fg%2F11qmnc9hkd?entry=ttu&g_ep=EgoyMDI2MDUyMC4wIKXMDSoASAFQAw%3D%3D";
 
 const LandingFinalCTA = () => {
   const reduce = useReducedMotion();
@@ -18,7 +21,7 @@ const LandingFinalCTA = () => {
     { icon: Phone, label: "Call us", value: CONTACT.phoneDisplay, href: `tel:${CONTACT.phoneTel}` },
     { icon: MessageCircle, label: "WhatsApp", value: "Chat with our team", href: whatsappHref },
     { icon: Mail, label: "Email", value: CONTACT.email, href: `mailto:${CONTACT.email}` },
-    { icon: MapPin, label: "Visit", value: CONTACT.location, href: undefined },
+    { icon: MapPin, label: "Visit", value: CONTACT.location, href: mapsHref },
   ];
 
   return (
@@ -41,7 +44,7 @@ const LandingFinalCTA = () => {
         style={{ "--lp-line": "rgba(255,255,255,0.05)" } as CSSProperties}
       />
 
-      <div className="relative mx-auto max-w-[1100px] px-5 text-center sm:px-8">
+      <div className="relative mx-auto max-w-[1240px] px-5 text-center sm:px-8">
         <motion.span
           initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -101,19 +104,35 @@ const LandingFinalCTA = () => {
           </Link>
         </motion.div>
 
-        <div className="mx-auto mt-14 grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-2xl border md:grid-cols-4"
-          style={{ borderColor: "rgba(241,239,233,0.12)", background: "rgba(241,239,233,0.06)" }}
-        >
+        <div className="mx-auto mt-12 grid max-w-[1180px] gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.28fr_1fr]">
           {methods.map((m) => {
+            const isEmail = m.label === "Email";
             const inner = (
               <>
-                <m.icon className="mx-auto h-5 w-5" style={{ color: COPPER }} />
-                <p className="lp-mono mt-2 text-[10px] uppercase tracking-[0.16em]" style={{ color: "rgba(241,239,233,0.5)" }}>
-                  {m.label}
-                </p>
-                <p className="mt-1 text-sm font-medium" style={{ color: "#f1efe9" }}>
-                  {m.value}
-                </p>
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+                  style={{
+                    borderColor: "rgba(210,130,63,0.32)",
+                    background: "rgba(210,130,63,0.12)",
+                    color: COPPER,
+                  }}
+                >
+                  <m.icon className="h-[18px] w-[18px]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    className="lp-mono block text-[10px] uppercase tracking-[0.18em]"
+                    style={{ color: "rgba(241,239,233,0.46)" }}
+                  >
+                    {m.label}
+                  </span>
+                  <span
+                    className={`mt-1 block text-[15px] font-semibold leading-snug ${isEmail ? "break-normal text-[14px] lg:whitespace-nowrap xl:text-[15px]" : "break-words"}`}
+                    style={{ color: "#f1efe9" }}
+                  >
+                    {m.value}
+                  </span>
+                </span>
               </>
             );
             return m.href ? (
@@ -122,13 +141,23 @@ const LandingFinalCTA = () => {
                 href={m.href}
                 target={m.href.startsWith("http") ? "_blank" : undefined}
                 rel={m.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                className="px-4 py-6 transition-colors hover:bg-white/[0.04]"
-                style={{ background: "rgba(8,9,11,0.5)" }}
+                className="group flex min-h-[104px] items-center gap-3 rounded-2xl border p-4 text-left transition-[background-color,border-color,transform] hover:-translate-y-0.5"
+                style={{
+                  borderColor: "rgba(241,239,233,0.12)",
+                  background: "rgba(8,9,11,0.48)",
+                }}
               >
                 {inner}
               </a>
             ) : (
-              <div key={m.label} className="px-4 py-6" style={{ background: "rgba(8,9,11,0.5)" }}>
+              <div
+                key={m.label}
+                className="flex min-h-[104px] items-center gap-3 rounded-2xl border p-4 text-left"
+                style={{
+                  borderColor: "rgba(241,239,233,0.12)",
+                  background: "rgba(8,9,11,0.48)",
+                }}
+              >
                 {inner}
               </div>
             );
