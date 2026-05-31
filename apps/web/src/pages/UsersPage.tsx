@@ -71,13 +71,13 @@ const PAGE_SIZE = 25;
 function approvalBadgeClass(status: ApprovalStatus): string {
   switch (status) {
     case "approved":
-      return "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300";
     case "pending_approval":
-      return "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-300";
+      return "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300";
     case "rejected":
-      return "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-300";
+      return "border-rose-400/35 bg-rose-400/10 text-rose-600 dark:text-rose-300";
     case "suspended":
-      return "border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-300";
+      return "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]";
   }
 }
 
@@ -97,11 +97,11 @@ function approvalLabel(status: ApprovalStatus): string {
 function roleBadgeClass(role: Role): string {
   switch (role) {
     case "admin":
-      return "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-300";
+      return "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]";
     case "engineer":
-      return "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-400/30 dark:bg-violet-500/10 dark:text-violet-300";
+      return "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]";
     case "customer":
-      return "border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-300";
+      return "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]";
   }
 }
 
@@ -325,7 +325,7 @@ const UsersPage = () => {
             key="reject"
             size="sm"
             variant="outline"
-            className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-400/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+            className="border-rose-400/40 text-rose-600 hover:bg-rose-400/10 dark:text-rose-300"
             disabled={pending}
             onClick={() =>
               setConfirmState({
@@ -351,7 +351,7 @@ const UsersPage = () => {
             key="suspend"
             size="sm"
             variant="outline"
-            className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-400/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+            className="border-rose-400/40 text-rose-600 hover:bg-rose-400/10 dark:text-rose-300"
             disabled={pending}
             onClick={() =>
               setConfirmState({
@@ -407,7 +407,7 @@ const UsersPage = () => {
             key="promote-admin"
             size="sm"
             variant="outline"
-            className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-400/30 dark:text-blue-300 dark:hover:bg-blue-500/10"
+            className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
             disabled={pending}
             onClick={() =>
               setConfirmState({
@@ -441,7 +441,7 @@ const UsersPage = () => {
             key="promote-admin"
             size="sm"
             variant="outline"
-            className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-400/30 dark:text-blue-300 dark:hover:bg-blue-500/10"
+            className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
             disabled={pending}
             onClick={() =>
               setConfirmState({
@@ -464,7 +464,7 @@ const UsersPage = () => {
             key="remove-admin"
             size="sm"
             variant="outline"
-            className="border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-400/30 dark:text-amber-300 dark:hover:bg-amber-500/10"
+            className="border-amber-400/40 text-amber-700 hover:bg-amber-400/10 dark:text-amber-300"
             disabled={pending}
             onClick={() =>
               setConfirmState({
@@ -512,7 +512,7 @@ const UsersPage = () => {
 
     if (buttons.length === 0) {
       return (
-        <span className="text-xs italic text-slate-400 dark:text-slate-500">
+        <span className="text-xs italic text-[var(--lp-faint)]">
           No actions available
         </span>
       );
@@ -554,12 +554,14 @@ const UsersPage = () => {
   return (
     <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
       {/* ── Invite team member ───────────────────────────────────────── */}
-      <div className="rounded-3xl border bg-card p-6 shadow-soft">
-        <p className="text-sm uppercase tracking-[0.2em] text-accent">Invite team member</p>
-        <h2 className="mt-2 font-display text-3xl font-bold text-foreground">
+      <div className="lp-card rounded-3xl border p-6">
+        <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
+          Invite team member
+        </p>
+        <h2 className="mt-2 lp-display text-2xl font-bold text-[var(--lp-ink)]">
           Manage staff access
         </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-sm text-[var(--lp-ink-soft)]">
           Users invited here are staff-managed accounts. Staff-managed accounts can later be
           assigned Engineer or Admin privileges.
         </p>
@@ -616,7 +618,7 @@ const UsersPage = () => {
           </div>
           <Button
             type="submit"
-            className="h-11 w-full rounded-md bg-blue-600 font-semibold text-white shadow-sm hover:bg-blue-700"
+            className="h-11 w-full rounded-md bg-[var(--lp-accent)] font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]"
             disabled={inviteMutation.isPending}
           >
             {inviteMutation.isPending ? "Inviting..." : "Create invite"}
@@ -624,24 +626,26 @@ const UsersPage = () => {
         </form>
 
         {inviteUrl && (
-          <div className="mt-6 rounded-2xl border bg-muted/30 p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="mt-6 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-4">
+            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
               Invite link
             </p>
-            <p className="mt-2 break-all text-sm text-foreground">{inviteUrl}</p>
+            <p className="mt-2 break-all text-sm text-[var(--lp-ink)]">{inviteUrl}</p>
           </div>
         )}
       </div>
 
       {/* ── Users list ───────────────────────────────────────────────── */}
-      <div className="rounded-3xl border bg-card p-6 shadow-soft">
+      <div className="lp-card rounded-3xl border p-6">
         <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-accent">Users</p>
-            <h2 className="mt-2 font-display text-3xl font-bold text-foreground">
+            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
+              Users
+            </p>
+            <h2 className="mt-2 lp-display text-2xl font-bold text-[var(--lp-ink)]">
               Platform accounts
             </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <p className="mt-2 text-sm text-[var(--lp-ink-soft)]">
               {users.length} total · {adminCount} admin{adminCount === 1 ? "" : "s"} · only
               staff-invited accounts can be promoted.
             </p>
@@ -722,14 +726,14 @@ const UsersPage = () => {
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-[88px] animate-pulse rounded-2xl bg-slate-200/60 dark:bg-white/[0.04]"
+                  className="h-[88px] animate-pulse rounded-2xl bg-[var(--lp-panel-2)]"
                 />
               ))}
             </div>
           )}
 
           {isError && !isLoading && (
-            <div className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-200">
+            <div className="rounded-2xl border border-rose-400/35 bg-rose-400/10 p-4 text-sm text-rose-700 dark:text-rose-200">
               <p className="font-medium">Could not load users.</p>
               <Button
                 variant="outline"
@@ -743,9 +747,9 @@ const UsersPage = () => {
           )}
 
           {!isLoading && !isError && pageItems.length === 0 && (
-            <div className="rounded-2xl border bg-muted/30 p-8 text-center">
-              <p className="font-medium text-foreground">No users match your filters.</p>
-              <p className="mt-1 text-sm text-muted-foreground">
+            <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-8 text-center">
+              <p className="font-medium text-[var(--lp-ink)]">No users match your filters.</p>
+              <p className="mt-1 text-sm text-[var(--lp-ink-soft)]">
                 Try clearing the search or filters to see everyone again.
               </p>
               <Button variant="outline" size="sm" className="mt-4" onClick={resetFilters}>
@@ -763,29 +767,29 @@ const UsersPage = () => {
                 <div
                   key={user.id}
                   className={cn(
-                    "rounded-2xl border bg-muted/30 p-4",
+                    "rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-4",
                     user.role === "admin" &&
-                      "border-blue-200 bg-blue-50/40 dark:border-blue-400/20 dark:bg-blue-500/5",
+                      "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/[0.06]",
                   )}
                 >
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-semibold text-foreground">
+                        <p className="truncate font-semibold text-[var(--lp-ink)]">
                           {user.displayName}
                         </p>
                         {isSelf && (
-                          <span className="rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/10 dark:text-blue-300">
+                          <span className="rounded-full border border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--lp-accent)]">
                             You
                           </span>
                         )}
                         {isSystemAdmin && (
-                          <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-700 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-300">
+                          <span className="rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--lp-ink-soft)]">
                             System admin
                           </span>
                         )}
                       </div>
-                      <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                      <p className="mt-0.5 truncate text-sm text-[var(--lp-ink-soft)]">
                         {user.email}
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -809,13 +813,13 @@ const UsersPage = () => {
                           className={cn(
                             "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
                             isStaffManaged(user.accountOrigin)
-                              ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300"
-                              : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-400/20 dark:bg-slate-500/10 dark:text-slate-300",
+                              ? "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]"
+                              : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
                           )}
                         >
                           {originLabel(user.accountOrigin)}
                         </span>
-                        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                        <span className="text-[11px] text-[var(--lp-faint)]">
                           Joined {formatDate(user.createdAt)}
                         </span>
                       </div>
@@ -830,7 +834,7 @@ const UsersPage = () => {
         {/* Pagination */}
         {!isLoading && !isError && sortedUsers.length > PAGE_SIZE && (
           <div className="mt-5 flex items-center justify-between text-sm">
-            <p className="text-muted-foreground">
+            <p className="text-[var(--lp-ink-soft)]">
               Showing {currentPage * PAGE_SIZE + 1}–
               {Math.min((currentPage + 1) * PAGE_SIZE, sortedUsers.length)} of{" "}
               {sortedUsers.length}
@@ -844,7 +848,7 @@ const UsersPage = () => {
               >
                 Previous
               </Button>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-[var(--lp-faint)]">
                 Page {currentPage + 1} of {pageCount}
               </span>
               <Button
@@ -881,7 +885,7 @@ const UsersPage = () => {
                   ? "bg-rose-600 text-white hover:bg-rose-700"
                   : confirmState?.kind === "remove"
                     ? "bg-rose-600 text-white hover:bg-rose-700"
-                    : "bg-blue-600 text-white hover:bg-blue-700",
+                    : "bg-[var(--lp-accent)] text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]",
               )}
             >
               {confirmState?.confirmLabel ?? "Confirm"}
