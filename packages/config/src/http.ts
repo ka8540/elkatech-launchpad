@@ -1,5 +1,16 @@
 import { getEnv } from "./env";
 
+export class InternalFetchError extends Error {
+  status: number;
+  body: unknown;
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "InternalFetchError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export function internalHeaders(extra: Record<string, string> = {}) {
   return {
     "content-type": "application/json",
@@ -29,7 +40,17 @@ export async function fetchJson<T>(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`${response.status} ${response.statusText}: ${errorText}`);
+    let parsed: unknown = errorText;
+    try {
+      parsed = JSON.parse(errorText);
+    } catch {
+      // keep raw text
+    }
+    const message =
+      (parsed && typeof parsed === "object" && "message" in (parsed as Record<string, unknown>)
+        ? String((parsed as { message?: unknown }).message ?? "")
+        : "") || `${response.status} ${response.statusText}`;
+    throw new InternalFetchError(message, response.status, parsed);
   }
 
   if (response.status === 204) {

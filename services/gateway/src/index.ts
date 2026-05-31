@@ -23,6 +23,7 @@ import {
   fetchJson,
   getEnv,
   internalHeaders,
+  InternalFetchError,
   verifyFirebaseIdTokenForRequest,
 } from "@elkatech/config";
 import { evaluateApprovalGate } from "./approval";
@@ -676,10 +677,21 @@ app.delete("/api/admin/users/:userId", async (request: any, reply: any) => {
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
-  return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
-    method: "DELETE",
-    headers: internalHeaders({ "x-user-id": session.user.id }),
-  });
+  try {
+    return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
+      method: "DELETE",
+      headers: internalHeaders({ "x-user-id": session.user.id }),
+    });
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      const body =
+        error.body && typeof error.body === "object"
+          ? (error.body as Record<string, unknown>)
+          : { message: error.message };
+      return reply.code(error.status).send(body);
+    }
+    throw error;
+  }
 });
 
 // ─── Admin: heartbeat / health dashboard ───────────────────────────────────

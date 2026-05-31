@@ -63064,6 +63064,16 @@ function getDb() {
 }
 
 // packages/config/src/http.ts
+var InternalFetchError = class extends Error {
+  status;
+  body;
+  constructor(message, status, body) {
+    super(message);
+    this.name = "InternalFetchError";
+    this.status = status;
+    this.body = body;
+  }
+};
 function internalHeaders(extra = {}) {
   return {
     "content-type": "application/json",
@@ -63072,10 +63082,24 @@ function internalHeaders(extra = {}) {
   };
 }
 async function fetchJson(input, init = {}) {
-  const response = await fetch(input, init);
+  let safeInit = init;
+  if (init.body == null && init.headers) {
+    const headers = new Headers(init.headers);
+    if (headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+      headers.delete("content-type");
+      safeInit = { ...init, headers };
+    }
+  }
+  const response = await fetch(input, safeInit);
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`${response.status} ${response.statusText}: ${errorText}`);
+    let parsed = errorText;
+    try {
+      parsed = JSON.parse(errorText);
+    } catch {
+    }
+    const message = (parsed && typeof parsed === "object" && "message" in parsed ? String(parsed.message ?? "") : "") || `${response.status} ${response.statusText}`;
+    throw new InternalFetchError(message, response.status, parsed);
   }
   if (response.status === 204) {
     return void 0;
