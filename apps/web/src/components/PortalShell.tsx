@@ -140,14 +140,11 @@ function ThemeSelector({
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40",
           compact
             ? "h-9 w-9 justify-center px-0"
-            : "h-10 w-full justify-between gap-2 px-3 py-2",
+            : "h-10 w-full items-center justify-start gap-2 px-3 py-2",
         )}
       >
         <span className="flex items-center gap-2">
           <CurrentIcon className="h-[15px] w-[15px] shrink-0" />
-          {showLabel && (
-            <span className="text-[13px] font-medium">Theme</span>
-          )}
         </span>
         {showLabel && (
           <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--lp-faint)]">
@@ -461,8 +458,8 @@ const PortalShell = () => {
                   <p className="truncate text-[13px] font-medium text-[var(--lp-ink)]">
                     {user.displayName}
                   </p>
-                  <p className="lp-mono text-[10px] uppercase tracking-[0.18em] text-[var(--lp-accent)]">
-                    {user.role}
+                  <p className="truncate text-[11px] text-[var(--lp-faint)]">
+                    {user.email}
                   </p>
                 </div>
               </div>
