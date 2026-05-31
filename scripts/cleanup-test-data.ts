@@ -114,10 +114,14 @@ async function main() {
     where aggregate_type = 'service_request'
       and aggregate_id = any(${requestIds.map(String)}::text[])
   `;
+  // auth.outbox has no user_id — events are keyed by aggregate_type/aggregate_id.
+  // Per services/auth/src/index.ts, user-scoped events use aggregate_type='user'
+  // and aggregate_id = <userId>::text.
   const [{ count: authOutboxCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
     from auth.outbox
-    where user_id = any(${removeIds}::uuid[])
+    where aggregate_type = 'user'
+      and aggregate_id = any(${removeIds.map(String)}::text[])
   `;
   const [{ count: sessionsCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
@@ -213,7 +217,8 @@ async function main() {
     }
     await tx`
       delete from auth.outbox
-      where user_id = any(${removeIds}::uuid[])
+      where aggregate_type = 'user'
+        and aggregate_id = any(${removeIds.map(String)}::text[])
     `;
     await tx`
       delete from auth.users
