@@ -270,7 +270,9 @@ const UsersPage = () => {
       }),
     onSuccess: invalidateUserQueries,
     onError: (error: unknown) => {
-      const message = error instanceof ApiError ? error.message : "Unable to remove user.";
+      const raw = error instanceof ApiError ? error.message : "";
+      const looksTechnical = /FST_ERR|Bad Request|application\/json/i.test(raw);
+      const message = raw && !looksTechnical ? raw : "Could not remove user. Please try again.";
       toast.error(message);
     },
   });
