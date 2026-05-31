@@ -68,7 +68,7 @@ async function main() {
   const usersToRemove = await sql<UserRow[]>`
     select id, email, display_name, role
     from auth.users
-    where id <> all(${sql.array(Array.from(keepIds))}::uuid[])
+    where id <> all(${Array.from(keepIds)}::uuid[])
     order by created_at asc
   `;
 
@@ -87,7 +87,7 @@ async function main() {
   const requests = await sql<RequestRow[]>`
     select id, request_number, customer_id, subject
     from service_desk.requests
-    where customer_id = any(${sql.array(removeIds)}::uuid[])
+    where customer_id = any(${removeIds}::uuid[])
     order by created_at asc
   `;
   const requestIds = requests.map((r) => r.id);
@@ -101,33 +101,33 @@ async function main() {
   const [{ count: messagesCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
     from service_desk.request_messages
-    where request_id = any(${sql.array(requestIds)}::uuid[])
+    where request_id = any(${requestIds}::uuid[])
   `;
   const [{ count: historyCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
     from service_desk.request_history
-    where request_id = any(${sql.array(requestIds)}::uuid[])
+    where request_id = any(${requestIds}::uuid[])
   `;
   const [{ count: deskOutboxCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
     from service_desk.outbox
     where aggregate_type = 'service_request'
-      and aggregate_id = any(${sql.array(requestIds.map(String))}::text[])
+      and aggregate_id = any(${requestIds.map(String)}::text[])
   `;
   const [{ count: authOutboxCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
     from auth.outbox
-    where user_id = any(${sql.array(removeIds)}::uuid[])
+    where user_id = any(${removeIds}::uuid[])
   `;
   const [{ count: sessionsCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
     from auth.sessions
-    where user_id = any(${sql.array(removeIds)}::uuid[])
+    where user_id = any(${removeIds}::uuid[])
   `;
   const [{ count: tokensCount }] = await sql<[{ count: string }]>`
     select count(*)::text as count
     from auth.tokens
-    where user_id = any(${sql.array(removeIds)}::uuid[])
+    where user_id = any(${removeIds}::uuid[])
   `;
   const oauthCount = await sql<[{ count: string }]>`
     select count(*)::text as count
@@ -139,7 +139,7 @@ async function main() {
     const [row] = await sql<[{ count: string }]>`
       select count(*)::text as count
       from auth.oauth_identities
-      where user_id = any(${sql.array(removeIds)}::uuid[])
+      where user_id = any(${removeIds}::uuid[])
     `;
     oauthRows = row.count;
   }
@@ -178,46 +178,46 @@ async function main() {
       await tx`
         delete from service_desk.outbox
         where aggregate_type = 'service_request'
-          and aggregate_id = any(${tx.array(requestIds.map(String))}::text[])
+          and aggregate_id = any(${requestIds.map(String)}::text[])
       `;
       // request_messages and request_history cascade via FK ON DELETE CASCADE,
       // but explicit deletes make intent clear and survive schema drift.
       await tx`
         delete from service_desk.request_messages
-        where request_id = any(${tx.array(requestIds)}::uuid[])
+        where request_id = any(${requestIds}::uuid[])
       `;
       await tx`
         delete from service_desk.request_history
-        where request_id = any(${tx.array(requestIds)}::uuid[])
+        where request_id = any(${requestIds}::uuid[])
       `;
       await tx`
         delete from service_desk.requests
-        where id = any(${tx.array(requestIds)}::uuid[])
+        where id = any(${requestIds}::uuid[])
       `;
     }
 
     // Auth dependents cascade on user delete, but explicit is safer/clearer.
     await tx`
       delete from auth.sessions
-      where user_id = any(${tx.array(removeIds)}::uuid[])
+      where user_id = any(${removeIds}::uuid[])
     `;
     await tx`
       delete from auth.tokens
-      where user_id = any(${tx.array(removeIds)}::uuid[])
+      where user_id = any(${removeIds}::uuid[])
     `;
     if (Number(oauthCount[0]?.count ?? "0") > 0) {
       await tx`
         delete from auth.oauth_identities
-        where user_id = any(${tx.array(removeIds)}::uuid[])
+        where user_id = any(${removeIds}::uuid[])
       `;
     }
     await tx`
       delete from auth.outbox
-      where user_id = any(${tx.array(removeIds)}::uuid[])
+      where user_id = any(${removeIds}::uuid[])
     `;
     await tx`
       delete from auth.users
-      where id = any(${tx.array(removeIds)}::uuid[])
+      where id = any(${removeIds}::uuid[])
     `;
   });
 
