@@ -60736,6 +60736,9 @@ var loginInputSchema = external_exports.object({
 var forgotPasswordInputSchema = external_exports.object({
   email: external_exports.string().email()
 });
+var updateProfileInputSchema = external_exports.object({
+  displayName: external_exports.string().trim().min(2).max(80)
+});
 var resetPasswordInputSchema = external_exports.object({
   token: external_exports.string().min(20),
   password: external_exports.string().min(8)

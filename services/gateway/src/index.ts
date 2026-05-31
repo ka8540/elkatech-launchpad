@@ -188,6 +188,74 @@ app.post("/api/auth/logout", async (request, reply) => {
   return { ok: true };
 });
 
+// Self-service: current user updates their own display name. Never touches
+// role, approval status, email, or password — those have dedicated flows.
+app.patch("/api/me/profile", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, [
+    "customer",
+    "engineer",
+    "admin",
+  ]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const input = z
+    .object({ displayName: z.string().trim().min(2).max(80) })
+    .parse(request.body);
+  try {
+    return await fetchJson(
+      `${env.AUTH_SERVICE_URL}/internal/users/${session.user.id}/profile`,
+      {
+        method: "PATCH",
+        headers: internalHeaders({ "x-user-id": session.user.id }),
+        body: JSON.stringify(input),
+      },
+    );
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "profile update failed");
+        return reply
+          .code(502)
+          .send({ message: "Could not update profile. Please try again." });
+      }
+      return reply.code(error.status).send(
+        error.body && typeof error.body === "object"
+          ? (error.body as Record<string, unknown>)
+          : { message: error.message },
+      );
+    }
+    throw error;
+  }
+});
+
+// Self-service: trigger the existing forgot-password flow for the signed-in
+// user. The frontend never needs to type its own email — eliminates the
+// "send reset to arbitrary address" surface for an already-authed session.
+app.post(
+  "/api/me/password-reset",
+  { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } },
+  async (request: any, reply: any) => {
+    const session = await requireSession(request, reply, [
+      "customer",
+      "engineer",
+      "admin",
+    ]);
+    if (!session) return;
+    if (!assertCsrf(request, reply)) return;
+    try {
+      await fetchJson(`${env.AUTH_SERVICE_URL}/forgot-password`, {
+        method: "POST",
+        headers: internalHeaders(),
+        body: JSON.stringify({ email: session.user.email }),
+      });
+    } catch (error) {
+      request.log.error({ err: error }, "self password reset failed");
+    }
+    // Always respond the same — no user-existence leak, no provider details.
+    return { message: "Password reset email sent." };
+  },
+);
+
 app.get("/api/auth/me", async (request, reply) => {
   const sessionToken = getSessionCookie(request);
   if (!sessionToken) {

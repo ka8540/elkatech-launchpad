@@ -608,6 +608,32 @@ app.get("/internal/users/:id", async (request, reply) => {
   return mapUser(user);
 });
 
+// Self-service profile update. Only the display name is mutable here — role,
+// approval status, email, and password are governed by other dedicated flows
+// so a user can never escalate themselves via this endpoint.
+app.patch("/internal/users/:id/profile", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const paramsSchema = z.object({ id: z.string().uuid() });
+  const params = paramsSchema.parse(request.params);
+  const bodySchema = z.object({
+    displayName: z.string().trim().min(2).max(80),
+  });
+  const input = bodySchema.parse(request.body);
+
+  const existing = await findUserById(params.id);
+  if (!existing) return reply.code(404).send({ message: "User not found." });
+
+  await sql`
+    update auth.users
+    set display_name = ${input.displayName}, updated_at = now()
+    where id = ${params.id}
+  `;
+  const updated = await findUserById(params.id);
+  return reply.send({ user: updated ? mapUser(updated) : null });
+});
+
 app.post("/internal/invite", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });

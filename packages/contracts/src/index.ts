@@ -129,6 +129,11 @@ export const forgotPasswordInputSchema = z.object({
   email: z.string().email(),
 });
 
+export const updateProfileInputSchema = z.object({
+  displayName: z.string().trim().min(2).max(80),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileInputSchema>;
+
 export const resetPasswordInputSchema = z.object({
   token: z.string().min(20),
   password: z.string().min(8),

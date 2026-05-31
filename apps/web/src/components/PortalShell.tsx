@@ -3,6 +3,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleUser,
   ClipboardList,
   Gauge,
   Inbox,
@@ -469,10 +470,49 @@ const PortalShell = () => {
           </div>
         )}
 
-        {/* Divider B→C */}
+        {/* Divider B→Account */}
         <div className="mx-3 border-t border-[var(--lp-line)]" />
 
-        {/* ── Group C: Logout ────────────────────────────────────────────── */}
+        {/* ── Group C: My Account ────────────────────────────────────────── */}
+        <div className="px-3 pt-3">
+          {collapsed && !isMobile ? (
+            <div className="flex justify-center">
+              <Link
+                to="/app/account"
+                title="My Account"
+                aria-label="My Account"
+                aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-xl border transition-all",
+                  location.pathname.startsWith("/app/account")
+                    ? "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
+                    : "border-[var(--lp-line)] bg-[var(--lp-panel)]/50 text-[var(--lp-faint)] hover:border-[var(--lp-accent)]/45 hover:text-[var(--lp-accent)]",
+                )}
+              >
+                <CircleUser className="h-[15px] w-[15px]" />
+              </Link>
+            </div>
+          ) : (
+            <Link
+              to="/app/account"
+              aria-current={location.pathname.startsWith("/app/account") ? "page" : undefined}
+              className={cn(
+                "flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium transition-all",
+                location.pathname.startsWith("/app/account")
+                  ? "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
+                  : "border-[var(--lp-line)] bg-[var(--lp-panel)]/50 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:text-[var(--lp-accent)]",
+              )}
+            >
+              <CircleUser className="h-[15px] w-[15px] shrink-0" />
+              <span>My Account</span>
+            </Link>
+          )}
+        </div>
+
+        {/* Divider Account→Logout */}
+        <div className="mx-3 mt-3 border-t border-[var(--lp-line)]" />
+
+        {/* ── Group D: Logout ────────────────────────────────────────────── */}
         <div className="px-3 pt-3">
           {collapsed && !isMobile ? (
             <div className="flex justify-center">
