@@ -65198,16 +65198,28 @@ app.get("/internal/users", async (request, reply) => {
     role: roleSchema.optional()
   });
   const query = querySchema.parse(request.query);
-  const rows = query.role ? await sql`
-        select *
-        from auth.users
-        where role = ${query.role}
-        order by created_at desc
-      ` : await sql`
-        select *
-        from auth.users
-        order by created_at desc
-      `;
+  let rows;
+  try {
+    rows = query.role ? await sql`
+          select *
+          from auth.users
+          where role = ${query.role}
+            and removed_at is null
+          order by created_at desc
+        ` : await sql`
+          select *
+          from auth.users
+          where removed_at is null
+          order by created_at desc
+        `;
+  } catch (error) {
+    if (error?.code !== "42703") throw error;
+    rows = query.role ? await sql`
+          select * from auth.users where role = ${query.role} order by created_at desc
+        ` : await sql`
+          select * from auth.users order by created_at desc
+        `;
+  }
   return rows.map(mapUser);
 });
 app.get("/internal/users/:id", async (request, reply) => {
@@ -65735,38 +65747,67 @@ app.delete("/internal/users/:id", async (request, reply) => {
     }
   }
   await sql.begin(async (tx) => {
-    await tx`
-      update auth.users
-      set approval_status = 'suspended',
-          suspended_at = now(),
-          suspended_by = ${actor},
-          updated_at = now()
-      where id = ${user.id}
-    `;
+    try {
+      await tx`
+        update auth.users
+        set approval_status = 'suspended',
+            suspended_at = now(),
+            suspended_by = ${actor},
+            removed_at = now(),
+            removed_by = ${actor},
+            updated_at = now()
+        where id = ${user.id}
+      `;
+    } catch (error) {
+      if (error?.code !== "42703") throw error;
+      await tx`
+        update auth.users
+        set approval_status = 'suspended',
+            suspended_at = now(),
+            suspended_by = ${actor},
+            updated_at = now()
+        where id = ${user.id}
+      `;
+    }
     await tx`delete from auth.sessions where user_id = ${user.id}`;
   });
-  const updated = await findUserById(user.id);
-  return reply.send({ user: updated ? mapUser(updated) : null });
+  return reply.send({ user: null });
 });
 app.get("/internal/users/summary", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });
   }
-  const [rows] = await sql`
-    select
-      count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-      count(*) filter (where approval_status = 'approved')         as approved,
-      count(*) filter (where approval_status = 'rejected')         as rejected,
-      count(*) filter (where approval_status = 'suspended')        as suspended,
-      count(*)                                                     as total
-    from auth.users
-  `;
+  let rows;
+  try {
+    rows = await sql`
+      select
+        count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+        count(*) filter (where approval_status = 'approved')         as approved,
+        count(*) filter (where approval_status = 'rejected')         as rejected,
+        count(*) filter (where approval_status = 'suspended')        as suspended,
+        count(*)                                                     as total
+      from auth.users
+      where removed_at is null
+    `;
+  } catch (error) {
+    if (error?.code !== "42703") throw error;
+    rows = await sql`
+      select
+        count(*) filter (where approval_status = 'pending_approval') as pending_approval,
+        count(*) filter (where approval_status = 'approved')         as approved,
+        count(*) filter (where approval_status = 'rejected')         as rejected,
+        count(*) filter (where approval_status = 'suspended')        as suspended,
+        count(*)                                                     as total
+      from auth.users
+    `;
+  }
+  const [summary] = rows;
   return {
-    pendingApproval: Number(rows.pending_approval ?? 0),
-    approved: Number(rows.approved ?? 0),
-    rejected: Number(rows.rejected ?? 0),
-    suspended: Number(rows.suspended ?? 0),
-    total: Number(rows.total ?? 0)
+    pendingApproval: Number(summary?.pending_approval ?? 0),
+    approved: Number(summary?.approved ?? 0),
+    rejected: Number(summary?.rejected ?? 0),
+    suspended: Number(summary?.suspended ?? 0),
+    total: Number(summary?.total ?? 0)
   };
 });
 var port = Number(new URL(env.AUTH_SERVICE_URL).port || "4001");

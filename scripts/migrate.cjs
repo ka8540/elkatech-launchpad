@@ -9,6 +9,9 @@ const path = require('path');
 const migrations = [
   'services/auth/migrations/001_init.sql',
   'services/auth/migrations/002_oauth_identities.sql',
+  'services/auth/migrations/003_firebase_and_approval.sql',
+  'services/auth/migrations/004_account_origin.sql',
+  'services/auth/migrations/005_user_removed_at.sql',
   'services/catalog/migrations/001_init.sql',
   'services/service-desk/migrations/001_init.sql',
   'services/notification/migrations/001_init.sql',
