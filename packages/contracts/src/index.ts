@@ -107,11 +107,27 @@ export const requestMessageSchema = z.object({
   requestId: z.string(),
   authorId: z.string(),
   authorRole: roleSchema,
+  // Display-only enrichment. Server fills these when looking up the author
+  // is safe; the UI falls back gracefully when they're missing so older
+  // payloads still render.
+  authorDisplayName: z.string().optional().nullable(),
+  authorEmail: z.string().optional().nullable(),
   visibility: messageVisibilitySchema,
   body: z.string(),
   createdAt: z.string(),
 });
 export type RequestMessage = z.infer<typeof requestMessageSchema>;
+
+/** Light-weight participant info returned alongside a request detail
+ *  payload — lets the UI show "Assigned to <name>" without doing its
+ *  own admin-users query (which only admins are allowed to make). */
+export const requestParticipantSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  email: z.string(),
+  role: roleSchema,
+});
+export type RequestParticipant = z.infer<typeof requestParticipantSchema>;
 
 export const signUpInputSchema = z.object({
   email: z.string().email(),

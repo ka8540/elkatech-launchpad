@@ -99219,9 +99219,20 @@ var requestMessageSchema = external_exports.object({
   requestId: external_exports.string(),
   authorId: external_exports.string(),
   authorRole: roleSchema,
+  // Display-only enrichment. Server fills these when looking up the author
+  // is safe; the UI falls back gracefully when they're missing so older
+  // payloads still render.
+  authorDisplayName: external_exports.string().optional().nullable(),
+  authorEmail: external_exports.string().optional().nullable(),
   visibility: messageVisibilitySchema,
   body: external_exports.string(),
   createdAt: external_exports.string()
+});
+var requestParticipantSchema = external_exports.object({
+  id: external_exports.string(),
+  displayName: external_exports.string(),
+  email: external_exports.string(),
+  role: roleSchema
 });
 var signUpInputSchema = external_exports.object({
   email: external_exports.string().email(),

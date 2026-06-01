@@ -60719,9 +60719,20 @@ var requestMessageSchema = external_exports.object({
   requestId: external_exports.string(),
   authorId: external_exports.string(),
   authorRole: roleSchema,
+  // Display-only enrichment. Server fills these when looking up the author
+  // is safe; the UI falls back gracefully when they're missing so older
+  // payloads still render.
+  authorDisplayName: external_exports.string().optional().nullable(),
+  authorEmail: external_exports.string().optional().nullable(),
   visibility: messageVisibilitySchema,
   body: external_exports.string(),
   createdAt: external_exports.string()
+});
+var requestParticipantSchema = external_exports.object({
+  id: external_exports.string(),
+  displayName: external_exports.string(),
+  email: external_exports.string(),
+  role: roleSchema
 });
 var signUpInputSchema = external_exports.object({
   email: external_exports.string().email(),
@@ -63459,6 +63470,22 @@ app.get("/requests/:requestId", async (request, reply) => {
           where request_id = ${params.requestId}
           order by created_at asc
         `;
+  const participantIds = /* @__PURE__ */ new Set();
+  if (current.assigned_engineer_id) participantIds.add(current.assigned_engineer_id);
+  for (const row of messageRows) {
+    if (row.author_id) participantIds.add(row.author_id);
+  }
+  const participantEntries = await Promise.all(
+    Array.from(participantIds).map(async (id) => {
+      try {
+        const user = await getUserById(id);
+        return [id, user];
+      } catch {
+        return [id, null];
+      }
+    })
+  );
+  const participantMap = new Map(participantEntries);
   return {
     request: serviceRequestSchema.parse({
       id: current.id,
@@ -63477,17 +63504,31 @@ app.get("/requests/:requestId", async (request, reply) => {
       createdAt: new Date(current.created_at).toISOString(),
       updatedAt: new Date(current.updated_at).toISOString()
     }),
-    messages: messageRows.map(
-      (row) => requestMessageSchema.parse({
+    assignedEngineer: (() => {
+      if (!current.assigned_engineer_id) return null;
+      const user = participantMap.get(current.assigned_engineer_id);
+      if (!user) return null;
+      return {
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+        role: user.role
+      };
+    })(),
+    messages: messageRows.map((row) => {
+      const author = row.author_id ? participantMap.get(row.author_id) : null;
+      return requestMessageSchema.parse({
         id: row.id,
         requestId: row.request_id,
         authorId: row.author_id,
         authorRole: row.author_role,
+        authorDisplayName: author?.displayName ?? null,
+        authorEmail: author?.email ?? null,
         visibility: row.visibility,
         body: row.body,
         createdAt: new Date(row.created_at).toISOString()
-      })
-    ),
+      });
+    }),
     history: historyRows.map((row) => ({
       id: row.id,
       requestId: row.request_id,

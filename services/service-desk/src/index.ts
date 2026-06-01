@@ -355,6 +355,27 @@ app.get("/requests/:requestId", async (request, reply) => {
           order by created_at asc
         `;
 
+  // Resolve display info for participants the UI needs to render — the
+  // assignee plus every message author. Done in parallel and silently
+  // tolerant of lookup failures so a stale author id never breaks the
+  // detail page.
+  const participantIds = new Set<string>();
+  if (current.assigned_engineer_id) participantIds.add(current.assigned_engineer_id);
+  for (const row of messageRows) {
+    if (row.author_id) participantIds.add(row.author_id);
+  }
+  const participantEntries = await Promise.all(
+    Array.from(participantIds).map(async (id) => {
+      try {
+        const user = await getUserById(id);
+        return [id, user] as const;
+      } catch {
+        return [id, null] as const;
+      }
+    }),
+  );
+  const participantMap = new Map(participantEntries);
+
   return {
     request: serviceRequestSchema.parse({
       id: current.id,
@@ -373,17 +394,31 @@ app.get("/requests/:requestId", async (request, reply) => {
       createdAt: new Date(current.created_at).toISOString(),
       updatedAt: new Date(current.updated_at).toISOString(),
     }),
-    messages: messageRows.map((row) =>
-      requestMessageSchema.parse({
+    assignedEngineer: (() => {
+      if (!current.assigned_engineer_id) return null;
+      const user = participantMap.get(current.assigned_engineer_id);
+      if (!user) return null;
+      return {
+        id: user.id,
+        displayName: user.displayName,
+        email: user.email,
+        role: user.role,
+      };
+    })(),
+    messages: messageRows.map((row) => {
+      const author = row.author_id ? participantMap.get(row.author_id) : null;
+      return requestMessageSchema.parse({
         id: row.id,
         requestId: row.request_id,
         authorId: row.author_id,
         authorRole: row.author_role,
+        authorDisplayName: author?.displayName ?? null,
+        authorEmail: author?.email ?? null,
         visibility: row.visibility,
         body: row.body,
         createdAt: new Date(row.created_at).toISOString(),
-      }),
-    ),
+      });
+    }),
     history: historyRows.map((row) => ({
       id: row.id,
       requestId: row.request_id,

@@ -5,6 +5,7 @@ import type {
   AuthUser,
   MessageVisibility,
   RequestMessage,
+  RequestParticipant,
   RequestStatus,
   ServiceRequest,
 } from "@elkatech/contracts";
@@ -78,6 +79,7 @@ type RequestHistoryEntry = {
 
 type RequestDetailResponse = {
   request: ServiceRequest;
+  assignedEngineer?: RequestParticipant | null;
   messages: RequestMessage[];
   history: RequestHistoryEntry[];
 };
@@ -228,39 +230,61 @@ function canEditRequestDetails({
 function MessageBubble({
   message,
   isStaff,
+  isMine,
 }: {
   message: RequestMessage;
   isStaff: boolean;
+  /** True when the current viewer is the message's author — used purely
+   *  for left/right chat alignment, not for permission. */
+  isMine: boolean;
 }) {
-  const isCustomerMessage = message.authorRole === "customer";
   const isInternal = message.visibility === "internal_note";
+  // Best-available sender label: real display name → email → role fallback.
+  const senderLabel = isMine
+    ? "You"
+    : message.authorDisplayName ||
+      message.authorEmail ||
+      (message.authorRole === "customer" ? "Customer" : "Service team");
+  const roleBadge =
+    !isMine && message.authorRole && message.authorRole !== "customer"
+      ? message.authorRole === "admin"
+        ? "Admin"
+        : "Engineer"
+      : null;
 
   return (
-    <div className={cn("flex", isCustomerMessage ? "justify-start" : "justify-end")}>
+    <div className={cn("flex", isMine ? "justify-end" : "justify-start")}>
       <article
         className={cn(
           "max-w-[88%] rounded-2xl border px-4 py-3 shadow-[0_18px_38px_-32px_rgba(0,0,0,0.75)] sm:max-w-[76%]",
-          isCustomerMessage
-            ? "rounded-bl-md border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70"
-            : "rounded-br-md border-[var(--lp-accent)]/28 bg-[var(--lp-accent)]/[0.10]",
-          isInternal && "border-amber-400/30 bg-amber-400/[0.08]",
+          isMine
+            ? "rounded-br-md border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/[0.12]"
+            : "rounded-bl-md border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70",
+          isInternal && "border-amber-400/35 bg-amber-400/[0.08]",
         )}
       >
-        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.16em]">
+        <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span
             className={cn(
-              "lp-mono font-semibold",
-              isCustomerMessage ? "text-[var(--lp-faint)]" : "text-[var(--lp-accent)]",
+              "text-[12px] font-semibold",
+              isMine ? "text-[var(--lp-accent)]" : "text-[var(--lp-ink)]",
             )}
           >
-            {isCustomerMessage ? "Customer" : "Service team"}
+            {senderLabel}
           </span>
+          {roleBadge && (
+            <span className="lp-mono rounded-full border border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-1.5 py-0 text-[9px] uppercase tracking-[0.14em] text-[var(--lp-ink-soft)]">
+              {roleBadge}
+            </span>
+          )}
           {isStaff && isInternal && (
-            <span className="rounded-full border border-amber-400/30 px-2 py-0.5 text-amber-600 dark:text-amber-300">
+            <span className="lp-mono rounded-full border border-amber-400/35 bg-amber-400/10 px-1.5 py-0 text-[9px] uppercase tracking-[0.14em] text-amber-700 dark:text-amber-300">
               Internal note
             </span>
           )}
-          <span className="text-[var(--lp-faint)]">{fmtDateTime(message.createdAt)}</span>
+          <span className="lp-mono text-[10px] uppercase tracking-[0.14em] text-[var(--lp-faint)]">
+            {fmtDateTime(message.createdAt)}
+          </span>
         </div>
         <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--lp-ink)]">
           {message.body}
@@ -526,9 +550,16 @@ const RequestDetailPage = () => {
     !request.assignedEngineerId;
   const assignedToMe =
     isStaff && Boolean(request.assignedEngineerId) && request.assignedEngineerId === user?.id;
+  // Prefer server-enriched assignee info (works for engineers too — they
+  // can't read /api/admin/users). Falls back to admin-only engineers list
+  // and finally to a generic label so the UI never says "engineer" when
+  // it can show a name.
   const assignedEngineerName = request.assignedEngineerId
-    ? engineers.find((e) => e.id === request.assignedEngineerId)?.displayName ??
-      users.find((u) => u.id === request.assignedEngineerId)?.displayName ??
+    ? data.assignedEngineer?.displayName ||
+      data.assignedEngineer?.email ||
+      engineers.find((e) => e.id === request.assignedEngineerId)?.displayName ||
+      users.find((u) => u.id === request.assignedEngineerId)?.displayName ||
+      users.find((u) => u.id === request.assignedEngineerId)?.email ||
       "another engineer"
     : null;
   const canCustomerCancel =
@@ -769,14 +800,18 @@ const RequestDetailPage = () => {
                   </span>
                 </span>
               )}
-              {request.assignedEngineerId && (
-                <span>
-                  Assigned{" "}
-                  <span className="text-[var(--lp-ink-soft)]">
-                    {engineers.find((e) => e.id === request.assignedEngineerId)?.displayName ?? "engineer"}
-                  </span>
-                </span>
-              )}
+              <span>
+                {request.assignedEngineerId ? (
+                  <>
+                    Assigned to{" "}
+                    <span className="text-[var(--lp-ink-soft)]">
+                      {assignedToMe ? "you" : assignedEngineerName}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[var(--lp-ink-soft)]">Unassigned</span>
+                )}
+              </span>
             </div>
           </section>
 
@@ -798,7 +833,12 @@ const RequestDetailPage = () => {
                 </div>
               ) : (
                 data.messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} isStaff={isStaff} />
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    isStaff={isStaff}
+                    isMine={Boolean(user?.id) && message.authorId === user?.id}
+                  />
                 ))
               )}
             </div>
@@ -888,6 +928,20 @@ const RequestDetailPage = () => {
             </div>
             <div className="mt-2">
               <DetailRow label="Status" value={getRequestStatusLabel(request.status)} />
+              <DetailRow
+                label="Assigned to"
+                value={
+                  request.assignedEngineerId ? (
+                    assignedToMe ? (
+                      <span className="font-medium text-[var(--lp-accent)]">You</span>
+                    ) : (
+                      <span>{assignedEngineerName}</span>
+                    )
+                  ) : (
+                    <span className="text-[var(--lp-faint)]">Unassigned</span>
+                  )
+                }
+              />
               <DetailRow
                 label="Priority"
                 value={<span className="capitalize">{request.priority}</span>}
