@@ -283,6 +283,30 @@ app.get("/health", async () => ({
   environment: env.NODE_ENV,
 }));
 
+/**
+ * On Vercel the function is suspended between requests, so the
+ * setInterval poller above never fires in production — every
+ * `emitOutbox()` from the gateway fires-and-forgets a request to this
+ * endpoint to drain the outbox immediately. The internal-token guard
+ * keeps it from being publicly callable.
+ */
+function ensureInternal(headers: Record<string, unknown>): boolean {
+  return headers["x-internal-token"] === env.INTERNAL_SERVICE_TOKEN;
+}
+
+app.post("/process-outbox", async (request, reply) => {
+  if (!ensureInternal(request.headers as Record<string, unknown>)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  try {
+    await poll();
+    return { ok: true };
+  } catch (error) {
+    app.log.error({ err: error }, "process-outbox failed");
+    return reply.code(500).send({ message: "outbox processing failed" });
+  }
+});
+
 setInterval(() => {
   void poll().catch((error) => {
     app.log.error(error);

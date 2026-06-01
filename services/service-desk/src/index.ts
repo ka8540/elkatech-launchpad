@@ -65,6 +65,22 @@ async function emitOutbox(eventType: string, aggregateId: string, payload: Recor
     insert into service_desk.outbox (id, aggregate_type, aggregate_id, event_type, payload)
     values (${randomUUID()}, ${"request"}, ${aggregateId}, ${eventType}, ${sql.json(payload as any)})
   `;
+  // Kick the notification service to drain the outbox. Vercel suspends
+  // serverless functions between requests, so the notification poller's
+  // setInterval never runs in prod — without this ping, emails never go
+  // out. Fire-and-forget so we never block or fail the user's request.
+  triggerNotificationPoll();
+}
+
+function triggerNotificationPoll(): void {
+  void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
+    method: "POST",
+    headers: internalHeaders(),
+  }).catch(() => {
+    // Best-effort. The setInterval poller will catch up next time the
+    // function happens to be warm, and the row stays in the outbox until
+    // it's processed.
+  });
 }
 
 async function addHistory(

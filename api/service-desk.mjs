@@ -63244,6 +63244,14 @@ async function emitOutbox(eventType, aggregateId, payload) {
     insert into service_desk.outbox (id, aggregate_type, aggregate_id, event_type, payload)
     values (${randomUUID()}, ${"request"}, ${aggregateId}, ${eventType}, ${sql.json(payload)})
   `;
+  triggerNotificationPoll();
+}
+function triggerNotificationPoll() {
+  void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
+    method: "POST",
+    headers: internalHeaders()
+  }).catch(() => {
+  });
 }
 async function addHistory(requestId, actor, eventType, metadata = {}) {
   await sql`

@@ -105134,6 +105134,21 @@ app.get("/health", async () => ({
   service: "notification",
   environment: env2.NODE_ENV
 }));
+function ensureInternal(headers) {
+  return headers["x-internal-token"] === env2.INTERNAL_SERVICE_TOKEN;
+}
+app.post("/process-outbox", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  try {
+    await poll();
+    return { ok: true };
+  } catch (error2) {
+    app.log.error({ err: error2 }, "process-outbox failed");
+    return reply.code(500).send({ message: "outbox processing failed" });
+  }
+});
 setInterval(() => {
   void poll().catch((error2) => {
     app.log.error(error2);

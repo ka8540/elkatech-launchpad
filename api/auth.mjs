@@ -64818,6 +64818,15 @@ function getDb() {
   return sqlClient;
 }
 
+// packages/config/src/http.ts
+function internalHeaders(extra = {}) {
+  return {
+    "content-type": "application/json",
+    "x-internal-token": getEnv().INTERNAL_SERVICE_TOKEN,
+    ...extra
+  };
+}
+
 // packages/config/src/redis.ts
 var import_ioredis = __toESM(require_built3(), 1);
 
@@ -64899,6 +64908,14 @@ async function emitOutbox(aggregateType, aggregateId, eventType, payload) {
     insert into auth.outbox (id, aggregate_type, aggregate_id, event_type, payload)
     values (${randomUUID()}, ${aggregateType}, ${aggregateId}, ${eventType}, ${sql.json(payload)})
   `;
+  triggerNotificationPoll();
+}
+function triggerNotificationPoll() {
+  void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
+    method: "POST",
+    headers: internalHeaders()
+  }).catch(() => {
+  });
 }
 async function createVerificationToken(userId, email) {
   const rawToken = generateToken();
