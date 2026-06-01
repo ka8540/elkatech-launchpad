@@ -1,0 +1,12 @@
+Hello,
+
+Your account has been added to the ElkaTech Service Portal.
+
+Please sign in or sign up using this email address:
+{{email}}
+
+Portal:
+{{portalUrl}}
+
+Thank you,
+ElkaTech Team

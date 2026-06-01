@@ -2,10 +2,88 @@ import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import nodemailer from "nodemailer";
 import { getDb, getEnv } from "@elkatech/config";
+import { isSesConfigured, sendSesTemplatedEmail } from "./ses";
 
 const app = Fastify({ logger: true });
 const sql = getDb();
 const env = getEnv();
+
+function portalUrl(): string {
+  return env.APP_BASE_URL.replace(/\/+$/, "");
+}
+
+function requestUrl(requestId: string): string {
+  return `${portalUrl()}/app/requests/${requestId}`;
+}
+
+/**
+ * For the two SES-backed flows, build the list of templated sends.
+ * Returns an empty array when the event isn't one we care about for SES.
+ */
+function buildSesSends(
+  eventType: string,
+  payload: Record<string, unknown>,
+): Array<{ to: string; template: string; data: Record<string, string>; subjectForLog: string }> {
+  switch (eventType) {
+    case "user.registered": {
+      // Mirror buildEmails(): we only send the "account added" SES template
+      // for admin-invited accounts, not normal self-signup verifications.
+      if (!payload.invitation) return [];
+      const email = String(payload.email ?? "");
+      if (!email) return [];
+      return [
+        {
+          to: email,
+          template: env.SES_ACCOUNT_ADDED_TEMPLATE,
+          data: {
+            email,
+            portalUrl: portalUrl(),
+          },
+          subjectForLog: "Your ElkaTech service portal account has been added",
+        },
+      ];
+    }
+    case "request.assigned": {
+      const customerEmail = String(payload.customerEmail ?? "");
+      const engineerEmail = String(payload.engineerEmail ?? "");
+      const data: Record<string, string> = {
+        requestNumber: String(payload.requestNumber ?? ""),
+        product: String(payload.product ?? ""),
+        location: String(payload.location ?? ""),
+        phone: String(payload.phone ?? ""),
+        customerName: String(payload.customerName ?? payload.customerEmail ?? ""),
+        engineerName: String(payload.engineerName ?? payload.engineerEmail ?? ""),
+        requestUrl: requestUrl(String(payload.requestId ?? "")),
+      };
+      const subjectForLog = `Service request picked up: ${data.requestNumber}`;
+      const sends: Array<{
+        to: string;
+        template: string;
+        data: Record<string, string>;
+        subjectForLog: string;
+      }> = [];
+      if (customerEmail) {
+        sends.push({
+          to: customerEmail,
+          template: env.SES_REQUEST_CLAIMED_TEMPLATE,
+          data,
+          subjectForLog,
+        });
+      }
+      if (engineerEmail && engineerEmail !== customerEmail) {
+        sends.push({
+          to: engineerEmail,
+          template: env.SES_REQUEST_CLAIMED_TEMPLATE,
+          data,
+          subjectForLog,
+        });
+      }
+      return sends;
+    }
+    default:
+      return [];
+  }
+}
 
 const transporter = nodemailer.createTransport({
   host: env.SMTP_HOST,
@@ -103,13 +181,31 @@ async function processOutbox(
   `;
 
   for (const row of rows) {
-    const emails = buildEmails(row.event_type, row.payload);
+    // Prefer SES for the two transactional flows the platform formally
+    // supports as templates (admin invite + request claim). Everything
+    // else, plus the same flows when SES isn't configured, falls through
+    // to the existing nodemailer/SMTP path so local Mailpit dev keeps
+    // working unchanged.
+    const sesSends =
+      isSesConfigured() ? buildSesSends(row.event_type, row.payload) : [];
+    const emails = sesSends.length === 0 ? buildEmails(row.event_type, row.payload) : [];
+
     try {
-      for (const email of emails) {
-        await transporter.sendMail({
-          from: env.SMTP_FROM,
-          ...email,
-        });
+      const deliveryRows: Array<{ to: string; subject: string }> = [];
+      if (sesSends.length > 0) {
+        for (const send of sesSends) {
+          const ok = await sendSesTemplatedEmail(send, app.log);
+          if (!ok) throw new Error(`SES send failed for template ${send.template}`);
+          deliveryRows.push({ to: send.to, subject: send.subjectForLog });
+        }
+      } else {
+        for (const email of emails) {
+          await transporter.sendMail({
+            from: env.SMTP_FROM,
+            ...email,
+          });
+          deliveryRows.push({ to: email.to, subject: email.subject });
+        }
       }
 
       await sql.begin(async (transaction) => {
@@ -118,7 +214,7 @@ async function processOutbox(
           set processed_at = now()
           where id = ${row.id}
         `;
-        for (const email of emails) {
+        for (const delivery of deliveryRows) {
           await transaction`
             insert into notification.deliveries (
               id,
@@ -133,8 +229,8 @@ async function processOutbox(
               ${randomUUID()},
               ${row.id},
               ${row.event_type},
-              ${email.to},
-              ${email.subject},
+              ${delivery.to},
+              ${delivery.subject},
               ${"sent"},
               now()
             )
@@ -143,6 +239,10 @@ async function processOutbox(
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email error";
+      const failedTo =
+        sesSends[0]?.to ?? emails[0]?.to ?? env.BOOTSTRAP_ADMIN_EMAIL;
+      const failedSubject =
+        sesSends[0]?.subjectForLog ?? emails[0]?.subject ?? `${serviceName} event`;
       await sql`
         insert into notification.deliveries (
           id,
@@ -157,12 +257,12 @@ async function processOutbox(
           ${randomUUID()},
           ${row.id},
           ${row.event_type},
-          ${emails[0]?.to ?? env.BOOTSTRAP_ADMIN_EMAIL},
-          ${emails[0]?.subject ?? `${serviceName} event`},
+          ${failedTo},
+          ${failedSubject},
           ${"failed"},
           ${message}
         )
-        on conflict (event_id)
+        on conflict (event_id, recipient_email)
         do update set
           status = excluded.status,
           attempts = notification.deliveries.attempts + 1,

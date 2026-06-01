@@ -32,3 +32,12 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Terraform (never commit state, plans, or filled tfvars)
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+*.auto.tfvars

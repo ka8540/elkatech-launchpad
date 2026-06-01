@@ -654,12 +654,26 @@ app.post("/requests/:requestId/claim", async (request, reply) => {
   `;
 
   await addHistory(params.requestId, actor, "request_claimed", {});
+  // Look up the customer so the claim email can address them by name.
+  // Tolerant: if the lookup fails the email still goes out with just the
+  // email address.
+  let customerName: string | null = null;
+  try {
+    const customer = await getUserById(current.customer_id);
+    customerName = customer.displayName ?? null;
+  } catch {
+    customerName = null;
+  }
   await emitOutbox("request.assigned", params.requestId, {
     requestId: params.requestId,
     requestNumber: current.request_number,
     engineerEmail: actor.email,
     engineerName: actor.displayName,
     customerEmail: current.customer_email,
+    customerName,
+    product: current.product_snapshot?.name ?? null,
+    location: current.site_location ?? null,
+    phone: current.contact_phone ?? null,
     status: "assigned",
   });
 
