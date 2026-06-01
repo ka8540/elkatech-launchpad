@@ -105049,74 +105049,100 @@ async function processOutbox(schemaName, tableName, serviceName) {
   for (const row of rows) {
     const sesSends = isSesConfigured() ? buildSesSends(row.event_type, row.payload) : [];
     const emails = sesSends.length === 0 ? buildEmails(row.event_type, row.payload) : [];
-    try {
-      const deliveryRows = [];
-      if (sesSends.length > 0) {
-        for (const send of sesSends) {
+    const outcomes = [];
+    if (sesSends.length > 0) {
+      for (const send of sesSends) {
+        try {
           const ok = await sendSesTemplatedEmail(send, app.log);
-          if (!ok) throw new Error(`SES send failed for template ${send.template}`);
-          deliveryRows.push({ to: send.to, subject: send.subjectForLog });
-        }
-      } else {
-        for (const email of emails) {
-          await transporter.sendMail({
-            from: env2.SMTP_FROM,
-            ...email
+          outcomes.push(
+            ok ? { kind: "sent", to: send.to, subject: send.subjectForLog } : {
+              kind: "failed",
+              to: send.to,
+              subject: send.subjectForLog,
+              error: `SES send failed for template ${send.template}`
+            }
+          );
+        } catch (error2) {
+          outcomes.push({
+            kind: "failed",
+            to: send.to,
+            subject: send.subjectForLog,
+            error: error2 instanceof Error ? error2.message : "Unknown SES error"
           });
-          deliveryRows.push({ to: email.to, subject: email.subject });
         }
       }
+    } else {
+      for (const email of emails) {
+        try {
+          await transporter.sendMail({ from: env2.SMTP_FROM, ...email });
+          outcomes.push({ kind: "sent", to: email.to, subject: email.subject });
+        } catch (error2) {
+          outcomes.push({
+            kind: "failed",
+            to: email.to,
+            subject: email.subject,
+            error: error2 instanceof Error ? error2.message : "Unknown SMTP error"
+          });
+        }
+      }
+    }
+    try {
       await sql.begin(async (transaction) => {
         await transaction`
           update ${sql(schemaName)}.${sql(tableName)}
           set processed_at = now()
           where id = ${row.id}
         `;
-        for (const delivery of deliveryRows) {
-          await transaction`
-            insert into notification.deliveries (
-              id,
-              event_id,
-              event_type,
-              recipient_email,
-              subject,
-              status,
-              sent_at
-            )
-            values (
-              ${randomUUID()},
-              ${row.id},
-              ${row.event_type},
-              ${delivery.to},
-              ${delivery.subject},
-              ${"sent"},
-              now()
-            )
-          `;
+        for (const outcome of outcomes) {
+          if (outcome.kind === "sent") {
+            await transaction`
+              insert into notification.deliveries (
+                id, event_id, event_type, recipient_email, subject, status, sent_at
+              )
+              values (
+                ${randomUUID()}, ${row.id}, ${row.event_type},
+                ${outcome.to}, ${outcome.subject}, ${"sent"}, now()
+              )
+              on conflict (event_id, recipient_email)
+              do update set
+                status = excluded.status,
+                attempts = notification.deliveries.attempts + 1,
+                sent_at = excluded.sent_at,
+                last_error = null
+            `;
+          } else {
+            await transaction`
+              insert into notification.deliveries (
+                id, event_id, event_type, recipient_email, subject, status, last_error
+              )
+              values (
+                ${randomUUID()}, ${row.id}, ${row.event_type},
+                ${outcome.to}, ${outcome.subject}, ${"failed"}, ${outcome.error}
+              )
+              on conflict (event_id, recipient_email)
+              do update set
+                status = excluded.status,
+                attempts = notification.deliveries.attempts + 1,
+                last_error = excluded.last_error
+            `;
+          }
         }
       });
     } catch (error2) {
-      const message = error2 instanceof Error ? error2.message : "Unknown email error";
-      const failedTo = sesSends[0]?.to ?? emails[0]?.to ?? env2.BOOTSTRAP_ADMIN_EMAIL;
-      const failedSubject = sesSends[0]?.subjectForLog ?? emails[0]?.subject ?? `${serviceName} event`;
+      app.log.error(
+        { err: error2, eventId: row.id, eventType: row.event_type },
+        "notification bookkeeping transaction failed"
+      );
+      const fallbackTo = outcomes[0]?.to ?? sesSends[0]?.to ?? emails[0]?.to ?? env2.BOOTSTRAP_ADMIN_EMAIL;
+      const fallbackSubject = outcomes[0]?.subject ?? sesSends[0]?.subjectForLog ?? emails[0]?.subject ?? `${serviceName} event`;
+      const message = error2 instanceof Error ? error2.message : "Bookkeeping failure";
       await sql`
         insert into notification.deliveries (
-          id,
-          event_id,
-          event_type,
-          recipient_email,
-          subject,
-          status,
-          last_error
+          id, event_id, event_type, recipient_email, subject, status, last_error
         )
         values (
-          ${randomUUID()},
-          ${row.id},
-          ${row.event_type},
-          ${failedTo},
-          ${failedSubject},
-          ${"failed"},
-          ${message}
+          ${randomUUID()}, ${row.id}, ${row.event_type},
+          ${fallbackTo}, ${fallbackSubject}, ${"failed"}, ${message}
         )
         on conflict (event_id, recipient_email)
         do update set
