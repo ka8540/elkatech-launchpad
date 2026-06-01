@@ -111,6 +111,10 @@ const SignupPage = () => {
         navigate(`/login?email=${encodeURIComponent(form.email)}`);
         return;
       }
+      // Seed cache synchronously so ProtectedRoute sees the fresh user on
+      // first render (the session query is inactive on this page, so an
+      // invalidate alone would not refetch before navigation).
+      queryClient.setQueryData(["session"], { user: result.user });
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       toast.success("Account created. An administrator will activate your account shortly.");
       navigate(landingForRoleAndStatus(result.user));
@@ -144,6 +148,7 @@ const SignupPage = () => {
     },
     onSuccess: async (user) => {
       if (!user) return;
+      queryClient.setQueryData(["session"], { user });
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       toast.success("Account created with Google.");
       navigate(landingForRoleAndStatus(user));

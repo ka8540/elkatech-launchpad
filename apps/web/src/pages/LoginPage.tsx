@@ -111,6 +111,13 @@ const LoginPage = () => {
       return await ensurePortalSessionReadable();
     },
     onSuccess: async (user) => {
+      // Seed the session cache synchronously so ProtectedRoute, which mounts
+      // on the very next render, reads the freshly-authenticated user instead
+      // of the stale `{ user: null }` left over from the unauthenticated
+      // page-load. Without this, useSession's `["session"]` query is inactive
+      // on LoginPage, so invalidateQueries only marks-stale (no refetch) and
+      // the guard bounces back to /login.
+      queryClient.setQueryData(["session"], { user });
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       toast.success("Logged in successfully.");
       navigate(landingPathForUser(user, next));
@@ -145,6 +152,10 @@ const LoginPage = () => {
     },
     onSuccess: async (user) => {
       if (!user) return;
+      // Same race as the email/password flow above: ProtectedRoute mounts on
+      // the next render and reads useSession's cached `{ user: null }` before
+      // the background refetch lands. Seed the cache so the first click works.
+      queryClient.setQueryData(["session"], { user });
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       toast.success("Logged in with Google.");
       navigate(landingPathForUser(user, next));
