@@ -64773,7 +64773,17 @@ var envSchema = external_exports.object({
   GOOGLE_OAUTH_REDIRECT_URI: external_exports.string().url().optional(),
   FIREBASE_PROJECT_ID: external_exports.string().optional(),
   FIREBASE_CLIENT_EMAIL: external_exports.string().optional(),
-  FIREBASE_PRIVATE_KEY: external_exports.string().optional()
+  FIREBASE_PRIVATE_KEY: external_exports.string().optional(),
+  // AWS SES — optional. When SES_FROM_EMAIL + AWS credentials are set the
+  // notification service uses SES SendTemplatedEmail for the two
+  // transactional flows ("account added", "request claimed"). Leaving
+  // these unset keeps the local Mailpit/SMTP flow working unchanged.
+  AWS_REGION: external_exports.string().optional(),
+  AWS_ACCESS_KEY_ID: external_exports.string().optional(),
+  AWS_SECRET_ACCESS_KEY: external_exports.string().optional(),
+  SES_FROM_EMAIL: external_exports.string().optional(),
+  SES_ACCOUNT_ADDED_TEMPLATE: external_exports.string().default("ElkaTechAccountAdded"),
+  SES_REQUEST_CLAIMED_TEMPLATE: external_exports.string().default("ElkaTechRequestClaimed")
 });
 var cachedEnv = null;
 function getEnv() {
@@ -64806,6 +64816,15 @@ function getDb() {
     });
   }
   return sqlClient;
+}
+
+// packages/config/src/http.ts
+function internalHeaders(extra = {}) {
+  return {
+    "content-type": "application/json",
+    "x-internal-token": getEnv().INTERNAL_SERVICE_TOKEN,
+    ...extra
+  };
 }
 
 // packages/config/src/redis.ts
@@ -64889,6 +64908,14 @@ async function emitOutbox(aggregateType, aggregateId, eventType, payload) {
     insert into auth.outbox (id, aggregate_type, aggregate_id, event_type, payload)
     values (${randomUUID()}, ${aggregateType}, ${aggregateId}, ${eventType}, ${sql.json(payload)})
   `;
+  triggerNotificationPoll();
+}
+function triggerNotificationPoll() {
+  void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
+    method: "POST",
+    headers: internalHeaders()
+  }).catch(() => {
+  });
 }
 async function createVerificationToken(userId, email) {
   const rawToken = generateToken();

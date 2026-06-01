@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f5f3ee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#181a1d;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f3ee;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e8e3d6;border-radius:12px;padding:32px;">
+            <tr>
+              <td style="font-size:14px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:#ac531c;padding-bottom:8px;">
+                ElkaTech Service Portal
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:20px;font-weight:700;color:#181a1d;padding-bottom:8px;">
+                Service request picked up
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:13px;font-family:'IBM Plex Mono',Menlo,monospace;color:#6c6f76;padding-bottom:20px;">
+                {{requestNumber}}
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8f5ec;border:1px solid #e8e3d6;border-radius:8px;">
+                  <tr>
+                    <td style="padding:8px 14px;font-size:12px;color:#6c6f76;text-transform:uppercase;letter-spacing:0.16em;width:120px;">Product</td>
+                    <td style="padding:8px 14px;font-size:14px;color:#181a1d;">{{product}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 14px;font-size:12px;color:#6c6f76;text-transform:uppercase;letter-spacing:0.16em;">Location</td>
+                    <td style="padding:8px 14px;font-size:14px;color:#181a1d;">{{location}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 14px;font-size:12px;color:#6c6f76;text-transform:uppercase;letter-spacing:0.16em;">Phone</td>
+                    <td style="padding:8px 14px;font-size:14px;color:#181a1d;">{{phone}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 14px;font-size:12px;color:#6c6f76;text-transform:uppercase;letter-spacing:0.16em;">Customer</td>
+                    <td style="padding:8px 14px;font-size:14px;color:#181a1d;">{{customerName}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:8px 14px;font-size:12px;color:#6c6f76;text-transform:uppercase;letter-spacing:0.16em;">Engineer</td>
+                    <td style="padding:8px 14px;font-size:14px;color:#181a1d;">{{engineerName}}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:24px;">
+                <a href="{{requestUrl}}" style="display:inline-block;background:#ac531c;color:#ffffff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px;">
+                  Open this request
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;color:#6c6f76;padding-top:24px;border-top:1px solid #efeae0;margin-top:24px;">
+                {{requestUrl}}<br /><br />
+                Thank you,<br />
+                ElkaTech Team
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -1,0 +1,16 @@
+Hello,
+
+A service request has been picked up.
+
+Request: {{requestNumber}}
+Product: {{product}}
+Location: {{location}}
+Phone: {{phone}}
+Customer: {{customerName}}
+Engineer: {{engineerName}}
+
+Portal:
+{{requestUrl}}
+
+Thank you,
+ElkaTech Team

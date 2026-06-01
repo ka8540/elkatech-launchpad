@@ -1,0 +1,15 @@
+# Copy this file to terraform.tfvars (which is gitignored) and fill in real
+# values before running terraform apply. Never commit a real tfvars file
+# containing production values.
+
+aws_region          = "us-east-1"
+domain_name         = "elkatech.com"
+from_email          = "no-reply@elkatech.com"
+mail_from_subdomain = "bounce"
+
+# Optional. Leave blank to receive DNS records as terraform outputs and add
+# them manually at your DNS provider; set when the apex domain is already in
+# a Route53 hosted zone you control.
+route53_zone_id = ""
+
+app_iam_user_name = "elkatech-notification-ses"

@@ -22,6 +22,7 @@ import {
   getDb,
   getEnv,
   hashToken,
+  internalHeaders,
   verifyFirebaseIdTokenForRequest,
 } from "@elkatech/config";
 
@@ -140,6 +141,19 @@ async function emitOutbox(
     insert into auth.outbox (id, aggregate_type, aggregate_id, event_type, payload)
     values (${randomUUID()}, ${aggregateType}, ${aggregateId}, ${eventType}, ${sql.json(payload as any)})
   `;
+  triggerNotificationPoll();
+}
+
+function triggerNotificationPoll(): void {
+  // Vercel suspends serverless functions between requests, so the
+  // notification service's setInterval poller never runs in prod. Ping
+  // it so the row we just wrote actually gets sent. Fire-and-forget.
+  void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
+    method: "POST",
+    headers: internalHeaders(),
+  }).catch(() => {
+    /* best-effort */
+  });
 }
 
 async function createVerificationToken(userId: string, email: string) {

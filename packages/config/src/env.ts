@@ -55,6 +55,16 @@ const envSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
+  // AWS SES — optional. When SES_FROM_EMAIL + AWS credentials are set the
+  // notification service uses SES SendTemplatedEmail for the two
+  // transactional flows ("account added", "request claimed"). Leaving
+  // these unset keeps the local Mailpit/SMTP flow working unchanged.
+  AWS_REGION: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  SES_FROM_EMAIL: z.string().optional(),
+  SES_ACCOUNT_ADDED_TEMPLATE: z.string().default("ElkaTechAccountAdded"),
+  SES_REQUEST_CLAIMED_TEMPLATE: z.string().default("ElkaTechRequestClaimed"),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;
