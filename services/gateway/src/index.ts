@@ -611,30 +611,60 @@ app.post("/api/requests/:requestId/messages", async (request, reply) => {
   });
 });
 
-app.post("/api/requests/:requestId/claim", async (request, reply) => {
+app.post("/api/requests/:requestId/claim", async (request: any, reply: any) => {
   const session = await requireSession(request, reply, ["engineer", "admin"]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/claim`, {
-    method: "POST",
-    headers: userHeaders(session.user),
-  });
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/claim`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+    });
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "claim request failed");
+        return reply.code(502).send({ message: "Could not claim request. Please try again." });
+      }
+      return reply.code(error.status).send(
+        error.body && typeof error.body === "object"
+          ? (error.body as Record<string, unknown>)
+          : { message: error.message },
+      );
+    }
+    throw error;
+  }
 });
 
-app.post("/api/requests/:requestId/assign", async (request, reply) => {
+app.post("/api/requests/:requestId/assign", async (request: any, reply: any) => {
   const session = await requireSession(request, reply, ["admin"]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = z.object({ engineerId: z.string().uuid() }).parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/assign`, {
-    method: "POST",
-    headers: userHeaders(session.user),
-    body: JSON.stringify(input),
-  });
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/assign`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "assign request failed");
+        return reply.code(502).send({ message: "Could not assign engineer. Please try again." });
+      }
+      return reply.code(error.status).send(
+        error.body && typeof error.body === "object"
+          ? (error.body as Record<string, unknown>)
+          : { message: error.message },
+      );
+    }
+    throw error;
+  }
 });
 
 app.post("/api/requests/:requestId/status", async (request, reply) => {

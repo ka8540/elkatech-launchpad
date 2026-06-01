@@ -587,6 +587,18 @@ app.post("/requests/:requestId/claim", async (request, reply) => {
     return reply.code(404).send({ message: "Request not found." });
   }
 
+  // Explicit conflict path: if the request is already assigned, never
+  // re-claim — neither by the current owner (would create duplicate
+  // "Request Claimed" history) nor by anyone else (would silently steal
+  // another engineer's work). Admin reassignment uses `/assign` instead.
+  if (current.assigned_engineer_id) {
+    const message =
+      current.assigned_engineer_id === actor.id
+        ? "You have already claimed this request."
+        : "This request is already assigned to another engineer.";
+    return reply.code(409).send({ message });
+  }
+
   if (
     !canClaimRequest(toWorkflowActor(actor), {
       customerId: current.customer_id,
@@ -648,6 +660,12 @@ app.post("/requests/:requestId/assign", async (request, reply) => {
     return reply.code(400).send({ message: "Only engineer accounts can be assigned." });
   }
 
+  const previousEngineerId: string | null = current.assigned_engineer_id ?? null;
+  // No-op guard: re-assigning the same engineer should not pollute history.
+  if (previousEngineerId === engineer.id) {
+    return { ok: true };
+  }
+
   await sql`
     update service_desk.requests
     set assigned_engineer_id = ${engineer.id},
@@ -656,9 +674,13 @@ app.post("/requests/:requestId/assign", async (request, reply) => {
     where id = ${params.requestId}
   `;
 
-  await addHistory(params.requestId, actor, "request_assigned", {
+  // Distinguish first-time assignment from reassignment so the activity
+  // timeline reads correctly ("Request Reassigned" vs "Request Assigned").
+  const eventType = previousEngineerId ? "request_reassigned" : "request_assigned";
+  await addHistory(params.requestId, actor, eventType, {
     engineerId: engineer.id,
     engineerEmail: engineer.email,
+    previousEngineerId,
   });
   await emitOutbox("request.assigned", params.requestId, {
     requestId: params.requestId,

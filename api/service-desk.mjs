@@ -63148,13 +63148,10 @@ function canClaimRequest(actor, request) {
   if (request.status === "closed") {
     return false;
   }
-  if (actor.role === "admin") {
-    return true;
-  }
-  if (actor.role !== "engineer") {
+  if (actor.role !== "engineer" && actor.role !== "admin") {
     return false;
   }
-  return !request.assignedEngineerId || request.assignedEngineerId === actor.id;
+  return request.assignedEngineerId === null;
 }
 function canUpdateRequestStatus(actor, request) {
   if (actor.role === "admin") {
@@ -63654,6 +63651,10 @@ app.post("/requests/:requestId/claim", async (request, reply) => {
   if (!current) {
     return reply.code(404).send({ message: "Request not found." });
   }
+  if (current.assigned_engineer_id) {
+    const message = current.assigned_engineer_id === actor.id ? "You have already claimed this request." : "This request is already assigned to another engineer.";
+    return reply.code(409).send({ message });
+  }
   if (!canClaimRequest(toWorkflowActor(actor), {
     customerId: current.customer_id,
     assignedEngineerId: current.assigned_engineer_id,
@@ -63704,6 +63705,10 @@ app.post("/requests/:requestId/assign", async (request, reply) => {
   if (engineer.role !== "engineer") {
     return reply.code(400).send({ message: "Only engineer accounts can be assigned." });
   }
+  const previousEngineerId = current.assigned_engineer_id ?? null;
+  if (previousEngineerId === engineer.id) {
+    return { ok: true };
+  }
   await sql`
     update service_desk.requests
     set assigned_engineer_id = ${engineer.id},
@@ -63711,9 +63716,11 @@ app.post("/requests/:requestId/assign", async (request, reply) => {
         updated_at = now()
     where id = ${params.requestId}
   `;
-  await addHistory(params.requestId, actor, "request_assigned", {
+  const eventType = previousEngineerId ? "request_reassigned" : "request_assigned";
+  await addHistory(params.requestId, actor, eventType, {
     engineerId: engineer.id,
-    engineerEmail: engineer.email
+    engineerEmail: engineer.email,
+    previousEngineerId
   });
   await emitOutbox("request.assigned", params.requestId, {
     requestId: params.requestId,

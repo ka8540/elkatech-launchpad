@@ -49,20 +49,25 @@ export function canReplyToRequest(actor: WorkflowActor, request: WorkflowRequest
   return request.assignedEngineerId === actor.id;
 }
 
+/**
+ * Claim ownership. Allowed only when the request is currently UNASSIGNED.
+ *
+ * - Customers never claim.
+ * - Engineers can claim only unassigned requests.
+ * - Admins can claim only unassigned requests via this path. Reassigning an
+ *   already-owned request to a different engineer goes through the dedicated
+ *   admin-only `/assign` route — keeping claim a one-way "first to grab it"
+ *   action prevents duplicate `request_claimed` history entries from re-clicks
+ *   and stops one staff member silently stealing another's work.
+ */
 export function canClaimRequest(actor: WorkflowActor, request: WorkflowRequest) {
   if (request.status === "closed") {
     return false;
   }
-
-  if (actor.role === "admin") {
-    return true;
-  }
-
-  if (actor.role !== "engineer") {
+  if (actor.role !== "engineer" && actor.role !== "admin") {
     return false;
   }
-
-  return !request.assignedEngineerId || request.assignedEngineerId === actor.id;
+  return request.assignedEngineerId === null;
 }
 
 export function canUpdateRequestStatus(actor: WorkflowActor, request: WorkflowRequest) {

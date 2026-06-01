@@ -66,8 +66,15 @@ describe("service desk workflow permissions", () => {
     expect(canClaimRequest(otherEngineer, assignedRequest)).toBe(false);
     expect(canUpdateRequestStatus(engineer, assignedRequest)).toBe(true);
     expect(canUpdateRequestStatus(otherEngineer, assignedRequest)).toBe(false);
-    expect(canClaimRequest(admin, assignedRequest)).toBe(true);
+    // An already-assigned request can never be re-claimed — not by the
+    // current owner (avoids duplicate "Request Claimed" history) and not
+    // by an admin (admins reassign via /assign, not /claim).
+    expect(canClaimRequest(engineer, assignedRequest)).toBe(false);
+    expect(canClaimRequest(admin, assignedRequest)).toBe(false);
+    expect(canClaimRequest(admin, openRequest)).toBe(true);
     expect(canUpdateRequestStatus(admin, assignedRequest)).toBe(true);
+    // Customers can never claim.
+    expect(canClaimRequest(customer, openRequest)).toBe(false);
   });
 
   it("prevents engineers from changing archived requests", () => {

@@ -339,7 +339,16 @@ const RequestDetailPage = () => {
       toast.success("Request claimed.");
       await refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: async (error: unknown) => {
+      toast.error(
+        friendlyActionError(error, "Could not claim this request.", {
+          409: "This request is already assigned.",
+          403: "You can no longer claim this request.",
+        }),
+      );
+      // Re-pull so the UI reflects whoever actually owns it now.
+      await refresh();
+    },
   });
 
   const statusMutation = useMutation({
@@ -406,10 +415,18 @@ const RequestDetailPage = () => {
       }),
     onSuccess: async () => {
       setEngineerId("");
-      toast.success("Engineer assigned.");
+      toast.success(
+        data?.request?.assignedEngineerId ? "Engineer reassigned." : "Engineer assigned.",
+      );
       await refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: unknown) =>
+      toast.error(
+        friendlyActionError(error, "Could not assign this engineer.", {
+          400: "That account cannot be assigned as an engineer.",
+          403: "You do not have permission to reassign this request.",
+        }),
+      ),
   });
 
   const cancelMutation = useMutation({
@@ -466,10 +483,20 @@ const RequestDetailPage = () => {
   const isStaff = user?.role === "engineer" || user?.role === "admin";
   const isAdmin = user?.role === "admin";
   const allowedStatuses = getAllowedStatuses({ request, user });
+  // Claim is a *first-grab* action — only valid when nobody owns the request
+  // yet. Re-claiming your own request creates duplicate history; admins
+  // reassign through the dedicated "Reassign" control below, not /claim.
   const canClaim =
     isStaff &&
     request.status !== "closed" &&
-    (isAdmin || !request.assignedEngineerId || request.assignedEngineerId === user?.id);
+    !request.assignedEngineerId;
+  const assignedToMe =
+    isStaff && Boolean(request.assignedEngineerId) && request.assignedEngineerId === user?.id;
+  const assignedEngineerName = request.assignedEngineerId
+    ? engineers.find((e) => e.id === request.assignedEngineerId)?.displayName ??
+      users.find((u) => u.id === request.assignedEngineerId)?.displayName ??
+      "another engineer"
+    : null;
   const canCustomerCancel =
     user?.role === "customer" &&
     request.customerId === user.id &&
@@ -857,10 +884,31 @@ const RequestDetailPage = () => {
                 {REQUEST_STATUS_DESCRIPTIONS[request.status]}
               </p>
 
+              {/* Assignment state — clear single source of truth for ownership. */}
+              <div
+                className={cn(
+                  "mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs",
+                  request.assignedEngineerId
+                    ? assignedToMe
+                      ? "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]"
+                      : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink)]"
+                    : "border-dashed border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 text-[var(--lp-faint)]",
+                )}
+              >
+                <UserCheck className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {request.assignedEngineerId
+                    ? assignedToMe
+                      ? "Assigned to you"
+                      : `Assigned to ${assignedEngineerName}`
+                    : "Unassigned"}
+                </span>
+              </div>
+
               {canClaim && (
                 <Button
                   type="button"
-                  className="mt-4 h-9 w-full gap-1.5 rounded-full bg-[var(--lp-accent)] px-4 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+                  className="mt-3 h-9 w-full gap-1.5 rounded-full bg-[var(--lp-accent)] px-4 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
                   onClick={() => claimMutation.mutate()}
                   disabled={claimMutation.isPending}
                 >
@@ -981,7 +1029,7 @@ const RequestDetailPage = () => {
               {isAdmin && (
                 <div className="mt-4 border-t border-[var(--lp-line)] pt-3">
                   <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
-                    Assign engineer
+                    {request.assignedEngineerId ? "Reassign engineer" : "Assign engineer"}
                   </p>
                   <div className="mt-2 flex items-center gap-2">
                     <Select value={engineerId} onValueChange={setEngineerId}>
@@ -1011,7 +1059,7 @@ const RequestDetailPage = () => {
                       ) : (
                         <UserCheck className="h-3 w-3" />
                       )}
-                      Assign
+                      {request.assignedEngineerId ? "Reassign" : "Assign"}
                     </Button>
                   </div>
                 </div>
