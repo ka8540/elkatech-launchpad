@@ -166,7 +166,7 @@ function friendlyActionError(
   return fallback;
 }
 
-function DetailItem({
+function DetailRow({
   label,
   value,
 }: {
@@ -174,16 +174,24 @@ function DetailItem({
   value: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/60 p-4">
-      <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
+    <div className="flex flex-col gap-1 border-b border-[var(--lp-line)] py-3 last:border-b-0 sm:flex-row sm:items-baseline sm:gap-4">
+      <span className="lp-mono shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)] sm:w-28">
         {label}
-      </p>
-      <div className="mt-1.5 break-words text-sm font-medium text-[var(--lp-ink)]">
+      </span>
+      <span className="break-words text-sm text-[var(--lp-ink)] sm:flex-1">
         {value}
-      </div>
+      </span>
     </div>
   );
 }
+
+/* Priority pill used in the compact summary header. */
+const priorityClass: Record<string, string> = {
+  low: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
+  normal: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
+  high: "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+  urgent: "border-rose-400/35 bg-rose-400/10 text-rose-600 dark:text-rose-300",
+};
 
 function canEditRequestDetails({
   request,
@@ -647,55 +655,85 @@ const RequestDetailPage = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(340px,0.9fr)]">
-        <div className="space-y-6">
-          <section className={cn("relative overflow-hidden rounded-3xl p-6 sm:p-8", cardSurface)}>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.85fr)]">
+        <div className="space-y-5">
+          <section className={cn("relative overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
             <div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.16]"
+              className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.14]"
               style={{
                 maskImage: "linear-gradient(to right, black, transparent 74%)",
                 WebkitMaskImage: "linear-gradient(to right, black, transparent 74%)",
               }}
             />
-            <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <p className="lp-mono text-xs font-semibold uppercase tracking-[0.22em] text-[var(--lp-faint)]">
-                  {request.requestNumber}
-                </p>
-                <h1 className="lp-display mt-3 text-3xl font-bold text-[var(--lp-ink)] sm:text-4xl">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="lp-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--lp-faint)]">
+                    {request.requestNumber}
+                  </span>
+                  <StatusBadge status={request.status} />
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                      priorityClass[request.priority] ?? priorityClass.normal,
+                    )}
+                  >
+                    {request.priority}
+                  </span>
+                </div>
+                <h1 className="lp-display mt-2.5 text-2xl font-bold leading-tight text-[var(--lp-ink)] sm:text-[26px]">
                   {request.subject}
                 </h1>
-                <p className="mt-3 text-sm text-[var(--lp-ink-soft)]">
-                  Product: <span className="text-[var(--lp-ink)]">{request.productSnapshot.name}</span>
+                <p className="mt-1.5 text-sm text-[var(--lp-ink-soft)]">
+                  {request.productSnapshot.name}
                 </p>
               </div>
-              <StatusBadge status={request.status} />
             </div>
-            <p className="relative mt-6 max-w-3xl text-sm leading-7 text-[var(--lp-ink-soft)]">
+            <p className="relative mt-4 max-w-3xl whitespace-pre-wrap text-sm leading-6 text-[var(--lp-ink-soft)]">
               {request.description}
             </p>
+            <div className="relative mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-[var(--lp-faint)]">
+              <span>
+                Created{" "}
+                <span className="text-[var(--lp-ink-soft)]">
+                  {fmtDateTime(request.createdAt)}
+                </span>
+              </span>
+              {request.updatedAt && (
+                <span>
+                  Updated{" "}
+                  <span className="text-[var(--lp-ink-soft)]">
+                    {fmtDateTime(request.updatedAt)}
+                  </span>
+                </span>
+              )}
+              {request.assignedEngineerId && (
+                <span>
+                  Assigned{" "}
+                  <span className="text-[var(--lp-ink-soft)]">
+                    {engineers.find((e) => e.id === request.assignedEngineerId)?.displayName ?? "engineer"}
+                  </span>
+                </span>
+              )}
+            </div>
           </section>
 
-          <section className={cn("rounded-3xl p-6 sm:p-8", cardSurface)}>
-            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-                  <MessageSquare className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Conversation</h2>
-                  <p className="mt-1 text-xs text-[var(--lp-faint)]">
-                    Public replies and internal notes stay with the service request.
-                  </p>
-                </div>
-              </div>
+          <section className={cn("rounded-2xl p-5 sm:p-6", cardSurface)}>
+            <div className="mb-4 flex items-center gap-2.5">
+              <MessageSquare className="h-4 w-4 text-[var(--lp-accent)]" />
+              <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
+                Conversation
+              </h2>
+              <span className="lp-mono text-[10px] uppercase tracking-[0.18em] text-[var(--lp-faint)]">
+                {data.messages.length} update{data.messages.length === 1 ? "" : "s"}
+              </span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {data.messages.length === 0 ? (
-                <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 p-5 text-sm text-[var(--lp-ink-soft)]">
-                  No updates yet.
+                <div className="rounded-xl border border-dashed border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 px-4 py-6 text-center text-sm text-[var(--lp-faint)]">
+                  No updates yet — start the conversation below.
                 </div>
               ) : (
                 data.messages.map((message) => (
@@ -705,7 +743,7 @@ const RequestDetailPage = () => {
             </div>
 
             <form
-              className="mt-6 space-y-4 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 p-4"
+              className="mt-5 rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 p-3"
               onSubmit={(event) => {
                 event.preventDefault();
                 messageMutation.mutate();
@@ -713,16 +751,24 @@ const RequestDetailPage = () => {
             >
               <Textarea
                 required
-                rows={4}
+                rows={3}
                 value={messageBody}
                 onChange={(event) => setMessageBody(event.target.value)}
-                placeholder="Add a service update..."
-                className={cn(fieldClassName, "min-h-[140px] resize-y")}
+                placeholder="Add a service update…"
+                className={cn(
+                  fieldClassName,
+                  "min-h-[88px] resize-y border-transparent bg-transparent px-2 py-2 focus-visible:border-transparent",
+                )}
               />
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="mt-2 flex flex-col gap-2 border-t border-[var(--lp-line)] pt-2 sm:flex-row sm:items-center sm:justify-between">
                 {isStaff ? (
-                  <Select value={visibility} onValueChange={(value) => setVisibility(value as MessageVisibility)}>
-                    <SelectTrigger className={cn(selectTriggerClassName, "md:w-64")}>
+                  <Select
+                    value={visibility}
+                    onValueChange={(value) => setVisibility(value as MessageVisibility)}
+                  >
+                    <SelectTrigger
+                      className={cn(selectTriggerClassName, "h-9 w-full sm:w-56")}
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className={selectContentClassName}>
@@ -735,23 +781,23 @@ const RequestDetailPage = () => {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-xs text-[var(--lp-faint)]">
-                    Customer replies are visible to the service team.
+                  <p className="text-[11px] text-[var(--lp-faint)]">
+                    Replies are visible to the service team.
                   </p>
                 )}
                 <Button
                   type="submit"
-                  className="h-11 rounded-xl bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
-                  disabled={messageMutation.isPending}
+                  className="h-9 w-full gap-1.5 rounded-full bg-[var(--lp-accent)] px-4 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)] sm:w-auto"
+                  disabled={messageMutation.isPending || messageBody.trim().length === 0}
                 >
                   {messageMutation.isPending ? (
                     <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Sending...
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Sending…
                     </>
                   ) : (
                     <>
-                      <Send className="h-4 w-4" />
+                      <Send className="h-3.5 w-3.5" />
                       Send update
                     </>
                   )}
@@ -761,15 +807,17 @@ const RequestDetailPage = () => {
           </section>
         </div>
 
-        <aside className="space-y-6">
-          <section className={cn("rounded-3xl p-6", cardSurface)}>
-            <div className="flex items-start justify-between gap-3">
-              <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Request details</h2>
+        <aside className="space-y-5">
+          <section className={cn("rounded-2xl p-5", cardSurface)}>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
+                Request details
+              </h2>
               {canEditRequest && (
                 <Button
                   type="button"
                   variant="outline"
-                  className="h-9 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-3 text-xs font-semibold text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
+                  className="h-8 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-3 text-xs font-semibold text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
                   onClick={openEditDialog}
                 >
                   <PencilLine className="h-3.5 w-3.5" />
@@ -777,198 +825,270 @@ const RequestDetailPage = () => {
                 </Button>
               )}
             </div>
-            <div className="mt-5 grid gap-3">
-              <DetailItem label="Current status" value={getRequestStatusLabel(request.status)} />
-              <DetailItem label="Priority" value={request.priority} />
-              <DetailItem label="Product" value={request.productSnapshot.name} />
-              <DetailItem label="Phone" value={request.contactPhone} />
-              <DetailItem label="Location" value={request.siteLocation} />
-              <DetailItem label="Serial number" value={request.serialNumber || "Not provided"} />
+            <div className="mt-2">
+              <DetailRow label="Status" value={getRequestStatusLabel(request.status)} />
+              <DetailRow
+                label="Priority"
+                value={<span className="capitalize">{request.priority}</span>}
+              />
+              <DetailRow label="Product" value={request.productSnapshot.name} />
+              <DetailRow label="Phone" value={request.contactPhone} />
+              <DetailRow label="Location" value={request.siteLocation} />
+              <DetailRow
+                label="Serial"
+                value={
+                  request.serialNumber || (
+                    <span className="text-[var(--lp-faint)]">Not provided</span>
+                  )
+                }
+              />
             </div>
           </section>
 
           {isStaff && (
-            <section className={cn("rounded-3xl p-6", cardSurface)}>
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Workflow</h2>
-                  <p className="mt-1 text-xs leading-5 text-[var(--lp-faint)]">
-                    {REQUEST_STATUS_DESCRIPTIONS[request.status]}
-                  </p>
-                </div>
+            <section className={cn("rounded-2xl p-5", cardSurface)}>
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="h-4 w-4 text-[var(--lp-accent)]" />
+                <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
+                  Workflow
+                </h2>
               </div>
+              <p className="mt-1.5 text-[11px] leading-5 text-[var(--lp-faint)]">
+                {REQUEST_STATUS_DESCRIPTIONS[request.status]}
+              </p>
 
-              <div className="mt-5 space-y-4">
-                {canClaim && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-11 w-full rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
-                    onClick={() => claimMutation.mutate()}
-                    disabled={claimMutation.isPending}
-                  >
-                    {claimMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
-                    {claimMutation.isPending ? "Claiming..." : "Claim request"}
-                  </Button>
-                )}
+              {canClaim && (
+                <Button
+                  type="button"
+                  className="mt-4 h-9 w-full gap-1.5 rounded-full bg-[var(--lp-accent)] px-4 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+                  onClick={() => claimMutation.mutate()}
+                  disabled={claimMutation.isPending}
+                >
+                  {claimMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <UserCheck className="h-3.5 w-3.5" />
+                  )}
+                  {claimMutation.isPending ? "Claiming…" : "Claim request"}
+                </Button>
+              )}
 
-                {allowedStatuses.length > 0 ? (
-                  <>
+              {allowedStatuses.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 p-2.5">
                     <Textarea
-                      rows={3}
+                      rows={2}
                       value={statusNote}
                       onChange={(event) => setStatusNote(event.target.value)}
-                      placeholder="Optional note for this status change..."
-                      className={cn(fieldClassName, "min-h-[96px] resize-y")}
+                      placeholder="Optional note for this status change…"
+                      className={cn(
+                        fieldClassName,
+                        "min-h-[60px] resize-y border-transparent bg-transparent px-1.5 py-1 text-sm focus-visible:border-transparent",
+                      )}
                     />
                     <Select
                       value={statusVisibility}
-                      onValueChange={(value) => setStatusVisibility(value as MessageVisibility)}
+                      onValueChange={(value) =>
+                        setStatusVisibility(value as MessageVisibility)
+                      }
                     >
-                      <SelectTrigger className={selectTriggerClassName}>
+                      <SelectTrigger
+                        className={cn(selectTriggerClassName, "mt-1.5 h-8 text-xs")}
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className={selectContentClassName}>
-                        <SelectItem value="customer_visible" className={selectItemClassName}>
+                        <SelectItem
+                          value="customer_visible"
+                          className={selectItemClassName}
+                        >
                           Customer visible note
                         </SelectItem>
-                        <SelectItem value="internal_note" className={selectItemClassName}>
+                        <SelectItem
+                          value="internal_note"
+                          className={selectItemClassName}
+                        >
                           Internal note
                         </SelectItem>
                       </SelectContent>
                     </Select>
-                    <div className="grid gap-2">
-                      {allowedStatuses.map((nextStatus) => {
-                        const Icon = workflowIcons[nextStatus];
-                        const isArchive = nextStatus === "closed";
-                        return (
-                          <Button
-                            key={nextStatus}
-                            type="button"
-                            variant="outline"
-                            className={cn(
-                              "h-auto justify-start rounded-xl border px-4 py-3 text-left font-semibold",
-                              isArchive
-                                ? "border-amber-400/30 bg-amber-400/10 text-amber-600 hover:border-amber-400/45 hover:bg-amber-400/15 dark:text-amber-300"
-                                : "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)] hover:border-[var(--lp-accent)]/55 hover:bg-[var(--lp-accent)]/15",
-                            )}
-                            onClick={() => submitStatus(nextStatus)}
-                            disabled={statusMutation.isPending}
-                          >
-                            {statusMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Icon className="h-4 w-4" />
-                            )}
-                            {workflowLabels[nextStatus]}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 p-4 text-sm text-[var(--lp-ink-soft)]">
-                    {request.status === "closed"
-                      ? "Archived requests can only be reopened by an admin."
-                      : "Claim or assign this request before changing its status."}
                   </div>
-                )}
 
-                {isAdmin && (
-                  <div className="border-t border-[var(--lp-line)] pt-4">
-                    <label className="text-sm font-medium text-[var(--lp-ink)]">Assign engineer</label>
-                    <div className="mt-2 space-y-2">
-                      <Select value={engineerId} onValueChange={setEngineerId}>
-                        <SelectTrigger className={selectTriggerClassName}>
-                          <SelectValue placeholder="Choose engineer" />
-                        </SelectTrigger>
-                        <SelectContent className={selectContentClassName}>
-                          {engineers.map((engineer) => (
-                            <SelectItem key={engineer.id} value={engineer.id} className={selectItemClassName}>
-                              {engineer.displayName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-11 w-full rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:bg-[var(--lp-panel)] hover:text-[var(--lp-ink)]"
-                        onClick={() => assignMutation.mutate()}
-                        disabled={assignMutation.isPending || !engineerId}
-                      >
-                        {assignMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserCheck className="h-4 w-4" />
+                  {/* Status actions — primary first, archive isolated at bottom. */}
+                  {(() => {
+                    const archive = allowedStatuses.find((s) => s === "closed");
+                    const primary = allowedStatuses.filter((s) => s !== "closed");
+                    return (
+                      <>
+                        {primary.length > 0 && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {primary.map((nextStatus, idx) => {
+                              const Icon = workflowIcons[nextStatus];
+                              const isPrimary = idx === 0;
+                              return (
+                                <Button
+                                  key={nextStatus}
+                                  type="button"
+                                  variant="outline"
+                                  className={cn(
+                                    "h-9 gap-1.5 rounded-lg px-2.5 text-xs font-semibold",
+                                    isPrimary
+                                      ? "border-[var(--lp-accent)]/45 bg-[var(--lp-accent)]/12 text-[var(--lp-accent)] hover:border-[var(--lp-accent)]/65 hover:bg-[var(--lp-accent)]/20"
+                                      : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/45 hover:text-[var(--lp-ink)]",
+                                  )}
+                                  onClick={() => submitStatus(nextStatus)}
+                                  disabled={statusMutation.isPending}
+                                >
+                                  {statusMutation.isPending ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Icon className="h-3 w-3" />
+                                  )}
+                                  <span className="truncate">
+                                    {workflowLabels[nextStatus]}
+                                  </span>
+                                </Button>
+                              );
+                            })}
+                          </div>
                         )}
-                        {assignMutation.isPending ? "Assigning..." : "Assign engineer"}
-                      </Button>
-                    </div>
+                        {archive && (
+                          <div className="mt-1 border-t border-[var(--lp-line)] pt-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 w-full gap-1.5 rounded-lg border-amber-400/35 bg-transparent text-xs font-semibold text-amber-700 hover:border-amber-400/55 hover:bg-amber-400/10 dark:text-amber-300"
+                              onClick={() => submitStatus(archive)}
+                              disabled={statusMutation.isPending}
+                            >
+                              <Archive className="h-3.5 w-3.5" />
+                              {workflowLabels[archive]}
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <p className="mt-4 rounded-lg border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 px-3 py-2 text-xs text-[var(--lp-ink-soft)]">
+                  {request.status === "closed"
+                    ? "Archived requests can only be reopened by an admin."
+                    : "Claim or assign this request before changing its status."}
+                </p>
+              )}
+
+              {isAdmin && (
+                <div className="mt-4 border-t border-[var(--lp-line)] pt-3">
+                  <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
+                    Assign engineer
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <Select value={engineerId} onValueChange={setEngineerId}>
+                      <SelectTrigger className={cn(selectTriggerClassName, "h-9 flex-1 text-sm")}>
+                        <SelectValue placeholder="Choose engineer" />
+                      </SelectTrigger>
+                      <SelectContent className={selectContentClassName}>
+                        {engineers.map((engineer) => (
+                          <SelectItem
+                            key={engineer.id}
+                            value={engineer.id}
+                            className={selectItemClassName}
+                          >
+                            {engineer.displayName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      className="h-9 shrink-0 gap-1.5 rounded-full bg-[var(--lp-accent)] px-3 text-xs font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)] disabled:opacity-50"
+                      onClick={() => assignMutation.mutate()}
+                      disabled={assignMutation.isPending || !engineerId}
+                    >
+                      {assignMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <UserCheck className="h-3 w-3" />
+                      )}
+                      Assign
+                    </Button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </section>
           )}
 
           {canCustomerCancel && (
-            <section className={cn("rounded-3xl p-6", cardSurface)}>
-              <h2 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">Request actions</h2>
-              <p className="mt-2 text-sm leading-6 text-[var(--lp-ink-soft)]">
-                You can cancel this service request while it is still active. It will be archived, not deleted.
+            <section className={cn("rounded-2xl p-5", cardSurface)}>
+              <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
+                Request actions
+              </h2>
+              <p className="mt-1.5 text-xs leading-5 text-[var(--lp-ink-soft)]">
+                Cancel while still active — the request is archived, not deleted.
               </p>
               <Button
                 type="button"
                 variant="outline"
-                className="mt-4 h-11 w-full rounded-xl border-amber-400/30 bg-amber-400/10 text-amber-600 hover:border-amber-400/45 hover:bg-amber-400/15 dark:text-amber-300"
+                className="mt-3 h-9 w-full gap-1.5 rounded-lg border-amber-400/35 bg-transparent text-xs font-semibold text-amber-700 hover:border-amber-400/55 hover:bg-amber-400/10 dark:text-amber-300"
                 onClick={() => setConfirmAction({ type: "cancel-request" })}
                 disabled={cancelMutation.isPending}
               >
-                {cancelMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-                {cancelMutation.isPending ? "Cancelling..." : "Cancel request"}
+                {cancelMutation.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Archive className="h-3.5 w-3.5" />
+                )}
+                {cancelMutation.isPending ? "Cancelling…" : "Cancel request"}
               </Button>
             </section>
           )}
 
           {isStaff && (
-            <section className={cn("rounded-3xl p-6", cardSurface)}>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]">
-                  <History className="h-4 w-4" />
-                </div>
-                <h2 className="lp-display text-2xl font-semibold text-[var(--lp-ink)]">Activity</h2>
+            <section className={cn("rounded-2xl p-5", cardSurface)}>
+              <div className="mb-3 flex items-center gap-2.5">
+                <History className="h-4 w-4 text-[var(--lp-accent)]" />
+                <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
+                  Activity
+                </h2>
               </div>
-              <div className="mt-5 space-y-3">
-                {data.history.length === 0 ? (
-                  <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 p-4 text-sm text-[var(--lp-ink-soft)]">
-                    No activity recorded yet.
-                  </div>
-                ) : (
-                  data.history.map((entry) => (
-                    <div key={entry.id} className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/55 p-4 text-sm">
-                      <p className="font-medium text-[var(--lp-ink)]">{formatEvent(entry.eventType)}</p>
-                      <p className="mt-1 text-xs text-[var(--lp-faint)]">{fmtDateTime(entry.createdAt)}</p>
+              {data.history.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 px-3 py-3 text-center text-xs text-[var(--lp-faint)]">
+                  No activity yet.
+                </p>
+              ) : (
+                <ol className="relative ml-1.5 space-y-3 border-l border-[var(--lp-line)] pl-4">
+                  {data.history.map((entry) => (
+                    <li key={entry.id} className="relative">
+                      <span
+                        aria-hidden="true"
+                        className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full border border-[var(--lp-accent)]/55 bg-[var(--lp-panel)]"
+                      />
+                      <p className="text-sm font-medium leading-5 text-[var(--lp-ink)]">
+                        {formatEvent(entry.eventType)}
+                      </p>
                       {entry.metadata?.from && entry.metadata?.to && (
-                        <p className="mt-2 text-xs text-[var(--lp-ink-soft)]">
-                          {String(entry.metadata.from).replaceAll("_", " ")} -&gt;{" "}
+                        <p className="mt-0.5 text-[11px] text-[var(--lp-ink-soft)]">
+                          {String(entry.metadata.from).replaceAll("_", " ")} →{" "}
                           {String(entry.metadata.to).replaceAll("_", " ")}
                         </p>
                       )}
-                    </div>
-                  ))
-                )}
-              </div>
+                      <p className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--lp-faint)]">
+                        {fmtDateTime(entry.createdAt)}
+                      </p>
+                    </li>
+                  ))}
+                </ol>
+              )}
             </section>
           )}
 
-          <section className={cn("rounded-3xl p-5", cardSurface)}>
-            <div className="flex items-start gap-3 text-sm leading-6 text-[var(--lp-ink-soft)]">
-              <Phone className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
+          <section className={cn("rounded-2xl px-4 py-3", cardSurface)}>
+            <div className="flex items-start gap-2.5 text-xs leading-5 text-[var(--lp-ink-soft)]">
+              <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-accent)]" />
               <span>
-                Keep updates factual and include measurements, machine behavior, and production impact where useful.
+                Keep updates factual — measurements, machine behavior, and
+                production impact help most.
               </span>
             </div>
           </section>
