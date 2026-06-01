@@ -11,13 +11,22 @@ export type WorkflowRequest = {
   status: RequestStatus;
 };
 
+/**
+ * Strict request lifecycle. The map intentionally only lists forward-or-
+ * lateral transitions; "going back to new" is never offered as a normal step,
+ * and `assigned` is reached only via the dedicated `/claim` / `/assign`
+ * routes — never through `/status` — so it's not listed as a target here.
+ *
+ * Reopen actions (resolved/closed → new) are admin-only; that extra role
+ * check lives in `canTransitionRequestTo` below.
+ */
 const statusTransitions: Record<RequestStatus, RequestStatus[]> = {
-  new: ["triaged", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  triaged: ["new", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  assigned: ["new", "triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  in_progress: ["new", "triaged", "waiting_for_customer", "resolved", "closed"],
-  waiting_for_customer: ["new", "triaged", "assigned", "in_progress", "resolved", "closed"],
-  resolved: ["new", "in_progress", "closed"],
+  new: ["triaged", "closed"],
+  triaged: ["in_progress", "waiting_for_customer", "resolved", "closed"],
+  assigned: ["triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  in_progress: ["waiting_for_customer", "resolved", "closed"],
+  waiting_for_customer: ["in_progress", "resolved", "closed"],
+  resolved: ["new", "closed"],
   closed: ["new"],
 };
 
@@ -106,9 +115,42 @@ export function canEditRequestDetails(actor: WorkflowActor, request: WorkflowReq
 }
 
 export function isValidStatusTransition(current: RequestStatus, next: RequestStatus) {
+  // Same-status updates are noise and used to create duplicate
+  // `status_changed` history rows — explicitly reject.
   if (current === next) {
-    return true;
+    return false;
   }
-
   return statusTransitions[current].includes(next);
+}
+
+/**
+ * Role-aware transition check. Wraps `canUpdateRequestStatus` (who may touch
+ * the request at all) plus extra guards for reopen actions, which are
+ * admin-only regardless of assignment.
+ */
+export function canTransitionRequestTo(
+  actor: WorkflowActor,
+  request: WorkflowRequest,
+  nextStatus: RequestStatus,
+): boolean {
+  if (!canUpdateRequestStatus(actor, request)) return false;
+  if (!isValidStatusTransition(request.status, nextStatus)) return false;
+  // Reopen: only admins can take a finished request back into the active
+  // pipeline. Engineers can archive their own resolved tickets but not
+  // unilaterally reopen them.
+  const isReopen =
+    nextStatus === "new" &&
+    (request.status === "resolved" || request.status === "closed");
+  if (isReopen && actor.role !== "admin") return false;
+  return true;
+}
+
+export function getAllowedTransitions(
+  actor: WorkflowActor,
+  request: WorkflowRequest,
+): RequestStatus[] {
+  if (!canUpdateRequestStatus(actor, request)) return [];
+  return statusTransitions[request.status].filter((next) =>
+    canTransitionRequestTo(actor, request, next),
+  );
 }

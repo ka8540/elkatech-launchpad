@@ -102187,11 +102187,24 @@ app.post("/api/requests/:requestId/status", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
-    method: "POST",
-    headers: userHeaders(session.user),
-    body: JSON.stringify(input)
-  });
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input)
+    });
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "status update failed");
+        return reply.code(502).send({ message: "Could not update status. Please try again." });
+      }
+      return reply.code(error.status).send(
+        error.body && typeof error.body === "object" ? error.body : { message: error.message }
+      );
+    }
+    throw error;
+  }
 });
 app.post("/api/requests/:requestId/cancel", async (request, reply) => {
   const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);

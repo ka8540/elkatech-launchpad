@@ -79,13 +79,20 @@ export const REQUEST_STATUS_BADGE_CLASSES: Record<RequestStatus, string> = {
   closed: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
 };
 
+/**
+ * Mirror of backend services/service-desk/src/workflow.ts statusTransitions.
+ * `assigned` is set only by /claim and /assign — never a /status target.
+ * Reopen (`resolved|closed → new`) is admin-only; UI filtering happens in
+ * RequestDetailPage.getAllowedStatuses, backend enforcement lives in
+ * workflow.ts canTransitionRequestTo.
+ */
 export const REQUEST_STATUS_WORKFLOW: Record<RequestStatus, RequestStatus[]> = {
-  new: ["triaged", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  triaged: ["new", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  assigned: ["new", "triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  in_progress: ["new", "triaged", "waiting_for_customer", "resolved", "closed"],
-  waiting_for_customer: ["new", "triaged", "assigned", "in_progress", "resolved", "closed"],
-  resolved: ["new", "in_progress", "closed"],
+  new: ["triaged", "closed"],
+  triaged: ["in_progress", "waiting_for_customer", "resolved", "closed"],
+  assigned: ["triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  in_progress: ["waiting_for_customer", "resolved", "closed"],
+  waiting_for_customer: ["in_progress", "resolved", "closed"],
+  resolved: ["new", "closed"],
   closed: ["new"],
 };
 

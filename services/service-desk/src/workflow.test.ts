@@ -3,6 +3,7 @@ import {
   canClaimRequest,
   canEditRequestDetails,
   canReplyToRequest,
+  canTransitionRequestTo,
   canUpdateRequestStatus,
   canViewRequest,
   isValidStatusTransition,
@@ -127,5 +128,40 @@ describe("service desk workflow transitions", () => {
   it("rejects unsupported status jumps", () => {
     expect(isValidStatusTransition("closed", "in_progress")).toBe(false);
     expect(isValidStatusTransition("resolved", "assigned")).toBe(false);
+    // Backward jumps are no longer allowed.
+    expect(isValidStatusTransition("in_progress", "new")).toBe(false);
+    expect(isValidStatusTransition("assigned", "new")).toBe(false);
+    expect(isValidStatusTransition("waiting_for_customer", "new")).toBe(false);
+    expect(isValidStatusTransition("in_progress", "triaged")).toBe(false);
+    // /status never sets `assigned` — that's /claim and /assign territory.
+    expect(isValidStatusTransition("new", "assigned")).toBe(false);
+    expect(isValidStatusTransition("triaged", "assigned")).toBe(false);
+    // Same-status updates are noise.
+    expect(isValidStatusTransition("in_progress", "in_progress")).toBe(false);
+  });
+
+  it("admin-only gate prevents engineers from reopening finished requests", () => {
+    const engineer = { id: "engineer-1", role: "engineer" as const };
+    const admin = { id: "admin-1", role: "admin" as const };
+    const resolvedOwn = {
+      customerId: "customer-1",
+      assignedEngineerId: "engineer-1",
+      status: "resolved" as const,
+    };
+    const closedRequest = {
+      customerId: "customer-1",
+      assignedEngineerId: "engineer-1",
+      status: "closed" as const,
+    };
+
+    // Engineer can archive their own resolved request…
+    expect(canTransitionRequestTo(engineer, resolvedOwn, "closed")).toBe(true);
+    // …but cannot reopen it back to `new`.
+    expect(canTransitionRequestTo(engineer, resolvedOwn, "new")).toBe(false);
+    // Admins reopen freely.
+    expect(canTransitionRequestTo(admin, resolvedOwn, "new")).toBe(true);
+    expect(canTransitionRequestTo(admin, closedRequest, "new")).toBe(true);
+    // Engineers can't touch closed requests at all.
+    expect(canTransitionRequestTo(engineer, closedRequest, "new")).toBe(false);
   });
 });

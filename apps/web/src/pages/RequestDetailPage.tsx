@@ -105,15 +105,31 @@ const selectContentClassName =
 const selectItemClassName =
   "focus:bg-[var(--lp-accent)]/12 focus:text-[var(--lp-ink)]";
 
-const workflowLabels: Record<RequestStatus, string> = {
-  new: "Mark open",
+/**
+ * Workflow button labels keyed by the *target* status. `assigned` is
+ * intentionally omitted as a button — assignment happens via the dedicated
+ * Claim / Reassign controls. `new` is shown as "Reopen request" because the
+ * only way the workflow surfaces a `new` action is when reopening a
+ * finished request.
+ */
+const workflowLabels: Record<Exclude<RequestStatus, "assigned">, string> = {
+  new: "Reopen request",
   triaged: "Mark triaged",
-  assigned: "Mark assigned",
   in_progress: "Start work",
   waiting_for_customer: "Mark pending",
   resolved: "Mark resolved",
   closed: "Archive request",
 };
+function workflowLabel(
+  current: RequestStatus,
+  next: Exclude<RequestStatus, "assigned">,
+): string {
+  // "Start work" from a paused/pending state reads better as "Resume work".
+  if (next === "in_progress" && current === "waiting_for_customer") {
+    return "Resume work";
+  }
+  return workflowLabels[next];
+}
 
 const workflowIcons: Record<RequestStatus, ComponentType<{ className?: string }>> = {
   new: RotateCcw,
@@ -268,8 +284,14 @@ function getAllowedStatuses({
   }
 
   return REQUEST_STATUS_WORKFLOW[request.status].filter((next) => {
-    if (next === "assigned" && !request.assignedEngineerId) return false;
-    return next !== request.status;
+    // Same-status updates are never offered.
+    if (next === request.status) return false;
+    // Reopen actions are admin-only. Mirrors backend canTransitionRequestTo.
+    const isReopen =
+      next === "new" &&
+      (request.status === "resolved" || request.status === "closed");
+    if (isReopen && user.role !== "admin") return false;
+    return true;
   });
 }
 
@@ -286,6 +308,7 @@ const RequestDetailPage = () => {
   const [engineerId, setEngineerId] = useState("");
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const [editForm, setEditForm] = useState<EditRequestForm>({
     subject: "",
     description: "",
@@ -374,7 +397,18 @@ const RequestDetailPage = () => {
       toast.success("Request status updated.");
       await refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: async (error: unknown) => {
+      toast.error(
+        friendlyActionError(error, "Could not update request status.", {
+          400: "That status change isn't allowed from the current state.",
+          403: "You do not have permission to change this request.",
+          409: "This request was updated by someone else. Please reload.",
+        }),
+      );
+      // Re-pull so the UI reflects the actual server state (someone may
+      // have moved the ticket while this button was visible).
+      await refresh();
+    },
   });
 
   const editMutation = useMutation({
@@ -993,7 +1027,10 @@ const RequestDetailPage = () => {
                                     <Icon className="h-3 w-3" />
                                   )}
                                   <span className="truncate">
-                                    {workflowLabels[nextStatus]}
+                                    {workflowLabel(
+                                      request.status,
+                                      nextStatus as Exclude<RequestStatus, "assigned">,
+                                    )}
                                   </span>
                                 </Button>
                               );
@@ -1010,7 +1047,10 @@ const RequestDetailPage = () => {
                               disabled={statusMutation.isPending}
                             >
                               <Archive className="h-3.5 w-3.5" />
-                              {workflowLabels[archive]}
+                              {workflowLabel(
+                                request.status,
+                                archive as Exclude<RequestStatus, "assigned">,
+                              )}
                             </Button>
                           </div>
                         )}
@@ -1092,44 +1132,75 @@ const RequestDetailPage = () => {
             </section>
           )}
 
-          {isStaff && (
-            <section className={cn("rounded-2xl p-5", cardSurface)}>
-              <div className="mb-3 flex items-center gap-2.5">
-                <History className="h-4 w-4 text-[var(--lp-accent)]" />
-                <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
-                  Activity
-                </h2>
-              </div>
-              {data.history.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 px-3 py-3 text-center text-xs text-[var(--lp-faint)]">
-                  No activity yet.
-                </p>
-              ) : (
-                <ol className="relative ml-1.5 space-y-3 border-l border-[var(--lp-line)] pl-4">
-                  {data.history.map((entry) => (
-                    <li key={entry.id} className="relative">
-                      <span
-                        aria-hidden="true"
-                        className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full border border-[var(--lp-accent)]/55 bg-[var(--lp-panel)]"
-                      />
-                      <p className="text-sm font-medium leading-5 text-[var(--lp-ink)]">
-                        {formatEvent(entry.eventType)}
-                      </p>
-                      {entry.metadata?.from && entry.metadata?.to && (
-                        <p className="mt-0.5 text-[11px] text-[var(--lp-ink-soft)]">
-                          {String(entry.metadata.from).replaceAll("_", " ")} →{" "}
-                          {String(entry.metadata.to).replaceAll("_", " ")}
-                        </p>
-                      )}
-                      <p className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--lp-faint)]">
-                        {fmtDateTime(entry.createdAt)}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
-          )}
+          {isStaff && (() => {
+            // Newest first so "the latest 5" is what's visible by default.
+            const sortedHistory = [...data.history].sort(
+              (a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+            );
+            const ACTIVITY_PREVIEW = 5;
+            const total = sortedHistory.length;
+            const visible = showAllActivity
+              ? sortedHistory
+              : sortedHistory.slice(0, ACTIVITY_PREVIEW);
+            const hiddenCount = total - visible.length;
+            return (
+              <section className={cn("rounded-2xl p-5", cardSurface)}>
+                <div className="mb-3 flex items-center gap-2">
+                  <History className="h-4 w-4 text-[var(--lp-accent)]" />
+                  <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
+                    Activity
+                  </h2>
+                  {total > 0 && (
+                    <span className="lp-mono ml-auto rounded-full border border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-[var(--lp-faint)]">
+                      {total} event{total === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+                {total === 0 ? (
+                  <p className="rounded-lg border border-dashed border-[var(--lp-line)] bg-[var(--lp-panel-2)]/40 px-3 py-3 text-center text-xs text-[var(--lp-faint)]">
+                    No activity yet.
+                  </p>
+                ) : (
+                  <>
+                    <ol className="relative ml-1.5 space-y-2.5 border-l border-[var(--lp-line)] pl-4">
+                      {visible.map((entry) => (
+                        <li key={entry.id} className="relative">
+                          <span
+                            aria-hidden="true"
+                            className="absolute -left-[18px] top-1.5 h-2 w-2 rounded-full border border-[var(--lp-accent)]/55 bg-[var(--lp-panel)]"
+                          />
+                          <p className="text-[13px] font-medium leading-5 text-[var(--lp-ink)]">
+                            {formatEvent(entry.eventType)}
+                          </p>
+                          {entry.metadata?.from && entry.metadata?.to && (
+                            <p className="text-[11px] leading-4 text-[var(--lp-ink-soft)]">
+                              {String(entry.metadata.from).replaceAll("_", " ")} →{" "}
+                              {String(entry.metadata.to).replaceAll("_", " ")}
+                            </p>
+                          )}
+                          <p className="lp-mono text-[10px] uppercase tracking-[0.14em] text-[var(--lp-faint)]">
+                            {fmtDateTime(entry.createdAt)}
+                          </p>
+                        </li>
+                      ))}
+                    </ol>
+                    {total > ACTIVITY_PREVIEW && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllActivity((v) => !v)}
+                        className="mt-3 w-full rounded-md border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 px-3 py-1.5 text-[11px] font-semibold text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/45 hover:text-[var(--lp-accent)]"
+                      >
+                        {showAllActivity
+                          ? "Show less"
+                          : `Show all activity (${hiddenCount} more)`}
+                      </button>
+                    )}
+                  </>
+                )}
+              </section>
+            );
+          })()}
 
           <section className={cn("rounded-2xl px-4 py-3", cardSurface)}>
             <div className="flex items-start gap-2.5 text-xs leading-5 text-[var(--lp-ink-soft)]">

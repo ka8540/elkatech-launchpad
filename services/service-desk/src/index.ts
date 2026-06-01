@@ -20,6 +20,7 @@ import {
   canClaimRequest,
   canEditRequestDetails,
   canReplyToRequest,
+  canTransitionRequestTo,
   canUpdateRequestStatus,
   canViewRequest,
   isValidStatusTransition,
@@ -720,18 +721,20 @@ app.post("/requests/:requestId/status", async (request, reply) => {
   }
 
   const nextStatus = requestStatusSchema.parse(input.status);
-  if (
-    !canUpdateRequestStatus(toWorkflowActor(actor), {
-      customerId: current.customer_id,
-      assignedEngineerId: current.assigned_engineer_id,
-      status: current.status,
-    })
-  ) {
+  const workflowRequest = {
+    customerId: current.customer_id,
+    assignedEngineerId: current.assigned_engineer_id,
+    status: current.status as typeof nextStatus,
+  };
+  // `canTransitionRequestTo` combines the per-user permission check
+  // (assignment / role) with the strict transition map and the admin-only
+  // reopen guard. One call replaces the previous two-step check and adds
+  // the reopen rule.
+  if (!canTransitionRequestTo(toWorkflowActor(actor), workflowRequest, nextStatus)) {
+    if (!isValidStatusTransition(current.status, nextStatus)) {
+      return reply.code(400).send({ message: "Invalid workflow transition." });
+    }
     return reply.code(403).send({ message: "Forbidden" });
-  }
-
-  if (!isValidStatusTransition(current.status, nextStatus)) {
-    return reply.code(400).send({ message: "Invalid status transition." });
   }
 
   await sql`

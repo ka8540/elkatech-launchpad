@@ -667,18 +667,35 @@ app.post("/api/requests/:requestId/assign", async (request: any, reply: any) => 
   }
 });
 
-app.post("/api/requests/:requestId/status", async (request, reply) => {
+app.post("/api/requests/:requestId/status", async (request: any, reply: any) => {
   const session = await requireSession(request, reply, ["engineer", "admin"]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = updateRequestStatusInputSchema.parse(request.body);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
-    method: "POST",
-    headers: userHeaders(session.user),
-    body: JSON.stringify(input),
-  });
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}/status`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    if (error instanceof InternalFetchError) {
+      if (error.status >= 500) {
+        request.log.error({ err: error }, "status update failed");
+        return reply
+          .code(502)
+          .send({ message: "Could not update status. Please try again." });
+      }
+      return reply.code(error.status).send(
+        error.body && typeof error.body === "object"
+          ? (error.body as Record<string, unknown>)
+          : { message: error.message },
+      );
+    }
+    throw error;
+  }
 });
 
 app.post("/api/requests/:requestId/cancel", async (request, reply) => {

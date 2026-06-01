@@ -63115,12 +63115,12 @@ var import_ioredis = __toESM(require_built3(), 1);
 
 // services/service-desk/src/workflow.ts
 var statusTransitions = {
-  new: ["triaged", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  triaged: ["new", "assigned", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  assigned: ["new", "triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
-  in_progress: ["new", "triaged", "waiting_for_customer", "resolved", "closed"],
-  waiting_for_customer: ["new", "triaged", "assigned", "in_progress", "resolved", "closed"],
-  resolved: ["new", "in_progress", "closed"],
+  new: ["triaged", "closed"],
+  triaged: ["in_progress", "waiting_for_customer", "resolved", "closed"],
+  assigned: ["triaged", "in_progress", "waiting_for_customer", "resolved", "closed"],
+  in_progress: ["waiting_for_customer", "resolved", "closed"],
+  waiting_for_customer: ["in_progress", "resolved", "closed"],
+  resolved: ["new", "closed"],
   closed: ["new"]
 };
 function canViewRequest(actor, request) {
@@ -63179,9 +63179,16 @@ function canEditRequestDetails(actor, request) {
 }
 function isValidStatusTransition(current, next) {
   if (current === next) {
-    return true;
+    return false;
   }
   return statusTransitions[current].includes(next);
+}
+function canTransitionRequestTo(actor, request, nextStatus) {
+  if (!canUpdateRequestStatus(actor, request)) return false;
+  if (!isValidStatusTransition(request.status, nextStatus)) return false;
+  const isReopen = nextStatus === "new" && (request.status === "resolved" || request.status === "closed");
+  if (isReopen && actor.role !== "admin") return false;
+  return true;
 }
 
 // services/service-desk/src/index.ts
@@ -63754,15 +63761,16 @@ app.post("/requests/:requestId/status", async (request, reply) => {
     return reply.code(404).send({ message: "Request not found." });
   }
   const nextStatus = requestStatusSchema.parse(input.status);
-  if (!canUpdateRequestStatus(toWorkflowActor(actor), {
+  const workflowRequest = {
     customerId: current.customer_id,
     assignedEngineerId: current.assigned_engineer_id,
     status: current.status
-  })) {
+  };
+  if (!canTransitionRequestTo(toWorkflowActor(actor), workflowRequest, nextStatus)) {
+    if (!isValidStatusTransition(current.status, nextStatus)) {
+      return reply.code(400).send({ message: "Invalid workflow transition." });
+    }
     return reply.code(403).send({ message: "Forbidden" });
-  }
-  if (!isValidStatusTransition(current.status, nextStatus)) {
-    return reply.code(400).send({ message: "Invalid status transition." });
   }
   await sql`
     update service_desk.requests
