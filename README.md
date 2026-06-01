@@ -802,6 +802,207 @@ Run `npm run db:migrate` to create the `auth.oauth_identities` table.
 
 The integration requests only `openid email profile` — minimal OpenID Connect scopes.
 
+## Recent Updates
+
+A summary of the work that has landed on `main` over the most recent
+iteration cycle. Each item refers to changes already in the codebase — see
+the git log for the exact commits.
+
+### Portal theme & UI polish
+
+- **Unified portal surfaces.** Replaced the residual navy/blue dashboard
+  styling across `/app/admin`, `/app/users`, `/app/queue`, `/app/requests`,
+  and `/app/requests/new` with the ElkaTech graphite/ivory/copper system
+  (`lp-card`, `--lp-panel`, `--lp-accent`, `--lp-line`). No more bright
+  blue buttons, badges, or card glows in the protected portal.
+- **Compact, consistent cards.** Stat cards, hero headers, recent-activity
+  panels, and detail panels all share the same matte surface, subtle
+  border, and `rounded-2xl` / `rounded-xl` radii.
+- **Status badge palette.**
+  - new / open → muted copper
+  - triaged / pending → muted amber
+  - resolved / approved / healthy → muted green
+  - suspended / rejected / down → muted red
+  - admin / engineer / customer → graphite neutral with copper accent
+- **Sidebar declutter.** The role tag under the user name and the redundant
+  "Theme" label in the theme switcher were removed; the user card now shows
+  display name + email and the theme row reads as `[icon] System >`.
+
+### New "My Account" page
+
+- **Route `/app/account`** available to all authenticated roles, gated by
+  the existing `ProtectedRoute`. Shows display name, email, role, approval
+  status, account origin, joined date, and email verification state.
+- **Sidebar entry** sits directly above Log out, supports both expanded and
+  collapsed sidebar widths, active-state styling, and tooltips.
+- **Backend endpoints**
+  - `PATCH /api/me/profile` → updates only the signed-in user's display
+    name (forwards to `PATCH /internal/users/:id/profile` on the auth
+    service). Role, approval status, email, and password are never mutable
+    via this route.
+  - `POST /api/me/password-reset` → rate-limited, sends the existing
+    forgot-password email to the session's own address; constant response so
+    it cannot leak account existence.
+- **Security** is layered: gateway `requireSession` + `assertCsrf` + the
+  internal route's `ensureInternal` token + a strict Zod schema that only
+  accepts `{ displayName: string(2..80) }`.
+- Email change is documented as admin-handled (Firebase is the identity
+  source); the page shows a copper-tinted notice rather than faking the
+  flow.
+
+### Remove user flow (soft-delete)
+
+- **Bug fix.** `DELETE /api/admin/users/:userId` previously failed with
+  `FST_ERR_CTP_EMPTY_JSON_BODY` because the shared `internalHeaders()` helper
+  always set `Content-Type: application/json` even when the request had no
+  body. `packages/config/src/http.ts → fetchJson` now strips the JSON
+  content-type when `init.body == null`, and throws a typed
+  `InternalFetchError { status, body }` so the gateway can forward the real
+  status code instead of converting everything to 500.
+- **Soft-delete migration.** Added
+  [`services/auth/migrations/005_user_removed_at.sql`](services/auth/migrations/005_user_removed_at.sql)
+  introducing `auth.users.removed_at` and `removed_by` plus a partial index
+  on rows where `removed_at IS NULL`.
+- **Schema-aware code path.** The auth service probes for the column once
+  (`hasRemovedAtColumn()` via `information_schema.columns`) and:
+  - `GET /internal/users` and `/summary` filter `WHERE removed_at IS NULL`
+    when the column exists; degrades gracefully when it doesn't.
+  - `DELETE /internal/users/:id` sets `removed_at`, `removed_by`,
+    `approval_status='suspended'`, and deletes all sessions — outside a
+    transaction-aborting `42703` fallback path.
+- **Production migration required:**
+  ```bash
+  DATABASE_URL='postgres://…neon.tech/…' npx tsx scripts/db-migrate.ts
+  ```
+
+### Safe test-data cleanup script
+
+- **Script** at [`scripts/cleanup-test-data.ts`](scripts/cleanup-test-data.ts)
+  with npm alias `npm run db:cleanup-test-data`.
+- **Dry-run by default.** Lists kept admins, doomed users, and dependent
+  row counts; takes no action. Pass `-- --confirm` to delete.
+- **Keeps:** every `role='admin'` row plus any account matching
+  `BOOTSTRAP_ADMIN_EMAIL` (defaults to `admin@elkatech.local`). Aborts
+  before touching anything if zero admins would remain.
+- **Deletes (single transaction, FK-safe order):**
+  `service_desk.outbox` → `request_messages` → `request_history` →
+  `requests` → `auth.sessions` → `auth.tokens` →
+  `auth.oauth_identities` (when present) → `auth.outbox` (user-scoped
+  events via `aggregate_type='user' AND aggregate_id IN …`) → `auth.users`.
+- **Notification deliveries** (no FK; audit log) and Firebase Auth users
+  are intentionally left in place — Firebase cleanup is documented as a
+  manual follow-up.
+- **Usage:**
+  ```bash
+  npm run db:cleanup-test-data                  # dry run
+  npm run db:cleanup-test-data -- --confirm     # destructive
+  DATABASE_URL='postgres://…' npm run db:cleanup-test-data -- --confirm
+  ```
+- Operational notes live in [`scripts/README.md`](scripts/README.md).
+
+### Google sign-in — first-click bug fix
+
+- **Bug.** After a successful Google OAuth round-trip the user landed
+  back on `/login` and had to click "Continue with Google" again. Root
+  cause was a React Query race: the `["session"]` query was inactive on
+  the login page, so `invalidateQueries` only marked it stale instead of
+  refetching, and `ProtectedRoute` read the cached `{ user: null }` on its
+  first render.
+- **Fix.** `LoginPage` and `SignupPage` now call
+  `queryClient.setQueryData(["session"], { user })` synchronously before
+  navigating, then invalidate for background freshness. Same one-click
+  behavior for email/password and Firebase signup paths.
+
+### Request detail page — UX overhaul
+
+- **Compact summary** card with request number, status badge, priority
+  pill, subject, product, description, and a meta strip showing created /
+  updated / assignee — no more giant hero block.
+- **Conversation thread** rendered as real chat:
+  - Your messages align right with a copper-tinted bubble and "You" label.
+  - Other participants align left with a graphite bubble; sender name
+    falls back to email, then to a role label.
+  - Role chips ("Admin" / "Engineer") and "Internal note" badge are
+    rendered as small `lp-mono` pills.
+- **Composer attached** to the conversation card: textarea sits flush
+  inside the wrapper, visibility selector + Send pill on a thin divider
+  below, Send disables on empty input.
+- **Sidebar density.** The 6-box detail grid collapsed into a single
+  card of `DetailRow` items (label + value with a hairline divider),
+  with a new "Assigned to" row that resolves to "You" / `<display name>` /
+  `<email>` / "Unassigned".
+- **Workflow panel** restructured: a single assignment-state pill at the
+  top, primary copper Claim button when unassigned, status actions in a
+  two-column grid, Archive isolated under a divider with caution styling,
+  admin Reassign as an inline `[Select] [Reassign]` row.
+- **Activity timeline** with a vertical line + copper dots, newest event
+  first, compact rows, an "N events" count badge, and a "Show all
+  activity (X more)" / "Show less" toggle (default cap = 5).
+
+### Request workflow state machine
+
+- **Strict transition map** mirrored in
+  [`services/service-desk/src/workflow.ts`](services/service-desk/src/workflow.ts)
+  and [`apps/web/src/lib/request-status.ts`](apps/web/src/lib/request-status.ts):
+
+  | From | Allowed via `/status` |
+  | --- | --- |
+  | `new` | `triaged`, `closed` |
+  | `triaged` | `in_progress`, `waiting_for_customer`, `resolved`, `closed` |
+  | `assigned` | `triaged`, `in_progress`, `waiting_for_customer`, `resolved`, `closed` |
+  | `in_progress` | `waiting_for_customer`, `resolved`, `closed` |
+  | `waiting_for_customer` | `in_progress`, `resolved`, `closed` |
+  | `resolved` | `new` (admin only), `closed` |
+  | `closed` | `new` (admin only) |
+
+  `assigned` is never a `/status` target — assignment is set exclusively
+  by `/claim` and `/assign`. Same-status updates are rejected so the
+  history never accumulates no-op `status_changed` rows.
+- **`canTransitionRequestTo`** combines RBAC + transition map + an
+  admin-only reopen gate; `/status` calls it as a single check and returns
+  400 *"Invalid workflow transition."* or 403 *"Forbidden"* with the real
+  status code forwarded by the gateway (no more opaque 500s).
+- **Claim hygiene.** `/claim` returns 409 with a friendly message if the
+  request is already assigned, and `/assign` no-ops when reassigning to
+  the same engineer — both prevent the duplicate "Request Claimed" /
+  "Request Assigned" history rows that the activity timeline previously
+  accumulated.
+- **Reassignment activity** writes `request_reassigned` (vs
+  `request_assigned`) with `{ previousEngineerId, engineerId,
+  engineerEmail }` metadata for clearer timelines.
+- **Frontend** mirrors all of the above: `getAllowedStatuses` filters to
+  only valid forward targets, hides reopens from non-admins, and uses
+  context-aware button copy (`Reopen request`, `Resume work`,
+  `Mark triaged`, etc.) — `Mark open` / `Mark assigned` are gone.
+
+### Request detail payload enrichment
+
+- **Backend** `GET /requests/:requestId` resolves every participant (the
+  assignee plus every message author) in parallel via the existing
+  `getUserById` internal call. The response now includes:
+  - `assignedEngineer: { id, displayName, email, role } | null`
+  - per-message `authorDisplayName` and `authorEmail` (nullable)
+- New contract type `RequestParticipant` in
+  [`packages/contracts/src/index.ts`](packages/contracts/src/index.ts);
+  `RequestMessage` gained optional `authorDisplayName`/`authorEmail` fields
+  (older payloads still parse).
+- **Result:** engineers and customers (who can't call
+  `/api/admin/users`) now see real names everywhere — "Assigned to Ajit
+  Doval" in the summary, the details row, and the workflow pill, plus
+  real author names on every conversation message.
+
+### Vercel bundling note
+
+The `api/*.mjs` serverless handlers are committed to the repo and are
+what Vercel actually runs. After **any** change under `services/*` or
+`packages/config/`, regenerate the bundles or production will keep
+running the old compiled code:
+
+```bash
+node scripts/bundle-api.cjs
+git add api/*.mjs
+```
+
 ## Future Improvements
 
 - Pin the Node version for reproducible local and CI environments.
