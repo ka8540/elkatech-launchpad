@@ -62844,10 +62844,12 @@ var sqlClient = null;
 function getDb() {
   if (!sqlClient) {
     const dbUrl = getEnv().POSTGRES_URL || getEnv().DATABASE_URL;
+    const isPgbouncer = /-pooler|pgbouncer/i.test(dbUrl);
     sqlClient = src_default(dbUrl, {
       max: 10,
       idle_timeout: 20,
-      connect_timeout: 10
+      connect_timeout: 10,
+      prepare: !isPgbouncer
     });
   }
   return sqlClient;
