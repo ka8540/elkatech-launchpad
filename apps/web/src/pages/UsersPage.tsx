@@ -268,7 +268,15 @@ const UsersPage = () => {
       apiRequest<{ user: AuthUser | null }>(`/api/admin/users/${userId}`, {
         method: "DELETE",
       }),
-    onSuccess: invalidateUserQueries,
+    // Only runs after the backend confirms the deletion (2xx). Drop the user
+    // from the cached list immediately so they disappear without a flicker,
+    // then refetch so the list reflects the permanent server-side deletion.
+    onSuccess: async (_data, variables) => {
+      queryClient.setQueryData<AuthUser[]>(["admin-users"], (old) =>
+        old ? old.filter((u) => u.id !== variables.userId) : old,
+      );
+      await invalidateUserQueries();
+    },
     onError: (error: unknown) => {
       const raw = error instanceof ApiError ? error.message : "";
       const looksTechnical = /FST_ERR|Bad Request|application\/json/i.test(raw);
@@ -487,8 +495,8 @@ const UsersPage = () => {
       }
     }
 
-    // ── Remove user (soft delete; never for self/system/last admin) ──────
-    if (!isSelf && !isSystemAdmin && !isOnlyAdmin) {
+    // ── Remove user (permanent hard delete; never for self/system/any admin) ──
+    if (!isSelf && !isSystemAdmin && !isAdmin) {
       buttons.push(
         <Button
           key="remove"
@@ -500,9 +508,9 @@ const UsersPage = () => {
             setConfirmState({
               kind: "remove",
               user,
-              title: `Remove ${user.displayName}?`,
+              title: `Remove ${user.displayName} permanently?`,
               description:
-                "This disables portal access and ends any active sessions. Their service request history is preserved. You can reactivate them later.",
+                "This permanently deletes their portal account, active sessions, and all related service request data. This cannot be undone.",
               confirmLabel: "Remove user",
             })
           }

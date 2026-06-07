@@ -21,6 +21,7 @@ import {
   generateToken,
   getDb,
   getEnv,
+  getFirebaseAdminAuth,
   hashToken,
   internalHeaders,
   verifyFirebaseIdTokenForRequest,
@@ -89,6 +90,22 @@ async function hasRemovedAtColumn(): Promise<boolean> {
     });
   }
   return removedAtColumnPromise;
+}
+
+// Generic existence check for a table on the connected database. Used by the
+// hard-delete flow so it stays safe on partially-migrated databases (e.g. the
+// service_desk schema or auth.oauth_identities not yet created locally). The
+// probe must happen BEFORE opening a transaction: a failed statement inside
+// `sql.begin` aborts the whole tx in Postgres.
+async function tableExists(schema: string, table: string): Promise<boolean> {
+  const rows = await sql<{ exists: boolean }[]>`
+    select true as exists
+    from information_schema.tables
+    where table_schema = ${schema}
+      and table_name = ${table}
+    limit 1
+  `;
+  return rows.length > 0;
 }
 
 // Best-effort tagging of how the account was created. Wrapped in a guard so
@@ -1226,9 +1243,18 @@ app.post("/internal/users/:id/role", async (request, reply) => {
   return reply.send({ user: mapUser(updated) });
 });
 
-// Soft-remove. Hard-deleting a user breaks audit history on service
-// requests, so this just suspends the account, kills their sessions, and
-// records the actor. Effectively a stronger Suspend with admin intent.
+// Hard delete. Removing a user permanently deletes their portal account and
+// every record they own — sessions, tokens, OAuth identities, user-scoped
+// outbox events, and all service requests they created (with each request's
+// messages/history/outbox). It all runs in a single transaction so a partial
+// failure rolls back and never leaves orphaned rows.
+//
+// The auth and service_desk schemas live in the same Postgres database behind a
+// single shared connection (see @elkatech/config getDb), so one cross-schema
+// transaction is the safest way to keep the delete atomic.
+//
+// Admin accounts are fully protected: no admin (self, system/bootstrap, or any
+// other) can be removed here.
 app.delete("/internal/users/:id", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });
@@ -1237,6 +1263,7 @@ app.delete("/internal/users/:id", async (request, reply) => {
   const user = await findUserById(params.id);
   if (!user) return reply.code(404).send({ message: "User not found." });
 
+  // ── Admin protection ────────────────────────────────────────────────
   const actor = actorIdFrom(request);
   if (actor && actor === user.id) {
     return reply.code(400).send({
@@ -1247,48 +1274,104 @@ app.delete("/internal/users/:id", async (request, reply) => {
   if (isSystemAdminEmail(user.email)) {
     return reply.code(400).send({
       code: "CANNOT_MODIFY_SYSTEM_ADMIN",
-      message: "The primary administrator account is protected.",
+      message: "Protected admin accounts cannot be removed.",
     });
   }
   if (user.role === "admin") {
-    const admins = await countAdmins();
-    if (admins <= 1) {
-      return reply.code(400).send({
-        code: "CANNOT_REMOVE_LAST_ADMIN",
-        message: "At least one administrator must remain.",
-      });
+    return reply.code(400).send({
+      code: "CANNOT_REMOVE_ADMIN",
+      message: "Protected admin accounts cannot be removed.",
+    });
+  }
+
+  // Probe optional/related tables BEFORE the transaction so we only issue
+  // deletes we know are valid (a failed statement inside `sql.begin` would
+  // abort the whole tx). Then collect the service requests this user owns so
+  // their dependent rows can be cleared before the requests themselves.
+  const hasOauth = await tableExists("auth", "oauth_identities");
+  const hasDeskRequests = await tableExists("service_desk", "requests");
+
+  let requestIds: string[] = [];
+  if (hasDeskRequests) {
+    const ownedRequests = await sql<{ id: string }[]>`
+      select id from service_desk.requests where customer_id = ${user.id}
+    `;
+    requestIds = ownedRequests.map((r) => r.id);
+  }
+
+  try {
+    await sql.begin(async (tx) => {
+      // 1–4. Service-desk data owned by the user.
+      if (hasDeskRequests && requestIds.length > 0) {
+        await tx`
+          delete from service_desk.outbox
+          where aggregate_type = 'service_request'
+            and aggregate_id = any(${requestIds.map(String)}::text[])
+        `;
+        await tx`
+          delete from service_desk.request_messages
+          where request_id = any(${requestIds}::uuid[])
+        `;
+        await tx`
+          delete from service_desk.request_history
+          where request_id = any(${requestIds}::uuid[])
+        `;
+        await tx`
+          delete from service_desk.requests
+          where id = any(${requestIds}::uuid[])
+        `;
+      }
+
+      // 5–8. Auth records tied to the user.
+      await tx`delete from auth.sessions where user_id = ${user.id}`;
+      await tx`delete from auth.tokens where user_id = ${user.id}`;
+      if (hasOauth) {
+        await tx`delete from auth.oauth_identities where user_id = ${user.id}`;
+      }
+      await tx`
+        delete from auth.outbox
+        where aggregate_type = 'user' and aggregate_id = ${user.id}
+      `;
+
+      // 9. The user row itself, last.
+      await tx`delete from auth.users where id = ${user.id}`;
+    });
+  } catch (error) {
+    request.log.error(
+      { err: error, userId: user.id },
+      "hard-delete user failed; transaction rolled back",
+    );
+    return reply.code(500).send({
+      code: "USER_DELETE_FAILED",
+      message: "Could not remove user.",
+    });
+  }
+
+  // Best-effort Firebase Auth cleanup AFTER the DB commit. This is never fatal:
+  // the local account is already gone, so a missing/failed Firebase deletion
+  // must not turn a successful removal into a 500. We log clearly so the admin
+  // can clean up Firebase manually if automatic deletion isn't available.
+  if (user.firebase_uid) {
+    try {
+      const adminAuth = await getFirebaseAdminAuth();
+      if (adminAuth) {
+        await adminAuth.deleteUser(user.firebase_uid);
+      } else {
+        request.log.warn(
+          { userId: user.id, firebaseUid: user.firebase_uid },
+          "Firebase Admin SDK not configured — skipped Firebase Auth deletion. " +
+            "Remove this user from the Firebase console manually if required.",
+        );
+      }
+    } catch (error) {
+      request.log.warn(
+        { err: error, userId: user.id, firebaseUid: user.firebase_uid },
+        "Firebase Auth deletion failed — local account already removed. " +
+          "Remove this user from the Firebase console manually.",
+      );
     }
   }
 
-  // Probe BEFORE entering the transaction — a failed statement inside
-  // `sql.begin` aborts the whole tx in Postgres, so an in-tx fallback is
-  // unsafe. Doing the column check first lets us pick the right UPDATE
-  // up front.
-  const supportsRemovedAt = await hasRemovedAtColumn();
-  await sql.begin(async (tx) => {
-    if (supportsRemovedAt) {
-      await tx`
-        update auth.users
-        set approval_status = 'suspended',
-            suspended_at = now(),
-            suspended_by = ${actor},
-            removed_at = now(),
-            removed_by = ${actor},
-            updated_at = now()
-        where id = ${user.id}
-      `;
-    } else {
-      await tx`
-        update auth.users
-        set approval_status = 'suspended',
-            suspended_at = now(),
-            suspended_by = ${actor},
-            updated_at = now()
-        where id = ${user.id}
-      `;
-    }
-    await tx`delete from auth.sessions where user_id = ${user.id}`;
-  });
   return reply.send({ user: null });
 });
 
