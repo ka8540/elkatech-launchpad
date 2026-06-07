@@ -637,9 +637,109 @@ Neon is the recommended hosted Postgres. Free tier covers initial usage with no 
 | `tsx`/`concurrently` errors with `Unexpected token {` or `Unexpected token ?` | Active Node version is too old. Run `nvm use 22` (or set `nvm alias default 22` so every new terminal starts on Node 22). |
 | Lint fails | The repo currently has pre-existing lint errors in shared UI/config files; isolate whether your change introduced anything new. |
 
+## Collaboration Workflow
+
+The GitHub repository is public, so collaborators contribute through branches and
+pull requests. To keep production safe and stop Vercel from deploying every random
+feature branch, the project uses three long-lived branches and a strict promotion
+path: `feature/*` → `dev` → `test` → `main`.
+
+### Branches
+
+- `main`
+  - Production branch.
+  - Anything merged here can deploy to the real live website.
+  - Only production-ready code should go here.
+- `dev`
+  - Development integration branch.
+  - Collaborators should open PRs into this branch.
+  - Used to test new features before they go to staging/production.
+- `test`
+  - QA/staging branch.
+  - Used for final checking before merging into `main`.
+
+### Developer workflow
+
+Contributors should **not** branch from `main` directly for normal feature work.
+
+Create your feature branch from `dev`:
+
+```sh
+git checkout dev
+git pull origin dev
+git checkout -b feature/<short-feature-name>
+```
+
+Then push it:
+
+```sh
+git push origin feature/<short-feature-name>
+```
+
+Then open a PR into:
+
+```
+dev
+```
+
+Not `main`.
+
+### Review workflow
+
+1. Contributor opens a PR into `dev`.
+2. Owner reviews the PR.
+3. Owner merges into `dev`.
+4. Check the `dev` deployment.
+5. When stable, merge `dev` into `test`.
+6. Check the `test` deployment.
+7. When approved, merge `test` into `main`.
+
+### Deployment behavior
+
+- `main` deploys production.
+- `dev` deploys a development preview.
+- `test` deploys a QA/staging preview.
+- Feature branches (`feature/*`, `fix/*`, `enhance/*`, and any other branch) are
+  intentionally skipped by Vercel via the ignored-build step below.
+
+### Vercel setup step
+
+Branch filtering is enforced by [`scripts/vercel-ignore-build.sh`](scripts/vercel-ignore-build.sh).
+Vercel treats exit code `0` as "skip this build" and any non-zero exit code as
+"run the build", so the script exits `1` for `main`/`dev`/`test` and `0` for
+everything else.
+
+In Vercel:
+
+**Project Settings → Git → Ignored Build Step**
+
+Set it to:
+
+```sh
+bash scripts/vercel-ignore-build.sh
+```
+
+This tells Vercel to skip deployments for random feature branches and only deploy
+`main`, `dev`, and `test`.
+
+You can verify the behavior locally:
+
+```sh
+VERCEL_GIT_COMMIT_REF=main bash scripts/vercel-ignore-build.sh; echo $?            # allow -> 1
+VERCEL_GIT_COMMIT_REF=dev bash scripts/vercel-ignore-build.sh; echo $?             # allow -> 1
+VERCEL_GIT_COMMIT_REF=test bash scripts/vercel-ignore-build.sh; echo $?            # allow -> 1
+VERCEL_GIT_COMMIT_REF=feature/example bash scripts/vercel-ignore-build.sh; echo $? # skip  -> 0
+```
+
+### Contributor warning
+
+- Do not push directly to `main`.
+- Do not open feature PRs directly into `main`.
+- Open PRs into `dev` first.
+
 ## Contribution Workflow
 
-1. Branch from `main`.
+1. Branch from `dev` for normal feature work (see [Collaboration Workflow](#collaboration-workflow)); promotion to production flows `dev` → `test` → `main`.
 2. Keep the change focused; avoid unrelated formatting churn.
 3. Update shared contracts and local public-page data together when changing catalog content.
 4. Run relevant build, typecheck, and tests before opening a pull request.
