@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link, useParams, type LinkProps } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -385,7 +386,7 @@ function MachineMoreMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align={align}
-        className="w-48 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] p-1 text-[var(--lp-ink)] shadow-xl"
+        className="z-[1001] w-48 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] p-1 text-[var(--lp-ink)] shadow-xl"
       >
         <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-semibold text-[var(--lp-faint)]">
           <span className="text-xs text-[var(--lp-faint)]">Machine actions</span>
@@ -438,26 +439,62 @@ function MachineDetailDrawer({
 }) {
   const [productOpen, setProductOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!machine || typeof document === "undefined") return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, [machine]);
+
+  useEffect(() => {
+    if (!machine || typeof window === "undefined") return;
+    const frame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [machine]);
+
+  useEffect(() => {
+    if (!machine || typeof document === "undefined") return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [machine, onClose]);
 
   if (!machine) return null;
   const active = machine.status === "active";
+  const portalTarget = typeof document === "undefined" ? null : document.body;
+  if (!portalTarget) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1000] flex h-screen w-screen justify-end overflow-hidden [height:100dvh]"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="machine-details-title"
+    >
       <button
         type="button"
         aria-label="Close machine details"
-        className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-sm"
+        className="absolute inset-0 h-full w-full cursor-default bg-black/65 backdrop-blur-md"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-[500px] flex-col border-l border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-2xl">
+      <aside className="absolute right-0 top-0 flex h-screen w-screen max-w-none flex-col border-l border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-2xl [height:100dvh] sm:w-[min(520px,100vw)] sm:max-w-[520px]">
         <header className="shrink-0 border-b border-[var(--lp-line)] px-4 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
                 Machine details
               </p>
-              <h2 className="lp-display mt-1 truncate text-xl font-bold text-[var(--lp-ink)]">
+              <h2 id="machine-details-title" className="lp-display mt-1 truncate text-xl font-bold text-[var(--lp-ink)]">
                 {machine.displayLabel || productLabel(machine)}
               </h2>
               <p className="mt-1 truncate text-sm text-[var(--lp-ink-soft)]">
@@ -465,9 +502,10 @@ function MachineDetailDrawer({
               </p>
             </div>
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label="Close machine details"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] text-[var(--lp-ink-soft)] transition-colors hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]"
             >
               <X className="h-4 w-4" />
@@ -585,7 +623,8 @@ function MachineDetailDrawer({
           />
         </footer>
       </aside>
-    </div>
+    </div>,
+    portalTarget,
   );
 }
 
@@ -1185,7 +1224,10 @@ const CustomerMachineProfilePage = () => {
           closeDetails();
           openEdit(machine);
         }}
-        onArchive={setConfirmArchive}
+        onArchive={(machine) => {
+          closeDetails();
+          setConfirmArchive(machine);
+        }}
         onReactivate={(machine) => statusMutation.mutate({ machine, action: "reactivate" })}
       />
 
