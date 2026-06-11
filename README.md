@@ -273,6 +273,46 @@ All non-health internal endpoints expect `x-internal-token`.
 
 For production, override the local defaults even when the schema technically supplies one.
 
+### Cloudflare R2 CORS (request attachments)
+
+Service-request photo/video attachments are uploaded **directly from the
+browser to R2** using a short-lived presigned `PUT` URL (the bytes never pass
+through the serverless functions). Because the browser talks to R2 directly,
+the R2 bucket must allow cross-origin `PUT`/`GET` from the app's origin —
+otherwise the upload is blocked by CORS and the UI shows
+"… file(s) could not be uploaded" even though the presigned URL is valid.
+
+Configure CORS on the bucket in the Cloudflare dashboard
+(**R2 → your bucket → Settings → CORS policy**). Recommended policy:
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:8080",
+      "http://127.0.0.1:8080",
+      "https://your-production-domain.com"
+    ],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["content-type", "x-amz-content-sha256", "x-amz-date", "authorization"],
+    "ExposeHeaders": ["etag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Notes:
+
+- Add your Vercel preview/production origins as needed; do **not** hardcode
+  these origins in application code.
+- `R2_ENDPOINT` is the S3 API endpoint
+  (`https://<account-id>.r2.cloudflarestorage.com`) and must **not** include the
+  bucket name. `R2_PUBLIC_BASE_URL` is the public read URL
+  (`https://pub-xxxx.r2.dev` or a custom domain) used to display attachments.
+- Reads use `R2_PUBLIC_BASE_URL` when set, otherwise a short-lived presigned
+  `GET`. Keep the bucket's write access private — uploads only work through the
+  presigned URLs the backend issues.
+
 ## Local Development Setup
 
 ### Prerequisites

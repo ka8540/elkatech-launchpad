@@ -249,6 +249,9 @@ function triggerNotificationPoll(): void {
   void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
     method: "POST",
     headers: internalHeaders(),
+    // Empty JSON body required — internalHeaders() sets Content-Type:
+    // application/json and Fastify rejects an empty body with that type.
+    body: "{}",
   }).catch(() => {
     /* best-effort */
   });

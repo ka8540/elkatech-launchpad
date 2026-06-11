@@ -23,13 +23,32 @@ export async function uploadRequestAttachment(
     },
   );
 
-  const putResponse = await fetch(ticket.uploadUrl, {
-    method: "PUT",
-    headers: ticket.headers,
-    body: file,
-  });
+  // Direct-to-R2 PUT — plain fetch, NO cookies/CSRF/Authorization. The only
+  // header is the signed Content-Type.
+  let putResponse: Response;
+  try {
+    putResponse = await fetch(ticket.uploadUrl, {
+      method: "PUT",
+      headers: ticket.headers,
+      body: file,
+    });
+  } catch (error) {
+    // A CORS block or network failure rejects before any status is available.
+    // Surface the real cause for debugging rather than a generic message.
+    // eslint-disable-next-line no-console
+    console.error(`Attachment upload to storage failed for ${file.name}:`, error);
+    throw new Error(
+      `Could not upload ${file.name}. The storage bucket may need CORS configured for this site.`,
+    );
+  }
   if (!putResponse.ok) {
-    throw new Error(`Upload failed for ${file.name}`);
+    const detail = await putResponse.text().catch(() => "");
+    // eslint-disable-next-line no-console
+    console.error(
+      `Attachment upload to storage failed for ${file.name}: ${putResponse.status} ${putResponse.statusText}`,
+      detail.slice(0, 300),
+    );
+    throw new Error(`Could not upload ${file.name} (HTTP ${putResponse.status}).`);
   }
 
   return apiRequest<RequestAttachment>(`/api/requests/${requestId}/attachments`, {

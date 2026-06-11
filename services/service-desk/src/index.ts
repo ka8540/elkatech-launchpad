@@ -101,6 +101,10 @@ function triggerNotificationPoll(): void {
   void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
     method: "POST",
     headers: internalHeaders(),
+    // internalHeaders() sets Content-Type: application/json, so we must send a
+    // (empty) JSON body — Fastify rejects an empty body with that content type
+    // (FST_ERR_CTP_EMPTY_JSON_BODY).
+    body: "{}",
   }).catch(() => {
     // Best-effort. The setInterval poller will catch up next time the
     // function happens to be warm, and the row stays in the outbox until

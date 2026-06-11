@@ -100614,7 +100614,13 @@ function getR2Client() {
       credentials: {
         accessKeyId: env3.R2_ACCESS_KEY_ID,
         secretAccessKey: env3.R2_SECRET_ACCESS_KEY
-      }
+      },
+      // The AWS SDK (v3.7x+) defaults to adding a CRC32 checksum to PutObject,
+      // which leaks x-amz-checksum-crc32 / x-amz-sdk-checksum-algorithm into the
+      // presigned URL. R2 doesn't need it and it only complicates the browser
+      // PUT, so only attach a checksum when the operation actually requires one.
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED"
     });
   }
   return cachedClient;
@@ -100788,7 +100794,11 @@ async function emitOutbox(eventType, aggregateId, payload) {
 function triggerNotificationPoll() {
   void fetch(`${env2.NOTIFICATION_SERVICE_URL}/process-outbox`, {
     method: "POST",
-    headers: internalHeaders()
+    headers: internalHeaders(),
+    // internalHeaders() sets Content-Type: application/json, so we must send a
+    // (empty) JSON body — Fastify rejects an empty body with that content type
+    // (FST_ERR_CTP_EMPTY_JSON_BODY).
+    body: "{}"
   }).catch(() => {
   });
 }
