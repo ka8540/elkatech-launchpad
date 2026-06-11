@@ -60,6 +60,22 @@ type UserRow = {
   created_at: string;
 };
 
+function resolvedProfileCompleted(row: UserRow): boolean {
+  // Older databases do not have the service-profile columns; keep those
+  // users unblocked. Once migrated, customer completion is derived from the
+  // required fields so a stale backfilled flag cannot skip onboarding.
+  if (row.profile_completed === undefined) return true;
+  if (row.role !== "customer") return true;
+  return isProfileComplete({
+    displayName: row.display_name,
+    companyName: row.company_name,
+    contactPhone: row.contact_phone,
+    addressLine1: row.address_line1,
+    city: row.city,
+    state: row.state,
+  });
+}
+
 function mapUser(row: UserRow) {
   return {
     id: row.id,
@@ -69,15 +85,14 @@ function mapUser(row: UserRow) {
     emailVerified: row.email_verified,
     approvalStatus: row.approval_status ?? "approved",
     accountOrigin: (row.account_origin ?? "self_signup") as AccountOrigin,
-    // Un-migrated databases (column absent → undefined) treat everyone as
-    // complete so the onboarding gate never traps users on old environments.
-    profileCompleted: row.profile_completed ?? true,
+    profileCompleted: resolvedProfileCompleted(row),
     createdAt: new Date(row.created_at).toISOString(),
   };
 }
 
 /** Full customer service profile for the profile GET/PATCH endpoints. */
 function mapProfile(row: UserRow) {
+  const profileCompleted = resolvedProfileCompleted(row);
   return {
     displayName: row.display_name,
     companyName: row.company_name ?? null,
@@ -89,8 +104,8 @@ function mapProfile(row: UserRow) {
     state: row.state ?? null,
     postalCode: row.postal_code ?? null,
     country: row.country ?? null,
-    profileCompleted: row.profile_completed ?? true,
-    profileCompletedAt: row.profile_completed_at
+    profileCompleted,
+    profileCompletedAt: profileCompleted && row.profile_completed_at
       ? new Date(row.profile_completed_at).toISOString()
       : null,
   };
