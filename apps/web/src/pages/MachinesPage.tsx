@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
@@ -178,6 +178,26 @@ function MachineDetailDrawer({
   );
 }
 
+/** Labelled key/value used in the mobile machine cards. */
+function CardField({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--lp-faint)]">
+        {label}
+      </p>
+      <div className="mt-0.5 break-words text-[var(--lp-ink-soft)]">{children}</div>
+    </div>
+  );
+}
+
 /* ─── Page ────────────────────────────────────────────────────────────────── */
 const MachinesPage = () => {
   const queryClient = useQueryClient();
@@ -284,6 +304,53 @@ const MachinesPage = () => {
 
   const isLoading = machinesQuery.isLoading || usersQuery.isLoading;
 
+  // Row actions — shared between the desktop table and the mobile cards.
+  const renderActions = (m: EnrichedMachine) => (
+    <div className="flex items-center gap-0.5">
+      {m.status === "active" && (
+        <Button
+          asChild
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8 text-[var(--lp-ink-soft)] hover:text-[var(--lp-accent)]"
+          title="Create request"
+        >
+          <Link to={`/app/requests/new?customerId=${m.customerId}&machineId=${m.id}`}>
+            <Wrench className="h-4 w-4" />
+          </Link>
+        </Button>
+      )}
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-8 w-8 text-[var(--lp-ink-soft)] hover:text-[var(--lp-accent)]"
+        title="Edit"
+        onClick={() => openEdit(m)}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-8 w-8 text-[var(--lp-ink-soft)] hover:text-[var(--lp-ink)]"
+        title={m.status === "active" ? "Archive" : "Reactivate"}
+        disabled={pendingId === m.id}
+        onClick={() => toggleStatus(m)}
+      >
+        {pendingId === m.id ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : m.status === "active" ? (
+          <Archive className="h-4 w-4" />
+        ) : (
+          <RotateCcw className="h-4 w-4" />
+        )}
+      </Button>
+    </div>
+  );
+
+  const emptyText =
+    enriched.length === 0 ? "No machines linked yet." : "No machines match your filters.";
+
   return (
     <div className="mx-auto max-w-7xl min-w-0 space-y-5 overflow-x-hidden">
       {/* Header */}
@@ -309,7 +376,7 @@ const MachinesPage = () => {
       </header>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total machines" count={stats.total} icon={HardDrive} accent="copper" />
         <StatCard label="Active" count={stats.active} icon={Wrench} accent="emerald" />
         <StatCard label="Customers with machines" count={stats.customers} icon={Users} accent="steel" />
@@ -317,8 +384,8 @@ const MachinesPage = () => {
       </div>
 
       {/* Filters */}
-      <div className={cn("flex flex-col gap-3 rounded-2xl p-3.5 sm:flex-row sm:items-center", cardSurface)}>
-        <div className="relative flex-1">
+      <div className={cn("flex flex-col gap-3 rounded-2xl p-3.5 sm:flex-row sm:flex-wrap sm:items-center", cardSurface)}>
+        <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)]" />
           <Input
             value={search}
@@ -327,11 +394,11 @@ const MachinesPage = () => {
             className="bg-background pl-9"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm text-[var(--lp-ink)]"
+            className="h-10 min-w-[130px] rounded-md border border-input bg-background px-3 text-sm text-[var(--lp-ink)]"
           >
             <option value="all">All statuses</option>
             <option value="active">Active</option>
@@ -340,7 +407,7 @@ const MachinesPage = () => {
           <select
             value={productFilter}
             onChange={(e) => setProductFilter(e.target.value)}
-            className="h-10 max-w-[200px] rounded-md border border-input bg-background px-3 text-sm text-[var(--lp-ink)]"
+            className="h-10 w-full min-w-[150px] max-w-full rounded-md border border-input bg-background px-3 text-sm text-[var(--lp-ink)] sm:w-auto sm:max-w-[220px]"
           >
             <option value="all">All products</option>
             {products.map((p) => (
@@ -352,129 +419,183 @@ const MachinesPage = () => {
         </div>
       </div>
 
-      {/* Table */}
-      <div className={cn("overflow-hidden rounded-2xl", cardSurface)}>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[var(--lp-line)] text-left">
-                {["Customer", "Machine / Product", "Serial", "Location", "Contact", "Status", "Updated", ""].map(
-                  (h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--lp-faint)]"
-                    >
-                      {h}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-[var(--lp-faint)]">
-                    <Loader2 className="mx-auto h-5 w-5 animate-spin" />
-                  </td>
-                </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center">
-                    <CircleSlash className="mx-auto mb-2 h-6 w-6 text-[var(--lp-faint)]" />
-                    <p className="text-sm text-[var(--lp-ink-soft)]">
-                      {enriched.length === 0 ? "No machines linked yet." : "No machines match your filters."}
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((m) => (
-                  <tr
-                    key={m.id}
-                    className="border-b border-[var(--lp-line)] transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/50"
+      {/* Table — desktop. table-fixed + colgroup keeps every column inside the
+          card width and truncates long values, so the card never scrolls or
+          clips horizontally. Stacked cards take over below lg. */}
+      <div className={cn("hidden overflow-hidden rounded-2xl lg:block", cardSurface)}>
+        <table className="w-full table-fixed border-collapse text-sm">
+          <colgroup>
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "17%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "8%" }} />
+            <col style={{ width: "7%" }} />
+            <col style={{ width: "120px" }} />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-[var(--lp-line)] text-left">
+              {["Customer", "Machine / Product", "Serial", "Location", "Contact", "Status", "Updated", ""].map(
+                (h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--lp-faint)]"
                   >
-                    <td className="px-4 py-3">
-                      <button onClick={() => setDetail(m)} className="text-left">
-                        <span className="block font-medium text-[var(--lp-ink)] hover:text-[var(--lp-accent)]">
-                          {m.customer?.displayName ?? "Unknown"}
-                        </span>
-                        <span className="block text-xs text-[var(--lp-faint)]">{m.customer?.email ?? m.customerId}</span>
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="block text-[var(--lp-ink)]">{m.displayLabel}</span>
-                      <span className="block text-xs text-[var(--lp-faint)]">
-                        {m.productSnapshot?.name ?? m.productId}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-[var(--lp-ink-soft)]">{m.internalSerialNumber || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-1 text-[var(--lp-ink-soft)]">
-                        <MapPin className="h-3 w-3 shrink-0 text-[var(--lp-faint)]" />
-                        <span className="truncate">{m.siteLocation}</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.contactPhone ? (
-                        <span className="flex items-center gap-1 text-[var(--lp-ink-soft)]">
-                          <Phone className="h-3 w-3 shrink-0 text-[var(--lp-faint)]" />
-                          {m.contactPhone}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusPill status={m.status} />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-[var(--lp-faint)]">{formatDate(m.updatedAt)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {m.status === "active" && (
-                          <Button
-                            asChild
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8 text-[var(--lp-ink-soft)] hover:text-[var(--lp-accent)]"
-                            title="Create request"
-                          >
-                            <Link to={`/app/requests/new?customerId=${m.customerId}&machineId=${m.id}`}>
-                              <Wrench className="h-4 w-4" />
-                            </Link>
-                          </Button>
-                        )}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-[var(--lp-ink-soft)] hover:text-[var(--lp-accent)]"
-                          title="Edit"
-                          onClick={() => openEdit(m)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-[var(--lp-ink-soft)] hover:text-[var(--lp-ink)]"
-                          title={m.status === "active" ? "Archive" : "Reactivate"}
-                          disabled={pendingId === m.id}
-                          onClick={() => toggleStatus(m)}
-                        >
-                          {pendingId === m.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : m.status === "active" ? (
-                            <Archive className="h-4 w-4" />
-                          ) : (
-                            <RotateCcw className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                    {h}
+                  </th>
+                ),
               )}
-            </tbody>
-          </table>
-        </div>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-[var(--lp-faint)]">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center">
+                  <CircleSlash className="mx-auto mb-2 h-6 w-6 text-[var(--lp-faint)]" />
+                  <p className="text-sm text-[var(--lp-ink-soft)]">{emptyText}</p>
+                </td>
+              </tr>
+            ) : (
+              filtered.map((m) => (
+                <tr
+                  key={m.id}
+                  className="border-b border-[var(--lp-line)] align-top transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/50"
+                >
+                  <td className="px-4 py-3">
+                    <button onClick={() => setDetail(m)} className="block w-full min-w-0 text-left">
+                      <span
+                        className="block truncate font-medium text-[var(--lp-ink)] hover:text-[var(--lp-accent)]"
+                        title={m.customer?.displayName ?? undefined}
+                      >
+                        {m.customer?.displayName ?? "Unknown"}
+                      </span>
+                      <span
+                        className="block truncate text-xs text-[var(--lp-faint)]"
+                        title={m.customer?.email ?? m.customerId}
+                      >
+                        {m.customer?.email ?? m.customerId}
+                      </span>
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="block truncate text-[var(--lp-ink)]" title={m.displayLabel}>
+                      {m.displayLabel}
+                    </span>
+                    <span
+                      className="block truncate text-xs text-[var(--lp-faint)]"
+                      title={m.productSnapshot?.name ?? m.productId}
+                    >
+                      {m.productSnapshot?.name ?? m.productId}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className="block truncate text-[var(--lp-ink-soft)]"
+                      title={m.internalSerialNumber || undefined}
+                    >
+                      {m.internalSerialNumber || "—"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className="flex min-w-0 items-center gap-1 text-[var(--lp-ink-soft)]"
+                      title={m.siteLocation}
+                    >
+                      <MapPin className="h-3 w-3 shrink-0 text-[var(--lp-faint)]" />
+                      <span className="truncate">{m.siteLocation}</span>
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {m.contactPhone ? (
+                      <span
+                        className="flex min-w-0 items-center gap-1 text-[var(--lp-ink-soft)]"
+                        title={m.contactPhone}
+                      >
+                        <Phone className="h-3 w-3 shrink-0 text-[var(--lp-faint)]" />
+                        <span className="truncate">{m.contactPhone}</span>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusPill status={m.status} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[var(--lp-faint)]">{formatDate(m.updatedAt)}</td>
+                  <td className="px-2 py-3">{renderActions(m)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Cards — tablet / mobile (no horizontal scroll) */}
+      <div className="space-y-3 lg:hidden">
+        {isLoading ? (
+          <div className={cn("flex justify-center rounded-2xl py-12", cardSurface)}>
+            <Loader2 className="h-5 w-5 animate-spin text-[var(--lp-faint)]" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className={cn("rounded-2xl py-12 text-center", cardSurface)}>
+            <CircleSlash className="mx-auto mb-2 h-6 w-6 text-[var(--lp-faint)]" />
+            <p className="text-sm text-[var(--lp-ink-soft)]">{emptyText}</p>
+          </div>
+        ) : (
+          filtered.map((m) => (
+            <div key={m.id} className={cn("rounded-2xl p-4", cardSurface)}>
+              <div className="flex items-start justify-between gap-3">
+                <button onClick={() => setDetail(m)} className="min-w-0 text-left">
+                  <span
+                    className="block truncate font-medium text-[var(--lp-ink)]"
+                    title={m.customer?.displayName ?? undefined}
+                  >
+                    {m.customer?.displayName ?? "Unknown"}
+                  </span>
+                  <span
+                    className="block truncate text-xs text-[var(--lp-faint)]"
+                    title={m.customer?.email ?? m.customerId}
+                  >
+                    {m.customer?.email ?? m.customerId}
+                  </span>
+                </button>
+                <StatusPill status={m.status} />
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">
+                <CardField label="Machine">{m.displayLabel}</CardField>
+                <CardField label="Product">{m.productSnapshot?.name ?? m.productId}</CardField>
+                <CardField label="Serial">{m.internalSerialNumber || "—"}</CardField>
+                <CardField label="Updated">{formatDate(m.updatedAt)}</CardField>
+                <CardField label="Location" className="col-span-2">
+                  <span className="flex items-start gap-1">
+                    <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-[var(--lp-faint)]" />
+                    {m.siteLocation}
+                  </span>
+                </CardField>
+                <CardField label="Contact" className="col-span-2">
+                  {m.contactPhone ? (
+                    <span className="flex items-center gap-1">
+                      <Phone className="h-3 w-3 shrink-0 text-[var(--lp-faint)]" />
+                      {m.contactPhone}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </CardField>
+              </div>
+              <div className="mt-3 flex justify-end border-t border-[var(--lp-line)] pt-2.5">
+                {renderActions(m)}
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       <MachineFormDialog
