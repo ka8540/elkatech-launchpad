@@ -386,7 +386,7 @@ function MachineMoreMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align={align}
-        className="z-[1001] w-48 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] p-1 text-[var(--lp-ink)] shadow-xl"
+        className="lp-portal z-[1001] w-48 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] p-1 text-[var(--lp-ink)] shadow-xl"
       >
         <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-semibold text-[var(--lp-faint)]">
           <span className="text-xs text-[var(--lp-faint)]">Machine actions</span>
@@ -476,7 +476,11 @@ function MachineDetailDrawer({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1000] flex h-screen w-screen justify-end overflow-hidden [height:100dvh]"
+      // `lp-portal` re-declares the graphite/copper tokens for this Radix-style
+      // body portal (which renders outside the `.lp` subtree). Without it the
+      // --lp-* variables are undefined here, so backgrounds collapse to
+      // transparent and borders fall back to currentColor (bright white).
+      className="lp-portal fixed inset-0 z-[1000] flex h-screen w-screen justify-end overflow-hidden text-[var(--lp-ink)] [height:100dvh]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="machine-details-title"
@@ -484,7 +488,7 @@ function MachineDetailDrawer({
       <button
         type="button"
         aria-label="Close machine details"
-        className="absolute inset-0 h-full w-full cursor-default bg-black/65 backdrop-blur-md"
+        className="absolute inset-0 h-full w-full cursor-default bg-black/55 backdrop-blur-[3px]"
         onClick={onClose}
       />
       <aside className="absolute right-0 top-0 flex h-screen w-screen max-w-none flex-col border-l border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-2xl [height:100dvh] sm:w-[min(520px,100vw)] sm:max-w-[520px]">
