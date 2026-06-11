@@ -98157,6 +98157,14 @@ var createCustomerMachineInputSchema = external_exports.object({
   installDate: external_exports.string().trim().max(20).optional(),
   notes: external_exports.string().trim().max(2e3).optional()
 });
+var adminLinkMachineInputSchema = createCustomerMachineInputSchema.extend({
+  customerId: external_exports.string().uuid()
+});
+var adminMachineListQuerySchema = external_exports.object({
+  customerId: external_exports.string().uuid().optional(),
+  productId: external_exports.string().optional(),
+  status: customerMachineStatusSchema.optional()
+});
 var updateCustomerMachineInputSchema = external_exports.object({
   displayLabel: external_exports.string().trim().min(1).max(120).optional(),
   unitNumber: external_exports.string().trim().max(40).nullable().optional(),
@@ -98180,7 +98188,10 @@ var createCustomerRequestInputSchema = external_exports.object({
   priority: requestPrioritySchema.default("normal"),
   // Optional override; defaults to the machine's contact phone, then the
   // customer profile phone.
-  contactPhone: external_exports.string().trim().min(7).max(30).optional()
+  contactPhone: external_exports.string().trim().min(7).max(30).optional(),
+  // Admin-on-behalf: when present the backend asserts the machine belongs to
+  // this customer. Customers omit it (their own id is used).
+  customerId: external_exports.string().uuid().optional()
 });
 var attachmentKindSchema = external_exports.enum(["image", "video"]);
 var requestAttachmentSchema = external_exports.object({
@@ -100872,6 +100883,70 @@ async function getMachineById(machineId) {
   `;
   return rows[0] ?? null;
 }
+async function customerAssignmentError(customerId) {
+  let user;
+  try {
+    user = await getUserById(customerId);
+  } catch (error2) {
+    if (error2 instanceof InternalFetchError && error2.status === 404) {
+      return "Customer not found.";
+    }
+    throw error2;
+  }
+  if (user.role !== "customer") {
+    return "Machines can only be linked to customer accounts.";
+  }
+  const approval = user.approvalStatus;
+  if (approval === "suspended" || approval === "rejected") {
+    return "Machines cannot be linked to a suspended or rejected customer.";
+  }
+  return null;
+}
+async function createMachineForCustomer(customerId, input) {
+  let product;
+  try {
+    product = await getCatalogProduct(input.productId);
+  } catch {
+    return null;
+  }
+  const productSnapshot = {
+    id: product.id,
+    categorySlug: product.categorySlug,
+    slug: product.slug,
+    name: product.name,
+    priceDisplay: product.priceDisplay
+  };
+  const unit = input.unitNumber?.trim();
+  const displayLabel = input.displayLabel?.trim() || `${product.name}${unit ? ` \u2014 Unit ${unit}` : ""}`;
+  const machineId = randomUUID2();
+  await sql`
+    insert into service_desk.customer_machines (
+      id, customer_id, product_id, product_snapshot, display_label, unit_number,
+      internal_serial_number, site_name, site_location, contact_phone,
+      purchase_date, install_date, status, notes
+    )
+    values (
+      ${machineId},
+      ${customerId},
+      ${product.id},
+      ${sql.json(productSnapshot)},
+      ${displayLabel},
+      ${unit || null},
+      ${input.internalSerialNumber?.trim() || null},
+      ${input.siteName?.trim() || null},
+      ${input.siteLocation.trim()},
+      ${input.contactPhone?.trim() || null},
+      ${input.purchaseDate?.trim() || null},
+      ${input.installDate?.trim() || null},
+      ${"active"},
+      ${input.notes?.trim() || null}
+    )
+  `;
+  const rows = await sql`
+    select * from service_desk.customer_machines where id = ${machineId} limit 1
+  `;
+  return rows[0];
+}
 async function getCatalogProduct(productId) {
   return fetchJson(
     `${env2.CATALOG_SERVICE_URL}/products/${productId}`,
@@ -100919,6 +100994,9 @@ app.post("/requests", async (request, reply) => {
     }
     if (actor.role === "customer" && machine.customer_id !== actor.id) {
       return reply.code(403).send({ message: "Forbidden" });
+    }
+    if (input2.customerId && machine.customer_id !== input2.customerId) {
+      return reply.code(400).send({ message: "This machine does not belong to that customer." });
     }
     const ownerId = machine.customer_id;
     let ownerEmail = actor.email;
@@ -101721,49 +101799,66 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
   if (!ensureAdmin(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
-  let product;
-  try {
-    product = await getCatalogProduct(input.productId);
-  } catch {
+  const customerError = await customerAssignmentError(params.customerId);
+  if (customerError) {
+    return reply.code(400).send({ message: customerError });
+  }
+  const machineRow = await createMachineForCustomer(params.customerId, input);
+  if (!machineRow) {
     return reply.code(400).send({ message: "Unknown product." });
   }
-  const productSnapshot = {
-    id: product.id,
-    categorySlug: product.categorySlug,
-    slug: product.slug,
-    name: product.name,
-    priceDisplay: product.priceDisplay
-  };
-  const unit = input.unitNumber?.trim();
-  const displayLabel = input.displayLabel?.trim() || `${product.name}${unit ? ` \u2014 Unit ${unit}` : ""}`;
-  const machineId = randomUUID2();
-  await sql`
-    insert into service_desk.customer_machines (
-      id, customer_id, product_id, product_snapshot, display_label, unit_number,
-      internal_serial_number, site_name, site_location, contact_phone,
-      purchase_date, install_date, status, notes
-    )
-    values (
-      ${machineId},
-      ${params.customerId},
-      ${product.id},
-      ${sql.json(productSnapshot)},
-      ${displayLabel},
-      ${unit || null},
-      ${input.internalSerialNumber?.trim() || null},
-      ${input.siteName?.trim() || null},
-      ${input.siteLocation.trim()},
-      ${input.contactPhone?.trim() || null},
-      ${input.purchaseDate?.trim() || null},
-      ${input.installDate?.trim() || null},
-      ${"active"},
-      ${input.notes?.trim() || null}
-    )
-  `;
+  await emitOutbox("customer_machine.linked", machineRow.id, {
+    machineId: machineRow.id,
+    customerId: params.customerId,
+    productId: machineRow.product_id,
+    productName: machineRow.product_snapshot?.name ?? machineRow.product_id,
+    displayLabel: machineRow.display_label,
+    linkedBy: actor.id
+  });
+  return reply.code(201).send(mapMachineRow(machineRow));
+});
+app.get("/admin/customer-machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const query = adminMachineListQuerySchema.parse(request.query);
   const rows = await sql`
-    select * from service_desk.customer_machines where id = ${machineId} limit 1
+    select *
+    from service_desk.customer_machines
+    where (${query.customerId ?? null}::uuid is null or customer_id = ${query.customerId ?? null})
+      and (${query.productId ?? null}::text is null or product_id = ${query.productId ?? null})
+      and (${query.status ?? null}::text is null or status = ${query.status ?? null})
+    order by updated_at desc
   `;
-  return reply.code(201).send(mapMachineRow(rows[0]));
+  return rows.map(mapMachineRow);
+});
+app.post("/admin/customer-machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const input = adminLinkMachineInputSchema.parse(request.body);
+  const customerError = await customerAssignmentError(input.customerId);
+  if (customerError) {
+    return reply.code(400).send({ message: customerError });
+  }
+  const { customerId, ...machineInput } = input;
+  const machineRow = await createMachineForCustomer(customerId, machineInput);
+  if (!machineRow) {
+    return reply.code(400).send({ message: "Unknown product." });
+  }
+  await emitOutbox("customer_machine.linked", machineRow.id, {
+    machineId: machineRow.id,
+    customerId,
+    productId: machineRow.product_id,
+    productName: machineRow.product_snapshot?.name ?? machineRow.product_id,
+    displayLabel: machineRow.display_label,
+    linkedBy: actor.id
+  });
+  return reply.code(201).send(mapMachineRow(machineRow));
 });
 app.patch("/admin/machines/:machineId", async (request, reply) => {
   if (!ensureInternal(request.headers)) {

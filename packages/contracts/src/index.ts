@@ -345,6 +345,22 @@ export const createCustomerMachineInputSchema = z.object({
 });
 export type CreateCustomerMachineInput = z.infer<typeof createCustomerMachineInputSchema>;
 
+// Admin links a machine to a chosen customer from the global machines
+// dashboard — same fields as createCustomerMachineInputSchema plus the target
+// customer. (The per-user route carries the customer in the URL instead.)
+export const adminLinkMachineInputSchema = createCustomerMachineInputSchema.extend({
+  customerId: z.string().uuid(),
+});
+export type AdminLinkMachineInput = z.infer<typeof adminLinkMachineInputSchema>;
+
+// Filters for the admin customer-machines list endpoint.
+export const adminMachineListQuerySchema = z.object({
+  customerId: z.string().uuid().optional(),
+  productId: z.string().optional(),
+  status: customerMachineStatusSchema.optional(),
+});
+export type AdminMachineListQuery = z.infer<typeof adminMachineListQuerySchema>;
+
 export const updateCustomerMachineInputSchema = z
   .object({
     displayLabel: z.string().trim().min(1).max(120).optional(),
@@ -376,6 +392,9 @@ export const createCustomerRequestInputSchema = z.object({
   // Optional override; defaults to the machine's contact phone, then the
   // customer profile phone.
   contactPhone: z.string().trim().min(7).max(30).optional(),
+  // Admin-on-behalf: when present the backend asserts the machine belongs to
+  // this customer. Customers omit it (their own id is used).
+  customerId: z.string().uuid().optional(),
 });
 export type CreateCustomerRequestInput = z.infer<typeof createCustomerRequestInputSchema>;
 

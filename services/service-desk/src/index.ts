@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { z } from "zod";
 import {
+  adminLinkMachineInputSchema,
+  adminMachineListQuerySchema,
   assignRequestInputSchema,
   cancelRequestInputSchema,
   catalogProductSchema,
@@ -33,6 +35,7 @@ import {
   getDb,
   getEnv,
   internalHeaders,
+  InternalFetchError,
   isAllowedAttachmentType,
   isR2Configured,
   maxAttachmentBytes,
@@ -224,6 +227,87 @@ async function getMachineById(machineId: string): Promise<any | null> {
   return rows[0] ?? null;
 }
 
+/**
+ * Validate that a customer can receive a machine assignment: the user must
+ * exist, be a customer, and not be suspended/rejected (removed users are hard-
+ * deleted, so a missing user surfaces as a 404 from getUserById). Returns an
+ * error message string, or null when the customer is eligible.
+ */
+async function customerAssignmentError(customerId: string): Promise<string | null> {
+  let user;
+  try {
+    user = await getUserById(customerId);
+  } catch (error) {
+    if (error instanceof InternalFetchError && error.status === 404) {
+      return "Customer not found.";
+    }
+    throw error;
+  }
+  if (user.role !== "customer") {
+    return "Machines can only be linked to customer accounts.";
+  }
+  const approval = (user as { approvalStatus?: string }).approvalStatus;
+  if (approval === "suspended" || approval === "rejected") {
+    return "Machines cannot be linked to a suspended or rejected customer.";
+  }
+  return null;
+}
+
+/** Insert a machine for a customer from a validated input. Shared by the
+ *  per-user route (customer in the URL) and the dashboard route (customer in
+ *  the body). Returns the created machine row, or null if the product is
+ *  unknown. */
+async function createMachineForCustomer(
+  customerId: string,
+  input: z.infer<typeof createCustomerMachineInputSchema>,
+): Promise<any | null> {
+  let product;
+  try {
+    product = await getCatalogProduct(input.productId);
+  } catch {
+    return null;
+  }
+  const productSnapshot = {
+    id: product.id,
+    categorySlug: product.categorySlug,
+    slug: product.slug,
+    name: product.name,
+    priceDisplay: product.priceDisplay,
+  };
+  const unit = input.unitNumber?.trim();
+  const displayLabel =
+    input.displayLabel?.trim() || `${product.name}${unit ? ` — Unit ${unit}` : ""}`;
+
+  const machineId = randomUUID();
+  await sql`
+    insert into service_desk.customer_machines (
+      id, customer_id, product_id, product_snapshot, display_label, unit_number,
+      internal_serial_number, site_name, site_location, contact_phone,
+      purchase_date, install_date, status, notes
+    )
+    values (
+      ${machineId},
+      ${customerId},
+      ${product.id},
+      ${sql.json(productSnapshot as any)},
+      ${displayLabel},
+      ${unit || null},
+      ${input.internalSerialNumber?.trim() || null},
+      ${input.siteName?.trim() || null},
+      ${input.siteLocation.trim()},
+      ${input.contactPhone?.trim() || null},
+      ${input.purchaseDate?.trim() || null},
+      ${input.installDate?.trim() || null},
+      ${"active"},
+      ${input.notes?.trim() || null}
+    )
+  `;
+  const rows = await sql<any[]>`
+    select * from service_desk.customer_machines where id = ${machineId} limit 1
+  `;
+  return rows[0];
+}
+
 async function getCatalogProduct(productId: string) {
   return fetchJson<z.infer<typeof catalogProductSchema>>(
     `${env.CATALOG_SERVICE_URL}/products/${productId}`,
@@ -300,6 +384,11 @@ app.post("/requests", async (request, reply) => {
     // Spoofing another customer's machine id is rejected here, server-side.
     if (actor.role === "customer" && machine.customer_id !== actor.id) {
       return reply.code(403).send({ message: "Forbidden" });
+    }
+    // Admin-on-behalf: when a target customer is named, the machine must
+    // actually belong to them (guards against a mismatched selection).
+    if (input.customerId && machine.customer_id !== input.customerId) {
+      return reply.code(400).send({ message: "This machine does not belong to that customer." });
     }
 
     const ownerId: string = machine.customer_id;
@@ -1254,54 +1343,72 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
   const params = customerParamSchema.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
 
-  // Snapshot the catalog product so the label/category stays stable.
-  let product;
-  try {
-    product = await getCatalogProduct(input.productId);
-  } catch {
+  const customerError = await customerAssignmentError(params.customerId);
+  if (customerError) {
+    return reply.code(400).send({ message: customerError });
+  }
+  const machineRow = await createMachineForCustomer(params.customerId, input);
+  if (!machineRow) {
     return reply.code(400).send({ message: "Unknown product." });
   }
-  const productSnapshot = {
-    id: product.id,
-    categorySlug: product.categorySlug,
-    slug: product.slug,
-    name: product.name,
-    priceDisplay: product.priceDisplay,
-  };
+  await emitOutbox("customer_machine.linked", machineRow.id, {
+    machineId: machineRow.id,
+    customerId: params.customerId,
+    productId: machineRow.product_id,
+    productName: machineRow.product_snapshot?.name ?? machineRow.product_id,
+    displayLabel: machineRow.display_label,
+    linkedBy: actor.id,
+  });
+  return reply.code(201).send(mapMachineRow(machineRow));
+});
 
-  const unit = input.unitNumber?.trim();
-  const displayLabel =
-    input.displayLabel?.trim() ||
-    `${product.name}${unit ? ` — Unit ${unit}` : ""}`;
+// ── Dashboard collection API: list all assignments (admin) ──────────────────
+app.get("/admin/customer-machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const query = adminMachineListQuerySchema.parse(request.query);
 
-  const machineId = randomUUID();
-  await sql`
-    insert into service_desk.customer_machines (
-      id, customer_id, product_id, product_snapshot, display_label, unit_number,
-      internal_serial_number, site_name, site_location, contact_phone,
-      purchase_date, install_date, status, notes
-    )
-    values (
-      ${machineId},
-      ${params.customerId},
-      ${product.id},
-      ${sql.json(productSnapshot as any)},
-      ${displayLabel},
-      ${unit || null},
-      ${input.internalSerialNumber?.trim() || null},
-      ${input.siteName?.trim() || null},
-      ${input.siteLocation.trim()},
-      ${input.contactPhone?.trim() || null},
-      ${input.purchaseDate?.trim() || null},
-      ${input.installDate?.trim() || null},
-      ${"active"},
-      ${input.notes?.trim() || null}
-    )
-  `;
   const rows = await sql<any[]>`
-    select * from service_desk.customer_machines where id = ${machineId} limit 1
+    select *
+    from service_desk.customer_machines
+    where (${query.customerId ?? null}::uuid is null or customer_id = ${query.customerId ?? null})
+      and (${query.productId ?? null}::text is null or product_id = ${query.productId ?? null})
+      and (${query.status ?? null}::text is null or status = ${query.status ?? null})
+    order by updated_at desc
   `;
-  return reply.code(201).send(mapMachineRow(rows[0]));
+  return rows.map(mapMachineRow);
+});
+
+// ── Dashboard collection API: link a machine to a chosen customer (admin) ───
+app.post("/admin/customer-machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const input = adminLinkMachineInputSchema.parse(request.body);
+
+  const customerError = await customerAssignmentError(input.customerId);
+  if (customerError) {
+    return reply.code(400).send({ message: customerError });
+  }
+  const { customerId, ...machineInput } = input;
+  const machineRow = await createMachineForCustomer(customerId, machineInput);
+  if (!machineRow) {
+    return reply.code(400).send({ message: "Unknown product." });
+  }
+  await emitOutbox("customer_machine.linked", machineRow.id, {
+    machineId: machineRow.id,
+    customerId,
+    productId: machineRow.product_id,
+    productName: machineRow.product_snapshot?.name ?? machineRow.product_id,
+    displayLabel: machineRow.display_label,
+    linkedBy: actor.id,
+  });
+  return reply.code(201).send(mapMachineRow(machineRow));
 });
 
 app.patch("/admin/machines/:machineId", async (request, reply) => {

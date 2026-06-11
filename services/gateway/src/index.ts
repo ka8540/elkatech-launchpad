@@ -4,6 +4,8 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import {
+  adminLinkMachineInputSchema,
+  adminMachineListQuerySchema,
   adminUpdateProfileInputSchema,
   approvalActionInputSchema,
   cancelRequestInputSchema,
@@ -920,6 +922,75 @@ app.delete("/api/admin/machines/:machineId", async (request: any, reply: any) =>
     });
   } catch (error) {
     return forwardServiceError(request, reply, error, "admin machine delete failed");
+  }
+});
+
+// ─── Admin: customer-machines dashboard (global collection) ─────────────────
+app.get("/api/admin/customer-machines", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  // Validate/normalise filters; forward only the recognised ones.
+  const query = adminMachineListQuerySchema.parse(request.query ?? {});
+  const params = new URLSearchParams();
+  if (query.customerId) params.set("customerId", query.customerId);
+  if (query.productId) params.set("productId", query.productId);
+  if (query.status) params.set("status", query.status);
+  const qs = params.toString();
+  try {
+    return await fetchJson(
+      `${env.SERVICE_DESK_URL}/admin/customer-machines${qs ? `?${qs}` : ""}`,
+      { headers: userHeaders(session.user) },
+    );
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machines list failed");
+  }
+});
+
+app.post("/api/admin/customer-machines", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const input = adminLinkMachineInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/customer-machines`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machine create failed");
+  }
+});
+
+app.patch("/api/admin/customer-machines/:machineId", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { machineId } = adminMachineParams.parse(request.params);
+  const input = updateCustomerMachineInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/machines/${machineId}`, {
+      method: "PATCH",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machine update failed");
+  }
+});
+
+app.delete("/api/admin/customer-machines/:machineId", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { machineId } = adminMachineParams.parse(request.params);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/machines/${machineId}`, {
+      method: "DELETE",
+      headers: userHeaders(session.user),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machine delete failed");
   }
 });
 

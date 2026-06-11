@@ -63152,6 +63152,14 @@ var createCustomerMachineInputSchema = external_exports.object({
   installDate: external_exports.string().trim().max(20).optional(),
   notes: external_exports.string().trim().max(2e3).optional()
 });
+var adminLinkMachineInputSchema = createCustomerMachineInputSchema.extend({
+  customerId: external_exports.string().uuid()
+});
+var adminMachineListQuerySchema = external_exports.object({
+  customerId: external_exports.string().uuid().optional(),
+  productId: external_exports.string().optional(),
+  status: customerMachineStatusSchema.optional()
+});
 var updateCustomerMachineInputSchema = external_exports.object({
   displayLabel: external_exports.string().trim().min(1).max(120).optional(),
   unitNumber: external_exports.string().trim().max(40).nullable().optional(),
@@ -63175,7 +63183,10 @@ var createCustomerRequestInputSchema = external_exports.object({
   priority: requestPrioritySchema.default("normal"),
   // Optional override; defaults to the machine's contact phone, then the
   // customer profile phone.
-  contactPhone: external_exports.string().trim().min(7).max(30).optional()
+  contactPhone: external_exports.string().trim().min(7).max(30).optional(),
+  // Admin-on-behalf: when present the backend asserts the machine belongs to
+  // this customer. Customers omit it (their own id is used).
+  customerId: external_exports.string().uuid().optional()
 });
 var attachmentKindSchema = external_exports.enum(["image", "video"]);
 var requestAttachmentSchema = external_exports.object({

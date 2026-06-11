@@ -99390,6 +99390,14 @@ var createCustomerMachineInputSchema = external_exports.object({
   installDate: external_exports.string().trim().max(20).optional(),
   notes: external_exports.string().trim().max(2e3).optional()
 });
+var adminLinkMachineInputSchema = createCustomerMachineInputSchema.extend({
+  customerId: external_exports.string().uuid()
+});
+var adminMachineListQuerySchema = external_exports.object({
+  customerId: external_exports.string().uuid().optional(),
+  productId: external_exports.string().optional(),
+  status: customerMachineStatusSchema.optional()
+});
 var updateCustomerMachineInputSchema = external_exports.object({
   displayLabel: external_exports.string().trim().min(1).max(120).optional(),
   unitNumber: external_exports.string().trim().max(40).nullable().optional(),
@@ -99413,7 +99421,10 @@ var createCustomerRequestInputSchema = external_exports.object({
   priority: requestPrioritySchema.default("normal"),
   // Optional override; defaults to the machine's contact phone, then the
   // customer profile phone.
-  contactPhone: external_exports.string().trim().min(7).max(30).optional()
+  contactPhone: external_exports.string().trim().min(7).max(30).optional(),
+  // Admin-on-behalf: when present the backend asserts the machine belongs to
+  // this customer. Customers omit it (their own id is used).
+  customerId: external_exports.string().uuid().optional()
 });
 var attachmentKindSchema = external_exports.enum(["image", "video"]);
 var requestAttachmentSchema = external_exports.object({
@@ -102587,6 +102598,69 @@ app.delete("/api/admin/machines/:machineId", async (request, reply) => {
     });
   } catch (error) {
     return forwardServiceError(request, reply, error, "admin machine delete failed");
+  }
+});
+app.get("/api/admin/customer-machines", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  const query = adminMachineListQuerySchema.parse(request.query ?? {});
+  const params = new URLSearchParams();
+  if (query.customerId) params.set("customerId", query.customerId);
+  if (query.productId) params.set("productId", query.productId);
+  if (query.status) params.set("status", query.status);
+  const qs = params.toString();
+  try {
+    return await fetchJson(
+      `${env.SERVICE_DESK_URL}/admin/customer-machines${qs ? `?${qs}` : ""}`,
+      { headers: userHeaders(session.user) }
+    );
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machines list failed");
+  }
+});
+app.post("/api/admin/customer-machines", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const input = adminLinkMachineInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/customer-machines`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input)
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machine create failed");
+  }
+});
+app.patch("/api/admin/customer-machines/:machineId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { machineId } = adminMachineParams.parse(request.params);
+  const input = updateCustomerMachineInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/machines/${machineId}`, {
+      method: "PATCH",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input)
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machine update failed");
+  }
+});
+app.delete("/api/admin/customer-machines/:machineId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { machineId } = adminMachineParams.parse(request.params);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/machines/${machineId}`, {
+      method: "DELETE",
+      headers: userHeaders(session.user)
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin customer-machine delete failed");
   }
 });
 app.post("/api/admin/users/invite", async (request, reply) => {

@@ -27,6 +27,7 @@ import CompleteProfilePage from "@/pages/CompleteProfilePage";
 import RequestDetailPage from "@/pages/RequestDetailPage";
 import QueuePage from "@/pages/QueuePage";
 import UsersPage from "@/pages/UsersPage";
+import MachinesPage from "@/pages/MachinesPage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
 import AccountPage from "@/pages/AccountPage";
 
@@ -101,6 +102,14 @@ const App = () => {
                 element={
                   <ProtectedRoute roles={["admin"]}>
                     <UsersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="machines"
+                element={
+                  <ProtectedRoute roles={["admin"]}>
+                    <MachinesPage />
                   </ProtectedRoute>
                 }
               />
