@@ -5,6 +5,7 @@ import {
   Archive,
   ArrowLeft,
   CalendarDays,
+  ChevronDown,
   ClipboardList,
   ExternalLink,
   Eye,
@@ -12,6 +13,7 @@ import {
   History,
   Loader2,
   MapPin,
+  MoreHorizontal,
   Pencil,
   Phone,
   Plus,
@@ -42,6 +44,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import MachineFormDialog from "@/components/MachineFormDialog";
 
 const cardSurface = "lp-card border";
@@ -50,12 +60,12 @@ type ProfileResponse = { user: AuthUser; profile: CustomerProfile };
 type MachineActionTone = "view" | "edit" | "request" | "archive" | "reactivate" | "neutral";
 
 const machineActionClass: Record<MachineActionTone, string> = {
-  view: "border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
-  edit: "border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/55 hover:bg-[var(--lp-accent)]/10 hover:text-[var(--lp-accent)]",
+  view: "border-[var(--lp-line-strong)] bg-transparent text-[var(--lp-ink-soft)] hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
+  edit: "border-[var(--lp-line-strong)] bg-transparent text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/55 hover:bg-[var(--lp-accent)]/10 hover:text-[var(--lp-accent)]",
   request: "border-emerald-400/30 bg-emerald-400/10 text-emerald-700 hover:border-emerald-400/55 hover:bg-emerald-400/15 dark:text-emerald-200",
-  archive: "border-amber-400/35 bg-amber-400/10 text-amber-700 hover:border-amber-400/60 hover:bg-amber-400/15 dark:text-amber-200",
-  reactivate: "border-emerald-400/35 bg-emerald-400/10 text-emerald-700 hover:border-emerald-400/60 hover:bg-emerald-400/15 dark:text-emerald-200",
-  neutral: "border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
+  archive: "border-amber-400/30 bg-transparent text-amber-700 hover:border-amber-400/55 hover:bg-amber-400/10 dark:text-amber-200",
+  reactivate: "border-emerald-400/35 bg-transparent text-emerald-700 hover:border-emerald-400/60 hover:bg-emerald-400/10 dark:text-emerald-200",
+  neutral: "border-[var(--lp-line-strong)] bg-transparent text-[var(--lp-ink-soft)] hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
 };
 
 const priorityClasses: Record<string, string> = {
@@ -247,7 +257,7 @@ function CompactActionButton({
     <button
       type="button"
       className={cn(
-        "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors duration-150",
+        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors duration-150",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-45",
         machineActionClass[tone],
         className,
@@ -270,7 +280,7 @@ function CompactActionLink({
   return (
     <Link
       className={cn(
-        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors duration-150",
+        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-colors duration-150",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40",
         machineActionClass[tone],
         className,
@@ -282,11 +292,130 @@ function CompactActionLink({
   );
 }
 
-function SectionTitle({ children }: { children: ReactNode }) {
+function DrawerFact({ label, value }: { label: string; value?: ReactNode }) {
   return (
-    <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
-      {children}
-    </h3>
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[var(--lp-faint)]">{label}</dt>
+      <dd className="mt-1 min-w-0 break-words text-sm leading-5 text-[var(--lp-ink)]">{value || "-"}</dd>
+    </div>
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value?: ReactNode;
+  icon?: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5">
+      <dt className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[var(--lp-faint)]">{label}</dt>
+      <dd className="min-w-0 text-sm leading-5 text-[var(--lp-ink)]">
+        {value ? (
+          <span className="flex min-w-0 items-start gap-1.5">
+            {icon}
+            <span className="min-w-0 break-words">{value}</span>
+          </span>
+        ) : (
+          "-"
+        )}
+      </dd>
+    </div>
+  );
+}
+
+function DrawerDisclosure({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border-t border-[var(--lp-line)]">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 py-3 text-left transition-colors hover:text-[var(--lp-ink)]"
+        aria-expanded={open}
+      >
+        <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">{title}</span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-[var(--lp-faint)] transition-transform", open && "rotate-180")} />
+      </button>
+      {open && <div className="pb-3">{children}</div>}
+    </section>
+  );
+}
+
+function MachineMoreMenu({
+  machine,
+  pending,
+  align = "end",
+  buttonClassName,
+  onArchive,
+  onReactivate,
+}: {
+  machine: CustomerMachine;
+  pending: boolean;
+  align?: "start" | "center" | "end";
+  buttonClassName?: string;
+  onArchive: (machine: CustomerMachine) => void;
+  onReactivate: (machine: CustomerMachine) => void;
+}) {
+  const active = machine.status === "active";
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconActionButton
+          tone="neutral"
+          label={`More actions for ${machine.displayLabel}`}
+          disabled={pending}
+          className={cn("h-8 w-8", buttonClassName)}
+        >
+          {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+        </IconActionButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={align}
+        className="w-48 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] p-1 text-[var(--lp-ink)] shadow-xl"
+      >
+        <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-semibold text-[var(--lp-faint)]">
+          <span className="text-xs text-[var(--lp-faint)]">Machine actions</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-[var(--lp-line)]" />
+        {active ? (
+          <DropdownMenuItem
+            disabled={pending}
+            className="cursor-pointer gap-2 rounded-lg px-2.5 py-2 text-sm text-amber-700 focus:bg-amber-400/10 focus:text-amber-700 dark:text-amber-200 dark:focus:text-amber-100"
+            onSelect={() => {
+              onArchive(machine);
+            }}
+          >
+            <Archive className="h-4 w-4" />
+            Archive machine
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            disabled={pending}
+            className="cursor-pointer gap-2 rounded-lg px-2.5 py-2 text-sm text-emerald-700 focus:bg-emerald-400/10 focus:text-emerald-700 dark:text-emerald-200 dark:focus:text-emerald-100"
+            onSelect={() => {
+              onReactivate(machine);
+            }}
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reactivate machine
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -307,6 +436,9 @@ function MachineDetailDrawer({
   onArchive: (machine: CustomerMachine) => void;
   onReactivate: (machine: CustomerMachine) => void;
 }) {
+  const [productOpen, setProductOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+
   if (!machine) return null;
   const active = machine.status === "active";
 
@@ -318,105 +450,98 @@ function MachineDetailDrawer({
         className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-sm"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-xl flex-col border-l border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-2xl">
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--lp-line)] px-5 py-4">
-          <div className="min-w-0">
-            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
-              Machine details
-            </p>
-            <h2 className="lp-display mt-1 break-words text-xl font-bold text-[var(--lp-ink)]">
-              {machine.displayLabel}
-            </h2>
-            <p className="mt-1 break-words text-sm text-[var(--lp-ink-soft)]">{productLabel(machine)}</p>
+      <aside className="relative flex h-full w-full max-w-[500px] flex-col border-l border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-2xl">
+        <header className="shrink-0 border-b border-[var(--lp-line)] px-4 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
+                Machine details
+              </p>
+              <h2 className="lp-display mt-1 truncate text-xl font-bold text-[var(--lp-ink)]">
+                {machine.displayLabel || productLabel(machine)}
+              </h2>
+              <p className="mt-1 truncate text-sm text-[var(--lp-ink-soft)]">
+                {productLabel(machine)} · {productCategory(machine)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] text-[var(--lp-ink-soft)] transition-colors hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] text-[var(--lp-ink-soft)] transition-colors hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="mt-3">
+            <MachineStatusBadge status={machine.status} />
+          </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-          <div className="space-y-5">
-            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <SectionTitle>Machine overview</SectionTitle>
-                <MachineStatusBadge status={machine.status} />
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="space-y-4">
+            <section className="rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/25 p-3.5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">Quick facts</h3>
               </div>
-              <dl className="grid gap-4 sm:grid-cols-2">
-                <DetailLine label="Product name" value={productLabel(machine)} />
-                <DetailLine label="Category" value={productCategory(machine)} />
-                <DetailLine label="Nickname" value={machine.displayLabel} />
-                <DetailLine label="Unit number" value={machine.unitNumber} />
-                <DetailLine label="Serial number" value={machine.internalSerialNumber} />
-                <DetailLine label="Status" value={active ? "Active" : "Inactive / archived"} />
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+                <DrawerFact label="Product" value={productLabel(machine)} />
+                <DrawerFact label="Category" value={productCategory(machine)} />
+                <DrawerFact label="Nickname" value={machine.displayLabel} />
+                <DrawerFact label="Unit" value={machine.unitNumber} />
+                <DrawerFact label="Serial" value={machine.internalSerialNumber} />
+                <DrawerFact label="Status" value={active ? "Active" : "Inactive / archived"} />
               </dl>
             </section>
 
-            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
-              <SectionTitle>Installation</SectionTitle>
-              <dl className="mt-4 grid gap-4">
-                <DetailLine
-                  label="Full installation location"
-                  value={
-                    <span className="flex items-start gap-1.5">
-                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
-                      <span>{machine.siteLocation}</span>
-                    </span>
-                  }
+            <section>
+              <h3 className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">Installation</h3>
+              <dl className="divide-y divide-[var(--lp-line)]">
+                <InfoRow
+                  label="Location"
+                  value={machine.siteLocation}
+                  icon={<MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />}
                 />
-                <DetailLine
-                  label="Contact phone"
-                  value={
-                    machine.contactPhone ? (
-                      <span className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
-                        {machine.contactPhone}
-                      </span>
-                    ) : null
-                  }
+                <InfoRow
+                  label="Contact"
+                  value={machine.contactPhone}
+                  icon={<Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />}
                 />
-                <DetailLine label="Installed date" value={formatDate(machine.installDate)} />
+                <InfoRow label="Installed" value={formatDate(machine.installDate)} />
               </dl>
             </section>
 
-            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
-              <SectionTitle>Product snapshot</SectionTitle>
-              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-                <DetailLine label="Product ID" value={machine.productSnapshot?.id ?? machine.productId} />
-                <DetailLine label="Name" value={machine.productSnapshot?.name} />
-                <DetailLine label="Category" value={machine.productSnapshot?.categorySlug} />
-                <DetailLine label="Slug" value={machine.productSnapshot?.slug} />
-                <DetailLine label="Price display" value={machine.productSnapshot?.priceDisplay} />
+            <DrawerDisclosure title="Product snapshot" open={productOpen} onToggle={() => setProductOpen((open) => !open)}>
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-3 rounded-xl bg-[var(--lp-panel-2)]/25 p-3 sm:grid-cols-2">
+                <DrawerFact label="Product ID" value={machine.productSnapshot?.id ?? machine.productId} />
+                <DrawerFact label="Slug" value={machine.productSnapshot?.slug} />
+                <DrawerFact label="Price" value={machine.productSnapshot?.priceDisplay} />
+                <DrawerFact label="Category" value={machine.productSnapshot?.categorySlug} />
               </dl>
-            </section>
+            </DrawerDisclosure>
 
-            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
-              <SectionTitle>Audit</SectionTitle>
-              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-                <DetailLine label="Created by" value="Not captured" />
-                <DetailLine label="Created at" value={formatDateTime(machine.createdAt)} />
-                <DetailLine label="Updated at" value={formatDateTime(machine.updatedAt)} />
-                <DetailLine label="Internal notes" value={machine.notes} />
+            <DrawerDisclosure title="Audit & notes" open={auditOpen} onToggle={() => setAuditOpen((open) => !open)}>
+              <dl className="grid gap-3 rounded-xl bg-[var(--lp-panel-2)]/25 p-3 sm:grid-cols-2">
+                <DrawerFact label="Created by" value="Not captured" />
+                <DrawerFact label="Created at" value={formatDateTime(machine.createdAt)} />
+                <DrawerFact label="Updated at" value={formatDateTime(machine.updatedAt)} />
+                <DrawerFact label="Internal notes" value={machine.notes} />
               </dl>
-            </section>
+            </DrawerDisclosure>
 
-            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
-              <SectionTitle>Related service requests</SectionTitle>
+            <section className="border-t border-[var(--lp-line)] pt-3">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">Related service requests</h3>
               {requests.length === 0 ? (
-                <p className="mt-4 rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 px-3 py-2.5 text-sm text-[var(--lp-ink-soft)]">
-                  No service requests found for this machine yet.
+                <p className="mt-2 rounded-lg bg-[var(--lp-panel-2)]/30 px-3 py-2 text-sm text-[var(--lp-ink-soft)]">
+                  No service requests found yet.
                 </p>
               ) : (
-                <div className="mt-4 space-y-2">
+                <div className="mt-2 space-y-2">
                   {requests.slice(0, 5).map((request) => (
                     <Link
                       key={request.id}
                       to={`/app/requests/${request.id}`}
-                      className="block rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 p-3 transition-colors hover:border-[var(--lp-accent)]/45"
+                      className="block rounded-lg border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/25 p-2.5 transition-colors hover:border-[var(--lp-accent)]/45"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -437,11 +562,12 @@ function MachineDetailDrawer({
           </div>
         </div>
 
-        <footer className="flex shrink-0 flex-col gap-2 border-t border-[var(--lp-line)] px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-end">
+        <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--lp-line)] px-4 py-3">
           {active && (
             <CompactActionLink
               tone="request"
               to={`/app/requests/new?customerId=${machine.customerId}&machineId=${machine.id}`}
+              className="h-8"
             >
               <Wrench className="h-3.5 w-3.5" />
               Create request
@@ -451,20 +577,12 @@ function MachineDetailDrawer({
             <Pencil className="h-3.5 w-3.5" />
             Edit machine
           </CompactActionButton>
-          {active ? (
-            <CompactActionButton tone="archive" disabled={pending} onClick={() => onArchive(machine)}>
-              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
-              Archive
-            </CompactActionButton>
-          ) : (
-            <CompactActionButton tone="reactivate" disabled={pending} onClick={() => onReactivate(machine)}>
-              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-              Reactivate
-            </CompactActionButton>
-          )}
-          <CompactActionButton tone="neutral" onClick={onClose}>
-            Close
-          </CompactActionButton>
+          <MachineMoreMenu
+            machine={machine}
+            pending={pending}
+            onArchive={onArchive}
+            onReactivate={onReactivate}
+          />
         </footer>
       </aside>
     </div>
@@ -597,21 +715,12 @@ const CustomerMachineProfilePage = () => {
     const active = machine.status === "active";
 
     return (
-      <div className="flex flex-wrap items-center justify-end gap-1.5">
-        <IconActionButton
-          tone="view"
-          label={`View details for ${machine.displayLabel}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            openDetails(machine);
-          }}
-        >
-          <Eye className="h-4 w-4" />
-        </IconActionButton>
+      <div className="flex flex-nowrap items-center justify-end gap-1">
         {active && (
           <CompactActionLink
             tone="request"
             to={`/app/requests/new?customerId=${machine.customerId}&machineId=${machine.id}`}
+            className="h-7 px-2 text-[11px]"
             onClick={(event) => event.stopPropagation()}
           >
             <Wrench className="h-3.5 w-3.5" />
@@ -619,8 +728,20 @@ const CustomerMachineProfilePage = () => {
           </CompactActionLink>
         )}
         <IconActionButton
+          tone="view"
+          label={`View details for ${machine.displayLabel}`}
+          className="h-7 w-7"
+          onClick={(event) => {
+            event.stopPropagation();
+            openDetails(machine);
+          }}
+        >
+          <Eye className="h-4 w-4" />
+        </IconActionButton>
+        <IconActionButton
           tone="edit"
           label={`Edit ${machine.displayLabel}`}
+          className="h-7 w-7"
           onClick={(event) => {
             event.stopPropagation();
             openEdit(machine);
@@ -628,31 +749,13 @@ const CustomerMachineProfilePage = () => {
         >
           <Pencil className="h-4 w-4" />
         </IconActionButton>
-        {active ? (
-          <IconActionButton
-            tone="archive"
-            label={`Archive ${machine.displayLabel}`}
-            disabled={pending}
-            onClick={(event) => {
-              event.stopPropagation();
-              setConfirmArchive(machine);
-            }}
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-          </IconActionButton>
-        ) : (
-          <IconActionButton
-            tone="reactivate"
-            label={`Reactivate ${machine.displayLabel}`}
-            disabled={pending}
-            onClick={(event) => {
-              event.stopPropagation();
-              statusMutation.mutate({ machine, action: "reactivate" });
-            }}
-          >
-            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          </IconActionButton>
-        )}
+        <MachineMoreMenu
+          machine={machine}
+          pending={pending}
+          buttonClassName="h-7 w-7"
+          onArchive={setConfirmArchive}
+          onReactivate={(selected) => statusMutation.mutate({ machine: selected, action: "reactivate" })}
+        />
       </div>
     );
   };
@@ -821,21 +924,21 @@ const CustomerMachineProfilePage = () => {
             <div className="hidden lg:block">
               <table className="w-full table-fixed border-collapse text-sm">
                 <colgroup>
-                  <col style={{ width: "23%" }} />
-                  <col style={{ width: "16%" }} />
-                  <col style={{ width: "13%" }} />
-                  <col style={{ width: "19%" }} />
-                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "20%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "11%" }} />
+                  <col style={{ width: "18%" }} />
                   <col style={{ width: "9%" }} />
-                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "8%" }} />
+                  <col style={{ width: "20%" }} />
                 </colgroup>
                 <thead>
                   <tr className="border-b border-[var(--lp-line)] text-left">
-                    {["Machine / Product", "Nickname / Unit", "Serial number", "Installed site", "Status", "Updated", "Actions"].map((header) => (
+                    {["Machine", "Nickname / Unit", "Serial", "Site", "Status", "Updated", "Actions"].map((header) => (
                       <th
                         key={header}
                         className={cn(
-                          "px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--lp-faint)]",
+                          "px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--lp-faint)]",
                           header === "Actions" && "text-right",
                         )}
                       >
@@ -857,40 +960,40 @@ const CustomerMachineProfilePage = () => {
                           openDetails(machine);
                         }
                       }}
-                      className="cursor-pointer border-b border-[var(--lp-line)] align-middle transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
+                      className="h-[76px] cursor-pointer border-b border-[var(--lp-line)] align-middle transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
                     >
-                      <td className="px-4 py-3">
-                        <span className="block truncate font-semibold text-[var(--lp-ink)]" title={productLabel(machine)}>
+                      <td className="px-4 py-2.5">
+                        <span className="block truncate text-sm font-semibold leading-5 text-[var(--lp-ink)]" title={productLabel(machine)}>
                           {productLabel(machine)}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-[var(--lp-faint)]" title={productCategory(machine)}>
                           {productCategory(machine)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="block truncate text-[var(--lp-ink-soft)]" title={machine.displayLabel}>
+                      <td className="px-4 py-2.5">
+                        <span className="block truncate text-sm text-[var(--lp-ink-soft)]" title={machine.displayLabel}>
                           {machine.displayLabel}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-[var(--lp-faint)]" title={machine.unitNumber ?? undefined}>
                           {machine.unitNumber ? `Unit ${machine.unitNumber}` : "No unit"}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="block truncate text-[var(--lp-ink-soft)]" title={machine.internalSerialNumber ?? undefined}>
+                      <td className="px-4 py-2.5">
+                        <span className="block truncate text-sm text-[var(--lp-ink-soft)]" title={machine.internalSerialNumber ?? undefined}>
                           {machine.internalSerialNumber || "-"}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="flex min-w-0 items-center gap-1.5 text-[var(--lp-ink-soft)]" title={machine.siteLocation}>
+                      <td className="px-4 py-2.5">
+                        <span className="flex min-w-0 items-center gap-1.5 text-sm text-[var(--lp-ink-soft)]" title={machine.siteLocation}>
                           <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
                           <span className="truncate">{machine.siteLocation}</span>
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-2.5">
                         <MachineStatusBadge status={machine.status} />
                       </td>
-                      <td className="px-4 py-3 text-xs text-[var(--lp-faint)]">{formatDate(machine.updatedAt)}</td>
-                      <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                      <td className="px-4 py-2.5 text-xs text-[var(--lp-faint)]">{formatDate(machine.updatedAt)}</td>
+                      <td className="px-4 py-2.5" onClick={(event) => event.stopPropagation()}>
                         {renderMachineActions(machine)}
                       </td>
                     </tr>
@@ -899,7 +1002,7 @@ const CustomerMachineProfilePage = () => {
               </table>
             </div>
 
-            <div className="space-y-3 p-4 lg:hidden">
+            <div className="space-y-2.5 p-4 lg:hidden">
               {machines.map((machine) => (
                 <article
                   key={machine.id}
@@ -912,7 +1015,7 @@ const CustomerMachineProfilePage = () => {
                       openDetails(machine);
                     }
                   }}
-                  className="min-w-0 cursor-pointer rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4 transition-colors hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35"
+                  className="min-w-0 cursor-pointer rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/25 p-3.5 transition-colors hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35"
                 >
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -921,7 +1024,7 @@ const CustomerMachineProfilePage = () => {
                     </div>
                     <MachineStatusBadge status={machine.status} />
                   </div>
-                  <div className="mt-3 grid min-w-0 gap-2 text-sm sm:grid-cols-2">
+                  <div className="mt-3 grid min-w-0 gap-x-3 gap-y-2 text-sm sm:grid-cols-2">
                     <DetailLine
                       label="Nickname / Unit"
                       value={
@@ -943,7 +1046,7 @@ const CustomerMachineProfilePage = () => {
                     />
                     <DetailLine label="Last updated" value={formatDate(machine.updatedAt)} />
                   </div>
-                  <div className="mt-3 flex justify-end border-t border-[var(--lp-line)] pt-3" onClick={(event) => event.stopPropagation()}>
+                  <div className="mt-3 flex justify-end border-t border-[var(--lp-line)] pt-2.5" onClick={(event) => event.stopPropagation()}>
                     {renderMachineActions(machine)}
                   </div>
                 </article>
@@ -1073,6 +1176,7 @@ const CustomerMachineProfilePage = () => {
       </section>
 
       <MachineDetailDrawer
+        key={selectedMachine?.id ?? "closed"}
         machine={selectedMachine}
         requests={selectedMachineRequests}
         pending={selectedMachine ? pendingMachineId === selectedMachine.id : false}
