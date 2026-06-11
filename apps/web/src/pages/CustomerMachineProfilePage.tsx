@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams, type LinkProps } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -155,11 +155,15 @@ function MetricCard({
   value,
   icon: Icon,
   accent = "copper",
+  valueClassName,
 }: {
   label: string;
   value: ReactNode;
   icon: React.ComponentType<{ className?: string }>;
   accent?: "copper" | "emerald" | "amber" | "steel";
+  // Override for non-numeric values (e.g. dates) so they read as metadata
+  // rather than a headline-sized stat.
+  valueClassName?: string;
 }) {
   const accentClass = {
     copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
@@ -175,7 +179,14 @@ function MetricCard({
           <p className="lp-mono break-words text-[10px] font-medium uppercase leading-4 tracking-[0.14em] text-[var(--lp-faint)]">
             {label}
           </p>
-          <p className="mt-2 min-w-0 break-words text-2xl font-bold text-[var(--lp-ink)]">{value}</p>
+          <p
+            className={cn(
+              "mt-2 min-w-0 break-words text-[var(--lp-ink)]",
+              valueClassName ?? "text-2xl font-bold",
+            )}
+          >
+            {value}
+          </p>
         </div>
         <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border", accentClass)}>
           <Icon className="h-5 w-5" />
@@ -218,18 +229,18 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-function IconActionButton({
-  tone,
-  label,
-  className,
-  children,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  tone: MachineActionTone;
-  label: string;
-}) {
+// forwardRef is required so this can be used as a Radix `asChild` trigger
+// (DropdownMenuTrigger needs the ref to anchor/open the menu).
+const IconActionButton = forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    tone: MachineActionTone;
+    label: string;
+  }
+>(({ tone, label, className, children, ...props }, ref) => {
   return (
     <button
+      ref={ref}
       type="button"
       title={label}
       aria-label={label}
@@ -244,7 +255,8 @@ function IconActionButton({
       {children}
     </button>
   );
-}
+});
+IconActionButton.displayName = "IconActionButton";
 
 function CompactActionButton({
   tone,
@@ -359,6 +371,7 @@ function MachineMoreMenu({
   machine,
   pending,
   align = "end",
+  side = "bottom",
   buttonClassName,
   onArchive,
   onReactivate,
@@ -366,6 +379,7 @@ function MachineMoreMenu({
   machine: CustomerMachine;
   pending: boolean;
   align?: "start" | "center" | "end";
+  side?: "top" | "bottom";
   buttonClassName?: string;
   onArchive: (machine: CustomerMachine) => void;
   onReactivate: (machine: CustomerMachine) => void;
@@ -380,12 +394,18 @@ function MachineMoreMenu({
           label={`More actions for ${machine.displayLabel}`}
           disabled={pending}
           className={cn("h-8 w-8", buttonClassName)}
+          // Stop the click bubbling to a clickable parent row (which would
+          // otherwise also open the detail drawer). Radix opens the menu on
+          // pointerdown, so the menu still works.
+          onClick={(event) => event.stopPropagation()}
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
         </IconActionButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align={align}
+        side={side}
+        sideOffset={6}
         className="lp-portal z-[1001] w-48 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)] p-1 text-[var(--lp-ink)] shadow-xl"
       >
         <DropdownMenuLabel className="px-2.5 py-1.5 text-xs font-semibold text-[var(--lp-faint)]">
@@ -622,6 +642,7 @@ function MachineDetailDrawer({
           <MachineMoreMenu
             machine={machine}
             pending={pending}
+            side="top"
             onArchive={onArchive}
             onReactivate={onReactivate}
           />
@@ -835,6 +856,15 @@ const CustomerMachineProfilePage = () => {
 
   return (
     <div className="mx-auto max-w-7xl min-w-0 space-y-5 overflow-x-hidden">
+      {/* Back navigation, top-left — separate from the primary header actions. */}
+      <Link
+        to="/app/machines"
+        className="inline-flex h-9 w-fit items-center gap-2 rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-4 text-sm font-medium text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Customer Machines
+      </Link>
+
       <header className={cn("min-w-0 overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
         <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex min-w-0 gap-3">
@@ -884,16 +914,6 @@ const CustomerMachineProfilePage = () => {
                 Create request
               </Link>
             </Button>
-            <Button
-              asChild
-              variant="outline"
-              className="h-10 rounded-full border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-5 text-sm text-[var(--lp-ink-soft)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]"
-            >
-              <Link to="/app/machines">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Customer Machines
-              </Link>
-            </Button>
           </div>
         </div>
       </header>
@@ -903,7 +923,13 @@ const CustomerMachineProfilePage = () => {
         <MetricCard label="Active machines" value={activeMachines.length} icon={Wrench} accent="emerald" />
         <MetricCard label="Inactive / archived" value={inactiveMachines.length} icon={Archive} accent="amber" />
         <MetricCard label="Open service requests" value={openRequests.length} icon={ClipboardList} accent="steel" />
-        <MetricCard label="Last service activity" value={formatDate(lastServiceActivity)} icon={CalendarDays} accent="steel" />
+        <MetricCard
+          label="Last service activity"
+          value={formatDate(lastServiceActivity)}
+          icon={CalendarDays}
+          accent="steel"
+          valueClassName="text-lg font-semibold leading-tight"
+        />
       </div>
 
       <section className={cn("min-w-0 rounded-2xl p-5", cardSurface)}>
