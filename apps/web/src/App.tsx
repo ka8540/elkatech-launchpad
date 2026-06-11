@@ -28,6 +28,7 @@ import RequestDetailPage from "@/pages/RequestDetailPage";
 import QueuePage from "@/pages/QueuePage";
 import UsersPage from "@/pages/UsersPage";
 import MachinesPage from "@/pages/MachinesPage";
+import CustomerMachineProfilePage from "@/pages/CustomerMachineProfilePage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
 import AccountPage from "@/pages/AccountPage";
 
@@ -110,6 +111,14 @@ const App = () => {
                 element={
                   <ProtectedRoute roles={["admin"]}>
                     <MachinesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="machines/:customerId"
+                element={
+                  <ProtectedRoute roles={["admin"]}>
+                    <CustomerMachineProfilePage />
                   </ProtectedRoute>
                 }
               />
