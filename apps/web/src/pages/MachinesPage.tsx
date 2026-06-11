@@ -59,6 +59,9 @@ const actionToneClass: Record<ActionTone, string> = {
   reactivate: "border-emerald-400/30 text-emerald-600 hover:border-emerald-400/55 hover:bg-emerald-400/10 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200",
 };
 
+const filterFieldClass =
+  "h-10 rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)]/75 text-sm text-[var(--lp-ink)] shadow-none transition-colors placeholder:text-[var(--lp-faint)] focus:border-[var(--lp-accent)]/55 focus:outline-none focus:ring-2 focus:ring-[var(--lp-accent)]/15";
+
 function actionClasses(tone: ActionTone, className?: string) {
   return cn(
     "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-[var(--lp-panel)] transition-colors duration-150",
@@ -475,21 +478,21 @@ const MachinesPage = () => {
       </div>
 
       {/* Filters */}
-      <div className={cn("grid min-w-0 gap-3 rounded-2xl p-3.5 lg:grid-cols-[minmax(0,1fr)_auto]", cardSurface)}>
-        <div className="relative min-w-0">
+      <div className={cn("flex min-w-0 flex-col gap-2.5 rounded-2xl p-3 sm:p-3.5 2xl:flex-row 2xl:items-center", cardSurface)}>
+        <div className="relative min-w-0 2xl:flex-[1_1_520px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)]" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search customer, email, product, serial"
-            className="bg-background pl-9"
+            className={cn(filterFieldClass, "w-full pl-9")}
           />
         </div>
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 2xl:flex 2xl:w-auto 2xl:flex-none 2xl:flex-wrap 2xl:justify-end">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="h-10 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-[var(--lp-ink)] sm:min-w-[150px]"
+            className={cn(filterFieldClass, "min-w-0 px-3 sm:min-w-[150px] 2xl:w-[168px]")}
           >
             <option value="all">All statuses</option>
             <option value="active">Active</option>
@@ -498,7 +501,7 @@ const MachinesPage = () => {
           <select
             value={productFilter}
             onChange={(e) => setProductFilter(e.target.value)}
-            className="h-10 min-w-0 rounded-md border border-input bg-background px-3 text-sm text-[var(--lp-ink)] sm:min-w-[190px] lg:max-w-[240px]"
+            className={cn(filterFieldClass, "min-w-0 px-3 sm:min-w-[190px] 2xl:w-[240px]")}
           >
             <option value="all">All products</option>
             {products.map((p) => (
