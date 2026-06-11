@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "buildCommand": "npm --prefix packages/contracts run build && npm --prefix packages/config run build && npm run db:migrate && npm --prefix apps/web run build",
+  "buildCommand": "npm --prefix packages/contracts run build && npm --prefix apps/web run build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     {

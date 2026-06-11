@@ -31,6 +31,48 @@ const app = Fastify({ logger: true });
 const sql = getDb();
 const env = getEnv();
 
+// Preview deployments run against a per-branch Neon database (the Neon-Vercel
+// integration) that is forked once and never re-migrated, so it can be missing
+// migration 006's customer-profile columns. When `profile_completed` is absent,
+// `resolvedProfileCompleted` falls back to "treat as complete" and new
+// customers skip /app/complete-profile and land on the dashboard. We can't
+// migrate at build time (the Vercel build has no Neon DATABASE_URL — it falls
+// back to localhost), so guarantee the columns at runtime on the same
+// connection the handlers use. Idempotent and cached: at most one run per cold
+// start, and a no-op once the columns already exist (e.g. the production DB).
+let ensureProfileColumnsPromise: Promise<void> | null = null;
+function ensureProfileColumns(): Promise<void> {
+  if (!ensureProfileColumnsPromise) {
+    ensureProfileColumnsPromise = sql
+      .unsafe(
+        `alter table auth.users add column if not exists company_name text;
+         alter table auth.users add column if not exists contact_phone text;
+         alter table auth.users add column if not exists alternate_phone text;
+         alter table auth.users add column if not exists address_line1 text;
+         alter table auth.users add column if not exists address_line2 text;
+         alter table auth.users add column if not exists city text;
+         alter table auth.users add column if not exists state text;
+         alter table auth.users add column if not exists postal_code text;
+         alter table auth.users add column if not exists country text default 'India';
+         alter table auth.users add column if not exists profile_completed boolean not null default false;
+         alter table auth.users add column if not exists profile_completed_at timestamptz;`,
+      )
+      .then(() => undefined)
+      .catch((error) => {
+        // Don't cache the failure — let a later request retry.
+        ensureProfileColumnsPromise = null;
+        throw error;
+      });
+  }
+  return ensureProfileColumnsPromise;
+}
+
+// Guarantee the customer-profile schema exists before any handler reads or
+// writes auth.users. Cached, so this is a no-op after the first request.
+app.addHook("onRequest", async () => {
+  await ensureProfileColumns();
+});
+
 type AccountOrigin = "self_signup" | "admin_invite" | "firebase_google" | "legacy";
 
 type UserRow = {

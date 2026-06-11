@@ -102785,6 +102785,31 @@ var import_ioredis = __toESM(require_built3(), 1);
 var app = (0, import_fastify.default)({ logger: true });
 var sql = getDb();
 var env = getEnv();
+var ensureProfileColumnsPromise = null;
+function ensureProfileColumns() {
+  if (!ensureProfileColumnsPromise) {
+    ensureProfileColumnsPromise = sql.unsafe(
+      `alter table auth.users add column if not exists company_name text;
+         alter table auth.users add column if not exists contact_phone text;
+         alter table auth.users add column if not exists alternate_phone text;
+         alter table auth.users add column if not exists address_line1 text;
+         alter table auth.users add column if not exists address_line2 text;
+         alter table auth.users add column if not exists city text;
+         alter table auth.users add column if not exists state text;
+         alter table auth.users add column if not exists postal_code text;
+         alter table auth.users add column if not exists country text default 'India';
+         alter table auth.users add column if not exists profile_completed boolean not null default false;
+         alter table auth.users add column if not exists profile_completed_at timestamptz;`
+    ).then(() => void 0).catch((error) => {
+      ensureProfileColumnsPromise = null;
+      throw error;
+    });
+  }
+  return ensureProfileColumnsPromise;
+}
+app.addHook("onRequest", async () => {
+  await ensureProfileColumns();
+});
 function resolvedProfileCompleted(row) {
   if (row.profile_completed === void 0) return true;
   if (row.role !== "customer") return true;
