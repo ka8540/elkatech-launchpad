@@ -4,17 +4,24 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import { z } from "zod";
 import {
+  adminUpdateProfileInputSchema,
   approvalActionInputSchema,
   cancelRequestInputSchema,
+  completeProfileInputSchema,
+  confirmAttachmentInputSchema,
+  createCustomerMachineInputSchema,
+  createCustomerRequestInputSchema,
   createRequestMessageInputSchema,
   createServiceRequestInputSchema,
   firebaseSessionInputSchema,
   forgotPasswordInputSchema,
   inviteUserInputSchema,
   loginInputSchema,
+  presignAttachmentInputSchema,
   resetPasswordInputSchema,
   roleSchema,
   signUpInputSchema,
+  updateCustomerMachineInputSchema,
   updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
   verifyEmailInputSchema,
@@ -45,6 +52,7 @@ type SessionUser = {
   role: "customer" | "engineer" | "admin";
   emailVerified: boolean;
   approvalStatus: "pending_approval" | "approved" | "rejected" | "suspended";
+  profileCompleted: boolean;
   createdAt: string;
 };
 
@@ -188,8 +196,41 @@ app.post("/api/auth/logout", async (request, reply) => {
   return { ok: true };
 });
 
-// Self-service: current user updates their own display name. Never touches
-// role, approval status, email, or password — those have dedicated flows.
+function forwardServiceError(request: any, reply: any, error: unknown, logMsg: string) {
+  if (error instanceof InternalFetchError) {
+    // 501 Not Implemented is a deliberate, safe signal (e.g. attachments
+    // disabled when R2 isn't configured) — forward its message verbatim.
+    if (error.status >= 500 && error.status !== 501) {
+      request.log.error({ err: error }, logMsg);
+      return reply.code(502).send({ message: "Something went wrong. Please try again." });
+    }
+    return reply.code(error.status).send(
+      error.body && typeof error.body === "object"
+        ? (error.body as Record<string, unknown>)
+        : { message: error.message },
+    );
+  }
+  throw error;
+}
+
+// Self-service: read the current user's service profile (contact + workshop).
+app.get("/api/me/profile", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  try {
+    return await fetchJson(
+      `${env.AUTH_SERVICE_URL}/internal/users/${session.user.id}/profile`,
+      { headers: internalHeaders() },
+    );
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "profile read failed");
+  }
+});
+
+// Self-service: update the current user's profile. Accepts the display name
+// alone (Account page) or the full onboarding payload (Complete profile page).
+// Never touches role, approval status, email, or password. `profile_completed`
+// is derived server-side from the required fields, never set by the client.
 app.patch("/api/me/profile", async (request: any, reply: any) => {
   const session = await requireSession(request, reply, [
     "customer",
@@ -198,9 +239,7 @@ app.patch("/api/me/profile", async (request: any, reply: any) => {
   ]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
-  const input = z
-    .object({ displayName: z.string().trim().min(2).max(80) })
-    .parse(request.body);
+  const input = completeProfileInputSchema.partial().parse(request.body);
   try {
     return await fetchJson(
       `${env.AUTH_SERVICE_URL}/internal/users/${session.user.id}/profile`,
@@ -211,20 +250,39 @@ app.patch("/api/me/profile", async (request: any, reply: any) => {
       },
     );
   } catch (error) {
-    if (error instanceof InternalFetchError) {
-      if (error.status >= 500) {
-        request.log.error({ err: error }, "profile update failed");
-        return reply
-          .code(502)
-          .send({ message: "Could not update profile. Please try again." });
-      }
-      return reply.code(error.status).send(
-        error.body && typeof error.body === "object"
-          ? (error.body as Record<string, unknown>)
-          : { message: error.message },
-      );
-    }
-    throw error;
+    return forwardServiceError(request, reply, error, "profile update failed");
+  }
+});
+
+// Admin: read any customer's profile.
+app.get("/api/admin/users/:userId/profile", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  const { userId } = z.object({ userId: z.string().uuid() }).parse(request.params);
+  try {
+    return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/profile`, {
+      headers: internalHeaders(),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin profile read failed");
+  }
+});
+
+// Admin: edit any customer's profile fields (partial).
+app.patch("/api/admin/users/:userId/profile", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { userId } = z.object({ userId: z.string().uuid() }).parse(request.params);
+  const input = adminUpdateProfileInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/profile`, {
+      method: "PATCH",
+      headers: internalHeaders({ "x-user-id": session.user.id }),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin profile update failed");
   }
 });
 
@@ -553,13 +611,38 @@ app.post("/api/requests", async (request, reply) => {
       message: "Verify your email before creating requests.",
     });
   }
+  // Defence-in-depth: a customer with an incomplete profile can't create
+  // requests even if they bypass the client redirect.
+  if (session.user.role === "customer" && !session.user.profileCompleted) {
+    return reply.code(403).send({
+      code: "PROFILE_INCOMPLETE",
+      message: "Complete your service profile before creating requests.",
+    });
+  }
 
-  const input = createServiceRequestInputSchema.parse(request.body);
+  const raw = (request.body ?? {}) as Record<string, unknown>;
+  const input =
+    "customerMachineId" in raw
+      ? createCustomerRequestInputSchema.parse(raw)
+      : createServiceRequestInputSchema.parse(raw);
   return fetchJson(`${env.SERVICE_DESK_URL}/requests`, {
     method: "POST",
     headers: userHeaders(session.user),
     body: JSON.stringify(input),
   });
+});
+
+// Customer-facing: the current user's own active machines (safe view).
+app.get("/api/me/machines", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/me/machines`, {
+      headers: userHeaders(session.user),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "machine list failed");
+  }
 });
 
 app.get("/api/requests", async (request, reply) => {
@@ -712,6 +795,59 @@ app.post("/api/requests/:requestId/cancel", async (request, reply) => {
   });
 });
 
+// ─── Request attachments (presign → upload to R2 → confirm → list) ──────────
+const attachmentRequestParams = z.object({ requestId: z.string().uuid() });
+
+app.post("/api/requests/:requestId/attachments/presign", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { requestId } = attachmentRequestParams.parse(request.params);
+  const input = presignAttachmentInputSchema.parse(request.body);
+  try {
+    return await fetchJson(
+      `${env.SERVICE_DESK_URL}/requests/${requestId}/attachments/presign`,
+      {
+        method: "POST",
+        headers: userHeaders(session.user),
+        body: JSON.stringify(input),
+      },
+    );
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "attachment presign failed");
+  }
+});
+
+app.post("/api/requests/:requestId/attachments", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { requestId } = attachmentRequestParams.parse(request.params);
+  const input = confirmAttachmentInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/requests/${requestId}/attachments`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "attachment confirm failed");
+  }
+});
+
+app.get("/api/requests/:requestId/attachments", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  if (!session) return;
+  const { requestId } = attachmentRequestParams.parse(request.params);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/requests/${requestId}/attachments`, {
+      headers: userHeaders(session.user),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "attachment list failed");
+  }
+});
+
 app.get("/api/admin/users", async (request, reply) => {
   const session = await requireSession(request, reply, ["admin"]);
   if (!session) return;
@@ -719,6 +855,72 @@ app.get("/api/admin/users", async (request, reply) => {
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users`, {
     headers: internalHeaders(),
   });
+});
+
+// ─── Admin: customer machine management ─────────────────────────────────────
+const adminMachineUserParams = z.object({ userId: z.string().uuid() });
+const adminMachineParams = z.object({ machineId: z.string().uuid() });
+
+app.get("/api/admin/users/:userId/machines", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  const { userId } = adminMachineUserParams.parse(request.params);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/customers/${userId}/machines`, {
+      headers: userHeaders(session.user),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin machine list failed");
+  }
+});
+
+app.post("/api/admin/users/:userId/machines", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { userId } = adminMachineUserParams.parse(request.params);
+  const input = createCustomerMachineInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/customers/${userId}/machines`, {
+      method: "POST",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin machine create failed");
+  }
+});
+
+app.patch("/api/admin/machines/:machineId", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { machineId } = adminMachineParams.parse(request.params);
+  const input = updateCustomerMachineInputSchema.parse(request.body);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/machines/${machineId}`, {
+      method: "PATCH",
+      headers: userHeaders(session.user),
+      body: JSON.stringify(input),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin machine update failed");
+  }
+});
+
+app.delete("/api/admin/machines/:machineId", async (request: any, reply: any) => {
+  const session = await requireSession(request, reply, ["admin"]);
+  if (!session) return;
+  if (!assertCsrf(request, reply)) return;
+  const { machineId } = adminMachineParams.parse(request.params);
+  try {
+    return await fetchJson(`${env.SERVICE_DESK_URL}/admin/machines/${machineId}`, {
+      method: "DELETE",
+      headers: userHeaders(session.user),
+    });
+  } catch (error) {
+    return forwardServiceError(request, reply, error, "admin machine delete failed");
+  }
 });
 
 app.post("/api/admin/users/invite", async (request, reply) => {

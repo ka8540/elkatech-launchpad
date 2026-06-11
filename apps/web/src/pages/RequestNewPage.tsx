@@ -1,111 +1,46 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
+  ImagePlus,
   Loader2,
+  MapPin,
   PackageCheck,
   Phone,
   Send,
   ShieldCheck,
   Sparkles,
   Wrench,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { CatalogProduct, RequestPriority } from "@elkatech/contracts";
+import {
+  ISSUE_TYPE_LABELS,
+  issueTypeSchema,
+  type CustomerMachinePublic,
+  type IssueType,
+  type RequestPriority,
+} from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
+import { formatFileSize, uploadRequestAttachment } from "@/lib/attachments";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-/* ─── Matte card surface ──────────────────────────────────────────────────── */
 const cardSurface = "lp-card";
 
-/* ─── Form field classes ──────────────────────────────────────────────────── */
-/*
- * The `.lp-field` utility (defined in index.css) sets a solid matte
- * background, border, text, and placeholder colors via real CSS — not via
- * `bg-[var(--lp-*)]/opacity` Tailwind classes, which Tailwind v3 drops on
- * hex-valued CSS vars and which would otherwise leave inputs with no
- * background at all (rendering as user-agent white in dark mode).
- */
-const inputClassName =
-  "lp-field h-10 min-w-0 rounded-xl border px-4 text-sm";
+const MAX_ATTACHMENT_MB = 25;
+const ISSUE_TYPES = issueTypeSchema.options as IssueType[];
 
-const selectTriggerClassName =
-  "lp-field h-10 min-w-0 rounded-xl border px-4 text-sm " +
-  "flex items-center justify-between [&>span]:truncate data-[placeholder]:text-[var(--lp-faint)]";
-
-/*
- * Radix Select portals its content to <body>, OUTSIDE the `.lp` subtree.
- * The `lp-portal` class (also defined in index.css) re-declares the
- * lp tokens so the portaled menu still resolves them.
- */
-const selectContentClassName =
-  "lp-portal rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink)] shadow-[0_18px_44px_rgba(0,0,0,0.38)]";
-
-/*
- * Override shadcn SelectItem default `focus:bg-accent focus:text-accent-foreground`
- * (global electric blue) with the copper accent at low opacity.
- */
-const selectItemClassName =
-  "rounded-lg py-2.5 pl-8 pr-3 text-sm text-[var(--lp-ink)] " +
-  "focus:bg-[var(--lp-accent)]/15 focus:text-[var(--lp-accent)] " +
-  "data-[state=checked]:text-[var(--lp-accent)]";
-
-/* ─── Form config ───────────────────────────────────────────────────────────── */
-const priorityOptions: Array<{ value: RequestPriority; label: string }> = [
-  { value: "low", label: "Low" },
-  { value: "normal", label: "Normal" },
-  { value: "high", label: "High" },
-  { value: "urgent", label: "Urgent" },
-];
-
-function formatCategorySlug(slug: string) {
-  return slug
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-/* ─── Field wrapper ─────────────────────────────────────────────────────────── */
-function Field({
-  label,
-  required,
-  helper,
-  children,
-  className,
-}: {
-  label: string;
-  required?: boolean;
-  helper?: string;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("min-w-0 space-y-2.5", className)}>
-      <label className="flex items-center gap-1.5 text-sm font-medium text-[var(--lp-ink)]">
-        {label}
-        {required && <span className="text-[var(--lp-accent)]" aria-hidden="true">*</span>}
-      </label>
-      {children}
-      {helper && <p className="text-xs leading-relaxed text-[var(--lp-faint)]">{helper}</p>}
-    </div>
-  );
-}
-
-/* ─── Form section block ─────────────────────────────────────────────────────── */
+/* ─── Section block ───────────────────────────────────────────────────────── */
 function FormSection({
   icon: Icon,
   title,
@@ -118,7 +53,7 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="min-w-0 border-t border-[var(--lp-line)] px-5 py-5 sm:px-6 lg:px-7">
+    <section className="min-w-0 border-t border-[var(--lp-line)] px-5 py-5 first:border-t-0 sm:px-6 lg:px-7">
       <div className="mb-4 flex min-w-0 items-start gap-2.5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
           <Icon className="h-4 w-4" />
@@ -133,17 +68,14 @@ function FormSection({
   );
 }
 
-/* ─── Guidance panel (sidebar) ───────────────────────────────────────────────── */
 function GuidancePanel({
   icon: Icon,
   title,
-  description,
   items,
   accent = "copper",
 }: {
   icon: LucideIcon;
   title: string;
-  description?: string;
   items: string[];
   accent?: "copper" | "emerald";
 }) {
@@ -151,7 +83,6 @@ function GuidancePanel({
     accent === "emerald"
       ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300"
       : "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]";
-
   return (
     <aside className={cn("min-w-0 overflow-hidden rounded-2xl border", cardSurface)}>
       <div className="relative p-4 sm:p-5">
@@ -159,10 +90,7 @@ function GuidancePanel({
           <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border", accentClass)}>
             <Icon className="h-4 w-4" />
           </div>
-          <div className="min-w-0">
-            <h3 className="lp-display text-sm font-semibold text-[var(--lp-ink)]">{title}</h3>
-            {description && <p className="mt-0.5 text-xs leading-5 text-[var(--lp-ink-soft)]">{description}</p>}
-          </div>
+          <h3 className="lp-display text-sm font-semibold text-[var(--lp-ink)]">{title}</h3>
         </div>
         <ul className="relative mt-4 space-y-2">
           {items.map((item) => (
@@ -177,17 +105,14 @@ function GuidancePanel({
   );
 }
 
-/* ─── Page hero (shared across gated + main states) ──────────────────────────── */
 function PageHero({
   icon: Icon,
   title,
   description,
-  badge,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
-  badge?: ReactNode;
 }) {
   return (
     <header className={cn("relative min-w-0 overflow-hidden rounded-2xl border p-5 sm:p-6", cardSurface)}>
@@ -199,30 +124,22 @@ function PageHero({
           WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
         }}
       />
-      <div className="relative flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <div className="mb-3 flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-              <Icon className="h-4 w-4" />
-            </div>
-            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-              Create Request
-            </p>
+      <div className="relative min-w-0">
+        <div className="mb-3 flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+            <Icon className="h-4 w-4" />
           </div>
-          <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">
-            {title}
-          </h1>
-          <p className="mt-1.5 text-sm leading-6 text-[var(--lp-ink-soft)]">
-            {description}
+          <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
+            Create Request
           </p>
         </div>
-        {badge}
+        <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">{title}</h1>
+        <p className="mt-1.5 text-sm leading-6 text-[var(--lp-ink-soft)]">{description}</p>
       </div>
     </header>
   );
 }
 
-/* ─── Back to requests button ────────────────────────────────────────────────── */
 function BackToRequests() {
   return (
     <Button
@@ -238,47 +155,99 @@ function BackToRequests() {
   );
 }
 
-/* ─── Page ───────────────────────────────────────────────────────────────────── */
+type PickedFile = { key: string; file: File; previewUrl?: string };
+
+/* ─── Page ────────────────────────────────────────────────────────────────── */
 const RequestNewPage = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { data: session } = useSession();
-  const requestedProductId = searchParams.get("product") ?? "";
-  const productsQuery = useQuery({
-    queryKey: ["catalog", "products"],
-    queryFn: () => apiRequest<CatalogProduct[]>("/api/catalog/products"),
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const machinesQuery = useQuery({
+    queryKey: ["me", "machines"],
+    queryFn: () => apiRequest<CustomerMachinePublic[]>("/api/me/machines"),
   });
-  const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
+  const machines = useMemo(() => machinesQuery.data ?? [], [machinesQuery.data]);
 
-  const [form, setForm] = useState({
-    productId: requestedProductId,
-    subject: "",
-    description: "",
-    contactPhone: "",
-    siteLocation: "",
-    serialNumber: "",
-    priority: "normal" as RequestPriority,
-  });
+  const [machineId, setMachineId] = useState("");
+  const [issueType, setIssueType] = useState<IssueType | "">("");
+  const [urgency, setUrgency] = useState<RequestPriority>("normal");
+  const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<PickedFile[]>([]);
 
-  useEffect(() => {
-    if (requestedProductId) {
-      setForm((current) => ({ ...current, productId: requestedProductId }));
-    }
-  }, [requestedProductId]);
-
-  const selectedProduct = useMemo(
-    () => products.find((product) => product.id === form.productId),
-    [form.productId, products],
+  const selectedMachine = useMemo(
+    () => machines.find((m) => m.id === machineId),
+    [machineId, machines],
   );
 
+  // Revoke object URLs on unmount to avoid leaks.
+  useEffect(() => {
+    return () => {
+      files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function onPickFiles(event: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(event.target.files ?? []);
+    event.target.value = ""; // allow re-picking the same file
+    const next: PickedFile[] = [];
+    for (const file of picked) {
+      const isMedia = file.type.startsWith("image/") || file.type.startsWith("video/");
+      if (!isMedia) {
+        toast.error(`${file.name} is not a photo or video.`);
+        continue;
+      }
+      if (file.size > MAX_ATTACHMENT_MB * 1024 * 1024) {
+        toast.error(`${file.name} is larger than ${MAX_ATTACHMENT_MB} MB.`);
+        continue;
+      }
+      next.push({
+        key: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+        file,
+        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+      });
+    }
+    if (next.length) setFiles((current) => [...current, ...next]);
+  }
+
+  function removeFile(key: string) {
+    setFiles((current) => {
+      const target = current.find((f) => f.key === key);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return current.filter((f) => f.key !== key);
+    });
+  }
+
   const mutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ id: string }>("/api/requests", {
+    mutationFn: async () => {
+      const created = await apiRequest<{ id: string }>("/api/requests", {
         method: "POST",
-        body: JSON.stringify(form),
-      }),
-    onSuccess: ({ id }) => {
-      toast.success("Service request created.");
+        body: JSON.stringify({
+          customerMachineId: machineId,
+          issueType,
+          description: description.trim(),
+          priority: urgency,
+        }),
+      });
+      // Upload attachments after the request exists; a failed upload doesn't
+      // discard the request.
+      const failed: string[] = [];
+      for (const picked of files) {
+        try {
+          await uploadRequestAttachment(created.id, picked.file);
+        } catch {
+          failed.push(picked.file.name);
+        }
+      }
+      return { id: created.id, failed };
+    },
+    onSuccess: ({ id, failed }) => {
+      if (failed.length) {
+        toast.warning(`Request created. ${failed.length} file(s) could not be uploaded.`);
+      } else {
+        toast.success("Service request created.");
+      }
       navigate(`/app/requests/${id}`);
     },
     onError: (error: Error) => {
@@ -286,9 +255,7 @@ const RequestNewPage = () => {
     },
   });
 
-  // Admin approval is required before a customer can submit a service request.
-  // The gateway enforces this too (403); short-circuiting here renders the
-  // polished pending/rejected/suspended card instead of the form.
+  // ── Gated states (kept from the original flow) ───────────────────────────
   const approvalBlocked = isCustomerActionBlocked(session?.user);
   if (approvalBlocked && session?.user && session.user.approvalStatus !== "approved") {
     return (
@@ -302,236 +269,244 @@ const RequestNewPage = () => {
                 ? "Account not approved"
                 : "Account suspended"
           }
-          description="Service request creation unlocks once an ElkaTech administrator activates your account. We'll have you up and running shortly."
+          description="Creating service requests unlocks once an ElkaTech administrator activates your account."
         />
-
-        <ApprovalStateCard
-          status={session.user.approvalStatus}
-          showBackToRequests={false}
-        />
-
+        <ApprovalStateCard status={session.user.approvalStatus} showBackToRequests={false} />
         <BackToRequests />
       </div>
     );
   }
 
-  // Email verification is required before a service request can be created.
-  // The gateway enforces this too (403); guarding here gives a clear,
-  // polished message instead of a generic submit failure.
-  const unverifiedUser =
-    session?.user && !session.user.emailVerified ? session.user : null;
-
+  const unverifiedUser = session?.user && !session.user.emailVerified ? session.user : null;
   if (unverifiedUser) {
     return (
       <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
         <PageHero
           icon={ShieldCheck}
           title="Verify your email first"
-          description="For your account's security, service requests can only be created once your email address is verified. It takes less than a minute."
+          description="For your account's security, service requests can only be created once your email is verified."
         />
-
         <VerifyEmailNotice email={unverifiedUser.email} />
-
         <BackToRequests />
       </div>
     );
   }
 
+  // ── No machines linked ───────────────────────────────────────────────────
+  if (!machinesQuery.isLoading && machines.length === 0) {
+    return (
+      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+        <PageHero
+          icon={Wrench}
+          title="Create service request"
+          description="Choose the machine and tell us what went wrong."
+        />
+        <div className={cn("rounded-2xl border p-6 text-center", cardSurface)}>
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
+            <PackageCheck className="h-6 w-6" />
+          </div>
+          <h2 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">
+            No machines are linked to your account yet
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[var(--lp-ink-soft)]">
+            Please contact ElkaTech support and we'll add your machines. Once they're linked, you
+            can raise a service request here.
+          </p>
+        </div>
+        <BackToRequests />
+      </div>
+    );
+  }
+
+  const canSubmit = Boolean(machineId && issueType && description.trim().length >= 5);
+
   return (
     <div className="mx-auto max-w-7xl min-w-0 space-y-4 overflow-x-hidden">
-      {/* ── Page header ──────────────────────────────────────────────────────── */}
       <PageHero
         icon={Wrench}
         title="Create service request"
-        description="Tell us the machine, issue, and best contact details."
+        description="Choose the machine and tell us what went wrong."
       />
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.95fr)_minmax(280px,1fr)]">
-        {/* ── Form card ──────────────────────────────────────────────────────── */}
         <form
           className={cn("min-w-0 overflow-hidden rounded-2xl border", cardSurface)}
           onSubmit={(event) => {
             event.preventDefault();
+            if (!canSubmit) {
+              toast.error("Choose a machine, pick an issue, and tell us what happened.");
+              return;
+            }
             mutation.mutate();
           }}
         >
-          {/* Error banner */}
-          {mutation.isError && (
-            <div className="mx-5 mb-2 mt-4 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3.5 text-sm text-rose-600 dark:text-rose-100 sm:mx-6 lg:mx-7">
-              <div className="flex gap-3">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500 dark:text-rose-300" />
-                <div>
-                  <p className="font-semibold">We couldn't create the request.</p>
-                  <p className="mt-1 opacity-75">Please check the details and try again.</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Section: Machine details */}
-          <FormSection
-            icon={PackageCheck}
-            title="Machine details"
-            description="Select the affected product and add location details."
-          >
-            {productsQuery.isError && (
-              <div className="mb-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-700 dark:text-amber-50">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex gap-3">
-                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500 dark:text-amber-200" />
-                    <div>
-                      <p className="font-semibold">Unable to load products</p>
-                      <p className="mt-1 opacity-70">Try again before selecting the affected machine.</p>
-                    </div>
-                  </div>
-                  <Button
+          {/* Card 1 — Machine */}
+          <FormSection icon={PackageCheck} title="Machine" description="Choose the machine that needs service.">
+            <div className="grid min-w-0 gap-2.5 sm:grid-cols-2">
+              {machines.map((machine) => {
+                const active = machine.id === machineId;
+                return (
+                  <button
                     type="button"
-                    variant="outline"
-                    className="h-10 rounded-xl border-amber-400/40 bg-amber-400/15 text-amber-700 hover:bg-amber-400/25 dark:text-amber-50"
-                    onClick={() => productsQuery.refetch()}
-                    disabled={productsQuery.isFetching}
+                    key={machine.id}
+                    onClick={() => setMachineId(machine.id)}
+                    aria-pressed={active}
+                    className={cn(
+                      "min-w-0 rounded-xl border p-3.5 text-left transition-colors",
+                      active
+                        ? "border-[var(--lp-accent)] bg-[var(--lp-accent)]/[0.08]"
+                        : "border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/40 hover:border-[var(--lp-accent)]/50",
+                    )}
                   >
-                    {productsQuery.isFetching && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Retry
-                  </Button>
+                    <p className="break-words text-sm font-semibold text-[var(--lp-ink)]">
+                      {machine.displayLabel}
+                    </p>
+                    <p className="mt-0.5 break-words text-xs text-[var(--lp-ink-soft)]">
+                      {machine.productName}
+                    </p>
+                    <p className="mt-1.5 flex items-center gap-1 text-xs text-[var(--lp-faint)]">
+                      <MapPin className="h-3 w-3 shrink-0" />
+                      <span className="break-words">{machine.siteName ?? machine.siteLocation}</span>
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </FormSection>
+
+          {/* Card 2 — Issue */}
+          <FormSection icon={Sparkles} title="Issue" description="What is happening with the machine?">
+            <div className="space-y-5">
+              <div>
+                <p className="mb-2.5 text-sm font-medium text-[var(--lp-ink)]">What is the issue?</p>
+                <div className="flex flex-wrap gap-2">
+                  {ISSUE_TYPES.map((type) => {
+                    const active = type === issueType;
+                    return (
+                      <button
+                        type="button"
+                        key={type}
+                        onClick={() => setIssueType(type)}
+                        aria-pressed={active}
+                        className={cn(
+                          "rounded-full border px-3.5 py-2 text-sm transition-colors",
+                          active
+                            ? "border-[var(--lp-accent)] bg-[var(--lp-accent)]/[0.12] text-[var(--lp-accent)]"
+                            : "border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/40 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-ink)]",
+                        )}
+                      >
+                        {ISSUE_TYPE_LABELS[type]}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            )}
 
-            <div className="grid min-w-0 gap-4 md:grid-cols-2">
-              <Field
-                label="Product"
-                required
-                helper={selectedProduct ? "Attached to this service request." : undefined}
-                className="md:col-span-2"
-              >
-                <Select
-                  value={form.productId}
-                  onValueChange={(value) => setForm((current) => ({ ...current, productId: value }))}
-                  disabled={productsQuery.isLoading || productsQuery.isError}
-                >
-                  <SelectTrigger className={selectTriggerClassName} aria-label="Product">
-                    <SelectValue placeholder={productsQuery.isLoading ? "Loading products..." : "Select a product"} />
-                  </SelectTrigger>
-                  <SelectContent className={selectContentClassName}>
-                    {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id} className={selectItemClassName}>
-                        <span className="block truncate">{product.name}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              {selectedProduct && (
-                <div className="min-w-0 rounded-xl border border-[var(--lp-accent)]/25 bg-[var(--lp-accent)]/[0.07] p-3 md:col-span-2">
-                  <div className="flex min-w-0 gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/15 text-[var(--lp-accent)]">
-                      <PackageCheck className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
-                        Selected product
-                      </p>
-                      <p className="mt-0.5 break-words text-sm font-medium text-[var(--lp-ink)]">{selectedProduct.name}</p>
-                      <p className="mt-0.5 text-xs text-[var(--lp-faint)]">
-                        {formatCategorySlug(selectedProduct.categorySlug)}
-                      </p>
-                    </div>
-                  </div>
+              <div>
+                <p className="mb-2.5 text-sm font-medium text-[var(--lp-ink)]">How urgent is it?</p>
+                <div className="inline-flex flex-wrap gap-2">
+                  {[
+                    { value: "normal" as RequestPriority, label: "Normal" },
+                    { value: "urgent" as RequestPriority, label: "Urgent — production stopped" },
+                  ].map((option) => {
+                    const active = option.value === urgency;
+                    return (
+                      <button
+                        type="button"
+                        key={option.value}
+                        onClick={() => setUrgency(option.value)}
+                        aria-pressed={active}
+                        className={cn(
+                          "rounded-full border px-4 py-2 text-sm transition-colors",
+                          active
+                            ? "border-[var(--lp-accent)] bg-[var(--lp-accent)]/[0.12] text-[var(--lp-accent)]"
+                            : "border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/40 text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-ink)]",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
 
-              <Field label="Serial Number">
-                <Input
-                  value={form.serialNumber}
-                  onChange={(event) => setForm((current) => ({ ...current, serialNumber: event.target.value }))}
-                  placeholder="Optional serial number"
-                  className={inputClassName}
-                />
-              </Field>
-
-              <Field label="Site Location" required helper="Workshop, branch, or city.">
-                <Input
-                  required
-                  value={form.siteLocation}
-                  onChange={(event) => setForm((current) => ({ ...current, siteLocation: event.target.value }))}
-                  placeholder="Workshop / branch / city"
-                  className={inputClassName}
-                />
-              </Field>
-            </div>
-          </FormSection>
-
-          {/* Section: Issue details */}
-          <FormSection
-            icon={Sparkles}
-            title="Issue details"
-            description="Describe what happened and when it started."
-          >
-            <div className="grid min-w-0 gap-4 md:grid-cols-2">
-              <Field label="Priority" required helper="Use urgent only for blocked production.">
-                <Select
-                  value={form.priority}
-                  onValueChange={(value) => setForm((current) => ({ ...current, priority: value as RequestPriority }))}
-                >
-                  <SelectTrigger className={selectTriggerClassName} aria-label="Priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className={selectContentClassName}>
-                    {priorityOptions.map((priority) => (
-                      <SelectItem key={priority.value} value={priority.value} className={selectItemClassName}>
-                        {priority.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field label="Subject" required helper="Short, scannable summary.">
-                <Input
-                  required
-                  value={form.subject}
-                  onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))}
-                  placeholder="Short issue summary"
-                  className={inputClassName}
-                />
-              </Field>
-
-              <Field label="Description" required className="md:col-span-2">
+              <div>
+                <label className="mb-2.5 block text-sm font-medium text-[var(--lp-ink)]">
+                  Tell us what happened
+                </label>
                 <Textarea
-                  required
-                  rows={7}
-                  value={form.description}
-                  onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  placeholder="Describe the problem, when it started, and what you already tried."
-                  className={cn(inputClassName, "min-h-[130px] resize-y py-3")}
+                  rows={5}
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Example: Printer stops after 10 minutes."
+                  className="lp-field min-h-[120px] resize-y rounded-xl border px-4 py-3 text-sm"
                 />
-              </Field>
+              </div>
             </div>
           </FormSection>
 
-          {/* Section: Contact */}
+          {/* Card 3 — Photos or video */}
           <FormSection
-            icon={Phone}
-            title="Contact"
-            description="Add the best phone number for follow-up."
+            icon={ImagePlus}
+            title="Photos or video"
+            description="Add photos or a short video if it helps us understand the issue."
           >
-            <div className="grid min-w-0 gap-4 md:grid-cols-2">
-              <Field label="Contact Phone" required helper="Best number during service hours.">
-                <Input
-                  required
-                  value={form.contactPhone}
-                  onChange={(event) => setForm((current) => ({ ...current, contactPhone: event.target.value }))}
-                  placeholder="Best follow-up number"
-                  className={inputClassName}
-                />
-              </Field>
-            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={onPickFiles}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-10 rounded-xl border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/60 px-4 text-sm text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-ink)]"
+            >
+              <ImagePlus className="h-4 w-4" />
+              Add photos or video
+            </Button>
+
+            {files.length > 0 && (
+              <ul className="mt-4 grid gap-2.5 sm:grid-cols-2">
+                {files.map((picked) => (
+                  <li
+                    key={picked.key}
+                    className="flex min-w-0 items-center gap-3 rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel)]/40 p-2.5"
+                  >
+                    {picked.previewUrl ? (
+                      <img
+                        src={picked.previewUrl}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-lg object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-line)] bg-[var(--lp-panel)] text-[var(--lp-accent)]">
+                        <Sparkles className="h-5 w-5" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-[var(--lp-ink)]">{picked.file.name}</p>
+                      <p className="text-xs text-[var(--lp-faint)]">{formatFileSize(picked.file.size)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(picked.key)}
+                      aria-label={`Remove ${picked.file.name}`}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--lp-faint)] transition-colors hover:bg-rose-500/10 hover:text-rose-500"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </FormSection>
 
-          {/* Form footer / submit */}
-          <div className="flex min-w-0 flex-col gap-3 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-4 sm:px-6 md:flex-row md:flex-wrap md:items-center md:justify-between lg:px-7">
+          {/* Footer */}
+          <div className="flex min-w-0 flex-col gap-3 border-t border-[var(--lp-line)] bg-[var(--lp-panel-2)] px-5 py-4 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-7">
             <div className="flex min-w-0 items-center gap-2.5 text-xs text-[var(--lp-ink-soft)]">
               <ShieldCheck className="h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
               <span className="min-w-0">Saved to the service portal on submit.</span>
@@ -557,7 +532,7 @@ const RequestNewPage = () => {
                 ) : (
                   <>
                     <Send className="h-4 w-4" />
-                    Submit service request
+                    Submit request
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -566,16 +541,38 @@ const RequestNewPage = () => {
           </div>
         </form>
 
-        {/* ── Guidance sidebar ────────────────────────────────────────────────── */}
+        {/* Sidebar */}
         <div className="space-y-3 lg:sticky lg:top-24 lg:self-start">
+          {selectedMachine && (
+            <div className={cn("min-w-0 overflow-hidden rounded-2xl border p-4 sm:p-5", cardSurface)}>
+              <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
+                Selected machine
+              </p>
+              <p className="mt-1.5 break-words text-sm font-semibold text-[var(--lp-ink)]">
+                {selectedMachine.displayLabel}
+              </p>
+              <p className="mt-0.5 break-words text-xs text-[var(--lp-ink-soft)]">
+                {selectedMachine.productName}
+              </p>
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--lp-faint)]">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span className="break-words">{selectedMachine.siteLocation}</span>
+              </p>
+              {selectedMachine.contactPhone && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--lp-faint)]">
+                  <Phone className="h-3.5 w-3.5 shrink-0" />
+                  <span className="break-words">{selectedMachine.contactPhone}</span>
+                </p>
+              )}
+            </div>
+          )}
           <GuidancePanel
             icon={ClipboardCheck}
-            title="Before you submit"
+            title="Before submitting"
             items={[
-              "Select the correct machine or product.",
-              "Add the site location.",
-              "Describe the issue and what you already tried.",
-              "Include the best phone number for follow-up.",
+              "Choose the correct machine.",
+              "Add a photo or video if useful.",
+              "Use urgent only if production is stopped.",
             ]}
           />
           <GuidancePanel
@@ -585,7 +582,6 @@ const RequestNewPage = () => {
             items={[
               "Your request is saved in the portal.",
               "The support team reviews it.",
-              "Updates appear in the request thread.",
               "An engineer or admin follows up.",
             ]}
           />

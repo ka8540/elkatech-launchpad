@@ -84,6 +84,8 @@ const SignupPage = () => {
     if (user.role !== "customer") {
       return user.role === "admin" ? "/app/queue" : "/app/queue";
     }
+    // New customers complete their service profile before the portal.
+    if (!user.profileCompleted) return "/app/complete-profile";
     return "/app/requests";
   }
 

@@ -43423,7 +43423,7 @@ var require_parse_url = __commonJS({
 var require_form_data = __commonJS({
   "node_modules/light-my-request/lib/form-data.js"(exports, module) {
     "use strict";
-    var { randomUUID } = __require("node:crypto");
+    var { randomUUID: randomUUID2 } = __require("node:crypto");
     var { Readable } = __require("node:stream");
     var textEncoder;
     function isFormDataLike(payload) {
@@ -43431,7 +43431,7 @@ var require_form_data = __commonJS({
     }
     function formDataToStream(formdata) {
       textEncoder = textEncoder ?? new TextEncoder();
-      const boundary = `----formdata-${randomUUID()}`;
+      const boundary = `----formdata-${randomUUID2()}`;
       const prefix = `--${boundary}\r
 Content-Disposition: form-data`;
       const escape3 = (str) => str.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22");
@@ -62798,6 +62798,11 @@ var envSchema = external_exports.object({
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
+  // Optional SMTP credentials. Set both when using a relay like Resend,
+  // SendGrid, Postmark, Brevo, or Gmail SMTPS. Leave unset for local
+  // Mailpit which doesn't require auth.
+  SMTP_USER: external_exports.string().optional(),
+  SMTP_PASS: external_exports.string().optional(),
   // Nodemailer accepts both bare emails ("a@b.com") and addresses with a
   // display name ("Name <a@b.com>"), so we only require a non-empty string.
   SMTP_FROM: external_exports.string().min(3).default("no-reply@elkatech.local"),
@@ -62818,7 +62823,24 @@ var envSchema = external_exports.object({
   AWS_SECRET_ACCESS_KEY: external_exports.string().optional(),
   SES_FROM_EMAIL: external_exports.string().optional(),
   SES_ACCOUNT_ADDED_TEMPLATE: external_exports.string().default("ElkaTechAccountAdded"),
-  SES_REQUEST_CLAIMED_TEMPLATE: external_exports.string().default("ElkaTechRequestClaimed")
+  SES_REQUEST_CLAIMED_TEMPLATE: external_exports.string().default("ElkaTechRequestClaimed"),
+  // ─── Cloudflare R2 (request attachment storage) ──────────────────────────
+  // S3-compatible object storage. When all four required vars are set, the
+  // service-desk issues presigned upload/download URLs so the browser uploads
+  // photos/videos straight to R2 (never through the serverless function).
+  // Leave unset to disable attachments cleanly. R2_PUBLIC_BASE_URL is optional
+  // and only used when the bucket is intentionally public; otherwise reads use
+  // short-lived signed GET URLs.
+  R2_ACCOUNT_ID: external_exports.string().optional(),
+  R2_ACCESS_KEY_ID: external_exports.string().optional(),
+  R2_SECRET_ACCESS_KEY: external_exports.string().optional(),
+  R2_BUCKET_NAME: external_exports.string().optional(),
+  R2_ENDPOINT: external_exports.string().optional(),
+  R2_PUBLIC_BASE_URL: external_exports.string().optional(),
+  MAX_REQUEST_ATTACHMENT_MB: external_exports.coerce.number().int().positive().default(25),
+  ALLOWED_REQUEST_ATTACHMENT_TYPES: external_exports.string().default(
+    "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+  )
 });
 var cachedEnv = null;
 function getEnv() {
@@ -62854,6 +62876,9 @@ function getDb() {
   }
   return sqlClient;
 }
+
+// packages/config/src/r2.ts
+import { randomUUID } from "node:crypto";
 
 // packages/config/src/redis.ts
 var import_ioredis = __toESM(require_built3(), 1);
@@ -62925,6 +62950,10 @@ var authUserSchema = external_exports.object({
   emailVerified: external_exports.boolean(),
   approvalStatus: approvalStatusSchema,
   accountOrigin: accountOriginSchema.default("self_signup"),
+  // Whether the customer has completed their service profile. Drives the
+  // onboarding gate. Defaults true so legacy/older session payloads (and
+  // staff accounts, which are never gated) parse cleanly.
+  profileCompleted: external_exports.boolean().default(true),
   createdAt: external_exports.string()
 });
 var productSnapshotSchema = external_exports.object({
@@ -62940,10 +62969,17 @@ var serviceRequestSchema = external_exports.object({
   customerId: external_exports.string(),
   productId: external_exports.string(),
   productSnapshot: productSnapshotSchema,
+  // Link to the customer machine this request was raised against. Null for
+  // legacy/admin requests created before the customer-machine model existed.
+  customerMachineId: external_exports.string().nullable().optional(),
+  // Simple, customer-chosen issue category. Null on legacy requests.
+  issueType: external_exports.string().nullable().optional(),
   subject: external_exports.string(),
   description: external_exports.string(),
   contactPhone: external_exports.string(),
   siteLocation: external_exports.string(),
+  // Internal/admin-only on the customer-machine model. The service-desk
+  // detail endpoint nulls this out for the customer role.
   serialNumber: external_exports.string().nullable().optional(),
   priority: requestPrioritySchema,
   status: requestStatusSchema,
@@ -62951,6 +62987,16 @@ var serviceRequestSchema = external_exports.object({
   createdAt: external_exports.string(),
   updatedAt: external_exports.string()
 });
+var issueTypeSchema = external_exports.enum([
+  "not_turning_on",
+  "printing_issue",
+  "ink_issue",
+  "media_feed_issue",
+  "software_settings_issue",
+  "noise_vibration",
+  "maintenance_service",
+  "other"
+]);
 var requestMessageSchema = external_exports.object({
   id: external_exports.string(),
   requestId: external_exports.string(),
@@ -63034,6 +63080,134 @@ var updateRequestStatusInputSchema = external_exports.object({
 });
 var cancelRequestInputSchema = external_exports.object({
   reason: external_exports.string().max(1e3).optional()
+});
+var customerProfileSchema = external_exports.object({
+  displayName: external_exports.string(),
+  companyName: external_exports.string().nullable().optional(),
+  contactPhone: external_exports.string().nullable().optional(),
+  alternatePhone: external_exports.string().nullable().optional(),
+  addressLine1: external_exports.string().nullable().optional(),
+  addressLine2: external_exports.string().nullable().optional(),
+  city: external_exports.string().nullable().optional(),
+  state: external_exports.string().nullable().optional(),
+  postalCode: external_exports.string().nullable().optional(),
+  country: external_exports.string().nullable().optional(),
+  profileCompleted: external_exports.boolean(),
+  profileCompletedAt: external_exports.string().nullable().optional()
+});
+var completeProfileInputSchema = external_exports.object({
+  displayName: external_exports.string().trim().min(2).max(80),
+  companyName: external_exports.string().trim().min(1).max(120),
+  contactPhone: external_exports.string().trim().min(7).max(30),
+  alternatePhone: external_exports.string().trim().max(30).optional(),
+  addressLine1: external_exports.string().trim().min(3).max(200),
+  addressLine2: external_exports.string().trim().max(200).optional(),
+  city: external_exports.string().trim().min(1).max(80),
+  state: external_exports.string().trim().min(1).max(80),
+  postalCode: external_exports.string().trim().max(20).optional(),
+  country: external_exports.string().trim().max(80).optional()
+});
+var adminUpdateProfileInputSchema = completeProfileInputSchema.partial().refine((input) => Object.values(input).some((value) => value !== void 0), {
+  message: "At least one profile field must be provided."
+});
+var customerMachineStatusSchema = external_exports.enum(["active", "inactive"]);
+var customerMachineSchema = external_exports.object({
+  id: external_exports.string(),
+  customerId: external_exports.string(),
+  productId: external_exports.string(),
+  productSnapshot: productSnapshotSchema,
+  displayLabel: external_exports.string(),
+  unitNumber: external_exports.string().nullable().optional(),
+  internalSerialNumber: external_exports.string().nullable().optional(),
+  siteName: external_exports.string().nullable().optional(),
+  siteLocation: external_exports.string(),
+  contactPhone: external_exports.string().nullable().optional(),
+  purchaseDate: external_exports.string().nullable().optional(),
+  installDate: external_exports.string().nullable().optional(),
+  status: customerMachineStatusSchema,
+  notes: external_exports.string().nullable().optional(),
+  createdAt: external_exports.string(),
+  updatedAt: external_exports.string()
+});
+var customerMachinePublicSchema = external_exports.object({
+  id: external_exports.string(),
+  productId: external_exports.string(),
+  productName: external_exports.string(),
+  displayLabel: external_exports.string(),
+  unitNumber: external_exports.string().nullable().optional(),
+  siteName: external_exports.string().nullable().optional(),
+  siteLocation: external_exports.string(),
+  contactPhone: external_exports.string().nullable().optional(),
+  status: customerMachineStatusSchema
+});
+var createCustomerMachineInputSchema = external_exports.object({
+  productId: external_exports.string().min(1),
+  displayLabel: external_exports.string().trim().min(1).max(120).optional(),
+  unitNumber: external_exports.string().trim().max(40).optional(),
+  internalSerialNumber: external_exports.string().trim().max(120).optional(),
+  siteName: external_exports.string().trim().max(120).optional(),
+  siteLocation: external_exports.string().trim().min(2).max(200),
+  contactPhone: external_exports.string().trim().max(30).optional(),
+  purchaseDate: external_exports.string().trim().max(20).optional(),
+  installDate: external_exports.string().trim().max(20).optional(),
+  notes: external_exports.string().trim().max(2e3).optional()
+});
+var updateCustomerMachineInputSchema = external_exports.object({
+  displayLabel: external_exports.string().trim().min(1).max(120).optional(),
+  unitNumber: external_exports.string().trim().max(40).nullable().optional(),
+  internalSerialNumber: external_exports.string().trim().max(120).nullable().optional(),
+  siteName: external_exports.string().trim().max(120).nullable().optional(),
+  siteLocation: external_exports.string().trim().min(2).max(200).optional(),
+  contactPhone: external_exports.string().trim().max(30).nullable().optional(),
+  purchaseDate: external_exports.string().trim().max(20).nullable().optional(),
+  installDate: external_exports.string().trim().max(20).nullable().optional(),
+  status: customerMachineStatusSchema.optional(),
+  notes: external_exports.string().trim().max(2e3).nullable().optional()
+}).refine((input) => Object.values(input).some((value) => value !== void 0), {
+  message: "At least one machine field must be provided."
+});
+var createCustomerRequestInputSchema = external_exports.object({
+  customerMachineId: external_exports.string().uuid(),
+  issueType: issueTypeSchema,
+  description: external_exports.string().trim().min(5).max(5e3),
+  // Workshop-friendly urgency maps onto the existing priority enum: the form
+  // only offers "normal" and "urgent".
+  priority: requestPrioritySchema.default("normal"),
+  // Optional override; defaults to the machine's contact phone, then the
+  // customer profile phone.
+  contactPhone: external_exports.string().trim().min(7).max(30).optional()
+});
+var attachmentKindSchema = external_exports.enum(["image", "video"]);
+var requestAttachmentSchema = external_exports.object({
+  id: external_exports.string(),
+  requestId: external_exports.string(),
+  uploadedBy: external_exports.string(),
+  fileName: external_exports.string(),
+  contentType: external_exports.string(),
+  sizeBytes: external_exports.number(),
+  kind: attachmentKindSchema,
+  // Short-lived signed (or public) read URL, derived from the object key at
+  // read time. Never persisted.
+  url: external_exports.string(),
+  createdAt: external_exports.string()
+});
+var presignAttachmentInputSchema = external_exports.object({
+  fileName: external_exports.string().trim().min(1).max(255),
+  contentType: external_exports.string().trim().min(1).max(120),
+  sizeBytes: external_exports.number().int().positive()
+});
+var attachmentUploadTicketSchema = external_exports.object({
+  uploadUrl: external_exports.string(),
+  objectKey: external_exports.string(),
+  // Headers the browser must send on the direct-to-R2 PUT.
+  headers: external_exports.record(external_exports.string()),
+  maxBytes: external_exports.number()
+});
+var confirmAttachmentInputSchema = external_exports.object({
+  objectKey: external_exports.string().trim().min(1).max(512),
+  fileName: external_exports.string().trim().min(1).max(255),
+  contentType: external_exports.string().trim().min(1).max(120),
+  sizeBytes: external_exports.number().int().positive()
 });
 var requestStatusGroupSchema = external_exports.enum([
   "all",

@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AuthUser,
   MessageVisibility,
+  RequestAttachment,
   RequestMessage,
   RequestParticipant,
   RequestStatus,
   ServiceRequest,
 } from "@elkatech/contracts";
+import { ISSUE_TYPE_LABELS, type IssueType } from "@elkatech/contracts";
 import {
   Archive,
   ArrowLeft,
@@ -16,6 +18,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
+  Image as ImageIcon,
   PencilLine,
   History,
   Loader2,
@@ -77,12 +80,31 @@ type RequestHistoryEntry = {
   createdAt: string;
 };
 
+type RequestMachineView = {
+  displayLabel?: string;
+  productName?: string;
+  unitNumber?: string | null;
+  siteName?: string | null;
+  siteLocation?: string;
+  // Present only in the staff (full) view.
+  internalSerialNumber?: string | null;
+  productSnapshot?: { name?: string } | null;
+};
+
 type RequestDetailResponse = {
   request: ServiceRequest;
   assignedEngineer?: RequestParticipant | null;
   messages: RequestMessage[];
   history: RequestHistoryEntry[];
+  attachments?: RequestAttachment[];
+  machine?: RequestMachineView | null;
+  customer?: { displayName: string; companyName: string | null } | null;
 };
+
+function issueTypeLabel(issueType: string | null | undefined): string | null {
+  if (!issueType) return null;
+  return ISSUE_TYPE_LABELS[issueType as IssueType] ?? issueType;
+}
 
 type EditRequestForm = {
   subject: string;
@@ -436,17 +458,22 @@ const RequestDetailPage = () => {
   });
 
   const editMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<ServiceRequest>(`/api/requests/${requestId}`, {
+    mutationFn: () => {
+      // Serial is internal/admin-only on the customer-machine model. Customers
+      // never see it, so we must not let an empty edit field wipe it.
+      const isStaffEditor =
+        session?.user?.role === "engineer" || session?.user?.role === "admin";
+      return apiRequest<ServiceRequest>(`/api/requests/${requestId}`, {
         method: "PATCH",
         body: JSON.stringify({
           subject: editForm.subject,
           description: editForm.description,
           contactPhone: editForm.contactPhone,
           siteLocation: editForm.siteLocation,
-          serialNumber: editForm.serialNumber.trim() || null,
+          ...(isStaffEditor ? { serialNumber: editForm.serialNumber.trim() || null } : {}),
         }),
-      }),
+      });
+    },
     onSuccess: async () => {
       setIsEditOpen(false);
       toast.success("Request details updated.");
@@ -675,18 +702,20 @@ const RequestDetailPage = () => {
                 />
               </label>
 
-              <label>
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
-                  Serial number
-                </span>
-                <Input
-                  value={editForm.serialNumber}
-                  onChange={(event) =>
-                    setEditForm((current) => ({ ...current, serialNumber: event.target.value }))
-                  }
-                  className={cn(fieldClassName, "h-10 rounded-xl px-3 py-2")}
-                />
-              </label>
+              {isStaff && (
+                <label>
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
+                    Serial number
+                  </span>
+                  <Input
+                    value={editForm.serialNumber}
+                    onChange={(event) =>
+                      setEditForm((current) => ({ ...current, serialNumber: event.target.value }))
+                    }
+                    className={cn(fieldClassName, "h-10 rounded-xl px-3 py-2")}
+                  />
+                </label>
+              )}
 
               <label className="sm:col-span-2">
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
@@ -947,18 +976,85 @@ const RequestDetailPage = () => {
                 value={<span className="capitalize">{request.priority}</span>}
               />
               <DetailRow label="Product" value={request.productSnapshot.name} />
+              {(data.machine?.displayLabel || request.customerMachineId) && (
+                <DetailRow
+                  label="Machine"
+                  value={data.machine?.displayLabel ?? "—"}
+                />
+              )}
+              {issueTypeLabel(request.issueType) && (
+                <DetailRow label="Issue" value={issueTypeLabel(request.issueType)} />
+              )}
+              {isStaff && data.customer && (
+                <>
+                  <DetailRow label="Customer" value={data.customer.displayName} />
+                  {data.customer.companyName && (
+                    <DetailRow label="Workshop" value={data.customer.companyName} />
+                  )}
+                </>
+              )}
               <DetailRow label="Phone" value={request.contactPhone} />
               <DetailRow label="Location" value={request.siteLocation} />
-              <DetailRow
-                label="Serial"
-                value={
-                  request.serialNumber || (
-                    <span className="text-[var(--lp-faint)]">Not provided</span>
-                  )
-                }
-              />
+              {/* Serial number is internal — staff only. */}
+              {isStaff && (
+                <DetailRow
+                  label="Serial"
+                  value={
+                    request.serialNumber || (
+                      <span className="text-[var(--lp-faint)]">Not provided</span>
+                    )
+                  }
+                />
+              )}
             </div>
           </section>
+
+          {/* ── Attachments (photos / video evidence) ──────────────────── */}
+          {data.attachments && data.attachments.length > 0 && (
+            <section className={cn("rounded-2xl p-5", cardSurface)}>
+              <div className="flex items-center gap-2.5">
+                <ImageIcon className="h-4 w-4 text-[var(--lp-accent)]" />
+                <h2 className="lp-display text-base font-semibold text-[var(--lp-ink)]">
+                  Photos &amp; video
+                </h2>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2.5">
+                {data.attachments.map((attachment) => (
+                  <a
+                    key={attachment.id}
+                    href={attachment.url || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group block overflow-hidden rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50"
+                    title={attachment.fileName}
+                  >
+                    {attachment.kind === "image" && attachment.url ? (
+                      <img
+                        src={attachment.url}
+                        alt={attachment.fileName}
+                        loading="lazy"
+                        className="h-28 w-full object-cover transition-opacity group-hover:opacity-90"
+                      />
+                    ) : attachment.kind === "video" && attachment.url ? (
+                      <video
+                        src={attachment.url}
+                        controls
+                        preload="metadata"
+                        className="h-28 w-full bg-black object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-28 w-full items-center justify-center text-[var(--lp-faint)]">
+                        <ImageIcon className="h-6 w-6" />
+                      </div>
+                    )}
+                    <p className="truncate px-2.5 py-1.5 text-[11px] text-[var(--lp-ink-soft)]">
+                      {attachment.fileName}
+                    </p>
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
 
           {isStaff && (
             <section className={cn("rounded-2xl p-5", cardSurface)}>

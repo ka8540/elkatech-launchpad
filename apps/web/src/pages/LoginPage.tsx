@@ -46,6 +46,8 @@ function isLegacyFallbackError(error: unknown): boolean {
 }
 
 function landingPathForUser(user: AuthUser, next: string): string {
+  // Customers must finish onboarding before anything else.
+  if (user.role === "customer" && !user.profileCompleted) return "/app/complete-profile";
   if (next) return next;
   if (user.role === "customer") return "/app/requests";
   return "/app/queue";

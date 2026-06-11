@@ -23,6 +23,7 @@ import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import VerifyEmailPage from "@/pages/VerifyEmailPage";
 import RequestsPage from "@/pages/RequestsPage";
 import RequestNewPage from "@/pages/RequestNewPage";
+import CompleteProfilePage from "@/pages/CompleteProfilePage";
 import RequestDetailPage from "@/pages/RequestDetailPage";
 import QueuePage from "@/pages/QueuePage";
 import UsersPage from "@/pages/UsersPage";
@@ -55,6 +56,17 @@ const App = () => {
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/verify-email" element={<VerifyEmailPage />} />
+
+            {/* Onboarding lives outside the portal shell so customers with an
+                incomplete profile aren't shown nav they can't yet use. */}
+            <Route
+              path="/app/complete-profile"
+              element={
+                <ProtectedRoute allowIncompleteProfile>
+                  <CompleteProfilePage />
+                </ProtectedRoute>
+              }
+            />
 
             <Route
               path="/app"
