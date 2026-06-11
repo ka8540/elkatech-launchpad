@@ -11,6 +11,7 @@ import type {
 import { ApiError, apiRequest } from "@/lib/api";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
+import CustomerMachinesDialog from "@/components/CustomerMachinesDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -151,6 +152,7 @@ const UsersPage = () => {
   });
   const [inviteUrl, setInviteUrl] = useState("");
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [machinesUser, setMachinesUser] = useState<AuthUser | null>(null);
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -315,6 +317,21 @@ const UsersPage = () => {
     const buttons: React.ReactNode[] = [];
     const pending =
       approvalMutation.isPending || roleMutation.isPending || removeMutation.isPending;
+
+    // ── Machine management (customers own machines) ──────────────────────
+    if (user.role === "customer") {
+      buttons.push(
+        <Button
+          key="machines"
+          size="sm"
+          variant="outline"
+          className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
+          onClick={() => setMachinesUser(user)}
+        >
+          Machines
+        </Button>,
+      );
+    }
 
     // ── Approval-state actions (only for non-admins) ─────────────────────
     if (!isAdmin) {
@@ -829,6 +846,18 @@ const UsersPage = () => {
                         >
                           {originLabel(user.accountOrigin)}
                         </span>
+                        {user.role === "customer" && (
+                          <span
+                            className={cn(
+                              "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
+                              user.profileCompleted
+                                ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300"
+                                : "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300",
+                            )}
+                          >
+                            {user.profileCompleted ? "Profile ✓" : "Profile missing"}
+                          </span>
+                        )}
                         <span className="text-[11px] text-[var(--lp-faint)]">
                           Joined {formatDate(user.createdAt)}
                         </span>
@@ -903,6 +932,15 @@ const UsersPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Customer machines & profile ─────────────────────────────── */}
+      <CustomerMachinesDialog
+        user={machinesUser}
+        open={machinesUser !== null}
+        onOpenChange={(open) => {
+          if (!open) setMachinesUser(null);
+        }}
+      />
     </div>
   );
 };

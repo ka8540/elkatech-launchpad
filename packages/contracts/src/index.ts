@@ -70,6 +70,10 @@ export const authUserSchema = z.object({
   emailVerified: z.boolean(),
   approvalStatus: approvalStatusSchema,
   accountOrigin: accountOriginSchema.default("self_signup"),
+  // Whether the customer has completed their service profile. Drives the
+  // onboarding gate. Defaults true so legacy/older session payloads (and
+  // staff accounts, which are never gated) parse cleanly.
+  profileCompleted: z.boolean().default(true),
   createdAt: z.string(),
 });
 export type AuthUser = z.infer<typeof authUserSchema>;
@@ -89,10 +93,17 @@ export const serviceRequestSchema = z.object({
   customerId: z.string(),
   productId: z.string(),
   productSnapshot: productSnapshotSchema,
+  // Link to the customer machine this request was raised against. Null for
+  // legacy/admin requests created before the customer-machine model existed.
+  customerMachineId: z.string().nullable().optional(),
+  // Simple, customer-chosen issue category. Null on legacy requests.
+  issueType: z.string().nullable().optional(),
   subject: z.string(),
   description: z.string(),
   contactPhone: z.string(),
   siteLocation: z.string(),
+  // Internal/admin-only on the customer-machine model. The service-desk
+  // detail endpoint nulls this out for the customer role.
   serialNumber: z.string().nullable().optional(),
   priority: requestPrioritySchema,
   status: requestStatusSchema,
@@ -101,6 +112,32 @@ export const serviceRequestSchema = z.object({
   updatedAt: z.string(),
 });
 export type ServiceRequest = z.infer<typeof serviceRequestSchema>;
+
+// ─── Simple issue categories (customer-facing, workshop-friendly) ───────────
+export const issueTypeSchema = z.enum([
+  "not_turning_on",
+  "printing_issue",
+  "ink_issue",
+  "media_feed_issue",
+  "software_settings_issue",
+  "noise_vibration",
+  "maintenance_service",
+  "other",
+]);
+export type IssueType = z.infer<typeof issueTypeSchema>;
+
+/** Plain-language labels for each issue type. Shared so the customer chips,
+ *  the auto-generated subject, and the staff detail view all read the same. */
+export const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
+  not_turning_on: "Not turning on",
+  printing_issue: "Printing issue",
+  ink_issue: "Ink issue",
+  media_feed_issue: "Media / feed issue",
+  software_settings_issue: "Software / settings issue",
+  noise_vibration: "Noise / vibration",
+  maintenance_service: "Maintenance / service",
+  other: "Other",
+};
 
 export const requestMessageSchema = z.object({
   id: z.string(),
@@ -209,6 +246,205 @@ export const updateRequestStatusInputSchema = z.object({
 export const cancelRequestInputSchema = z.object({
   reason: z.string().max(1000).optional(),
 });
+
+// ─── Customer service profile ───────────────────────────────────────────────
+// Who the customer is and where their workshop is. Admin-controlled machine
+// ownership is modelled separately (customerMachineSchema) and never mixed in.
+export const customerProfileSchema = z.object({
+  displayName: z.string(),
+  companyName: z.string().nullable().optional(),
+  contactPhone: z.string().nullable().optional(),
+  alternatePhone: z.string().nullable().optional(),
+  addressLine1: z.string().nullable().optional(),
+  addressLine2: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  state: z.string().nullable().optional(),
+  postalCode: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  profileCompleted: z.boolean(),
+  profileCompletedAt: z.string().nullable().optional(),
+});
+export type CustomerProfile = z.infer<typeof customerProfileSchema>;
+
+// Onboarding form — all required fields must be present to mark the profile
+// complete. Optional fields may be omitted entirely (the frontend drops empty
+// strings rather than sending them).
+export const completeProfileInputSchema = z.object({
+  displayName: z.string().trim().min(2).max(80),
+  companyName: z.string().trim().min(1).max(120),
+  contactPhone: z.string().trim().min(7).max(30),
+  alternatePhone: z.string().trim().max(30).optional(),
+  addressLine1: z.string().trim().min(3).max(200),
+  addressLine2: z.string().trim().max(200).optional(),
+  city: z.string().trim().min(1).max(80),
+  state: z.string().trim().min(1).max(80),
+  postalCode: z.string().trim().max(20).optional(),
+  country: z.string().trim().max(80).optional(),
+});
+export type CompleteProfileInput = z.infer<typeof completeProfileInputSchema>;
+
+// Admin partial edit of a customer's profile — every field optional.
+export const adminUpdateProfileInputSchema = completeProfileInputSchema
+  .partial()
+  .refine((input) => Object.values(input).some((value) => value !== undefined), {
+    message: "At least one profile field must be provided.",
+  });
+export type AdminUpdateProfileInput = z.infer<typeof adminUpdateProfileInputSchema>;
+
+// ─── Customer machines (admin-controlled physical assets) ───────────────────
+export const customerMachineStatusSchema = z.enum(["active", "inactive"]);
+export type CustomerMachineStatus = z.infer<typeof customerMachineStatusSchema>;
+
+/** Full machine record — admin/engineer view. Includes the internal serial. */
+export const customerMachineSchema = z.object({
+  id: z.string(),
+  customerId: z.string(),
+  productId: z.string(),
+  productSnapshot: productSnapshotSchema,
+  displayLabel: z.string(),
+  unitNumber: z.string().nullable().optional(),
+  internalSerialNumber: z.string().nullable().optional(),
+  siteName: z.string().nullable().optional(),
+  siteLocation: z.string(),
+  contactPhone: z.string().nullable().optional(),
+  purchaseDate: z.string().nullable().optional(),
+  installDate: z.string().nullable().optional(),
+  status: customerMachineStatusSchema,
+  notes: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type CustomerMachine = z.infer<typeof customerMachineSchema>;
+
+/** Customer-safe machine view. No internal serial, notes, or admin metadata —
+ *  only what the customer needs to pick the right machine on a request. */
+export const customerMachinePublicSchema = z.object({
+  id: z.string(),
+  productId: z.string(),
+  productName: z.string(),
+  displayLabel: z.string(),
+  unitNumber: z.string().nullable().optional(),
+  siteName: z.string().nullable().optional(),
+  siteLocation: z.string(),
+  contactPhone: z.string().nullable().optional(),
+  status: customerMachineStatusSchema,
+});
+export type CustomerMachinePublic = z.infer<typeof customerMachinePublicSchema>;
+
+export const createCustomerMachineInputSchema = z.object({
+  productId: z.string().min(1),
+  displayLabel: z.string().trim().min(1).max(120).optional(),
+  unitNumber: z.string().trim().max(40).optional(),
+  internalSerialNumber: z.string().trim().max(120).optional(),
+  siteName: z.string().trim().max(120).optional(),
+  // Optional: when omitted, the backend falls back to the customer's saved
+  // profile address. Only an admin "different installation site" override
+  // sends an explicit value.
+  siteLocation: z.string().trim().min(2).max(200).optional(),
+  contactPhone: z.string().trim().max(30).optional(),
+  purchaseDate: z.string().trim().max(20).optional(),
+  installDate: z.string().trim().max(20).optional(),
+  notes: z.string().trim().max(2000).optional(),
+});
+export type CreateCustomerMachineInput = z.infer<typeof createCustomerMachineInputSchema>;
+
+// Admin links a machine to a chosen customer from the global machines
+// dashboard — same fields as createCustomerMachineInputSchema plus the target
+// customer. (The per-user route carries the customer in the URL instead.)
+export const adminLinkMachineInputSchema = createCustomerMachineInputSchema.extend({
+  customerId: z.string().uuid(),
+});
+export type AdminLinkMachineInput = z.infer<typeof adminLinkMachineInputSchema>;
+
+// Filters for the admin customer-machines list endpoint.
+export const adminMachineListQuerySchema = z.object({
+  customerId: z.string().uuid().optional(),
+  productId: z.string().optional(),
+  status: customerMachineStatusSchema.optional(),
+});
+export type AdminMachineListQuery = z.infer<typeof adminMachineListQuerySchema>;
+
+export const updateCustomerMachineInputSchema = z
+  .object({
+    displayLabel: z.string().trim().min(1).max(120).optional(),
+    unitNumber: z.string().trim().max(40).nullable().optional(),
+    internalSerialNumber: z.string().trim().max(120).nullable().optional(),
+    siteName: z.string().trim().max(120).nullable().optional(),
+    siteLocation: z.string().trim().min(2).max(200).optional(),
+    contactPhone: z.string().trim().max(30).nullable().optional(),
+    purchaseDate: z.string().trim().max(20).nullable().optional(),
+    installDate: z.string().trim().max(20).nullable().optional(),
+    status: customerMachineStatusSchema.optional(),
+    notes: z.string().trim().max(2000).nullable().optional(),
+  })
+  .refine((input) => Object.values(input).some((value) => value !== undefined), {
+    message: "At least one machine field must be provided.",
+  });
+export type UpdateCustomerMachineInput = z.infer<typeof updateCustomerMachineInputSchema>;
+
+// ─── Customer-facing "create request" (machine-based, simplified) ───────────
+// The customer never types product, serial, or site location — those are
+// derived server-side from the selected machine. Subject is auto-generated.
+export const createCustomerRequestInputSchema = z.object({
+  customerMachineId: z.string().uuid(),
+  issueType: issueTypeSchema,
+  description: z.string().trim().min(5).max(5000),
+  // Workshop-friendly urgency maps onto the existing priority enum: the form
+  // only offers "normal" and "urgent".
+  priority: requestPrioritySchema.default("normal"),
+  // Optional override; defaults to the machine's contact phone, then the
+  // customer profile phone.
+  contactPhone: z.string().trim().min(7).max(30).optional(),
+  // Admin-on-behalf: when present the backend asserts the machine belongs to
+  // this customer. Customers omit it (their own id is used).
+  customerId: z.string().uuid().optional(),
+});
+export type CreateCustomerRequestInput = z.infer<typeof createCustomerRequestInputSchema>;
+
+// ─── Request attachments (photo/video evidence stored in Cloudflare R2) ─────
+export const attachmentKindSchema = z.enum(["image", "video"]);
+export type AttachmentKind = z.infer<typeof attachmentKindSchema>;
+
+export const requestAttachmentSchema = z.object({
+  id: z.string(),
+  requestId: z.string(),
+  uploadedBy: z.string(),
+  fileName: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number(),
+  kind: attachmentKindSchema,
+  // Short-lived signed (or public) read URL, derived from the object key at
+  // read time. Never persisted.
+  url: z.string(),
+  createdAt: z.string(),
+});
+export type RequestAttachment = z.infer<typeof requestAttachmentSchema>;
+
+// Step 1: client asks the server for a presigned upload target.
+export const presignAttachmentInputSchema = z.object({
+  fileName: z.string().trim().min(1).max(255),
+  contentType: z.string().trim().min(1).max(120),
+  sizeBytes: z.number().int().positive(),
+});
+export type PresignAttachmentInput = z.infer<typeof presignAttachmentInputSchema>;
+
+export const attachmentUploadTicketSchema = z.object({
+  uploadUrl: z.string(),
+  objectKey: z.string(),
+  // Headers the browser must send on the direct-to-R2 PUT.
+  headers: z.record(z.string()),
+  maxBytes: z.number(),
+});
+export type AttachmentUploadTicket = z.infer<typeof attachmentUploadTicketSchema>;
+
+// Step 2: after the direct upload succeeds, client persists the metadata.
+export const confirmAttachmentInputSchema = z.object({
+  objectKey: z.string().trim().min(1).max(512),
+  fileName: z.string().trim().min(1).max(255),
+  contentType: z.string().trim().min(1).max(120),
+  sizeBytes: z.number().int().positive(),
+});
+export type ConfirmAttachmentInput = z.infer<typeof confirmAttachmentInputSchema>;
 
 export const requestStatusGroupSchema = z.enum([
   "all",

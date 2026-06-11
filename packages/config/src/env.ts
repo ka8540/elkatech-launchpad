@@ -44,6 +44,11 @@ const envSchema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(720),
   SMTP_HOST: z.string().default("127.0.0.1"),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
+  // Optional SMTP credentials. Set both when using a relay like Resend,
+  // SendGrid, Postmark, Brevo, or Gmail SMTPS. Leave unset for local
+  // Mailpit which doesn't require auth.
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
   // Nodemailer accepts both bare emails ("a@b.com") and addresses with a
   // display name ("Name <a@b.com>"), so we only require a non-empty string.
   SMTP_FROM: z.string().min(3).default("no-reply@elkatech.local"),
@@ -65,6 +70,25 @@ const envSchema = z.object({
   SES_FROM_EMAIL: z.string().optional(),
   SES_ACCOUNT_ADDED_TEMPLATE: z.string().default("ElkaTechAccountAdded"),
   SES_REQUEST_CLAIMED_TEMPLATE: z.string().default("ElkaTechRequestClaimed"),
+  // ─── Cloudflare R2 (request attachment storage) ──────────────────────────
+  // S3-compatible object storage. When all four required vars are set, the
+  // service-desk issues presigned upload/download URLs so the browser uploads
+  // photos/videos straight to R2 (never through the serverless function).
+  // Leave unset to disable attachments cleanly. R2_PUBLIC_BASE_URL is optional
+  // and only used when the bucket is intentionally public; otherwise reads use
+  // short-lived signed GET URLs.
+  R2_ACCOUNT_ID: z.string().optional(),
+  R2_ACCESS_KEY_ID: z.string().optional(),
+  R2_SECRET_ACCESS_KEY: z.string().optional(),
+  R2_BUCKET_NAME: z.string().optional(),
+  R2_ENDPOINT: z.string().optional(),
+  R2_PUBLIC_BASE_URL: z.string().optional(),
+  MAX_REQUEST_ATTACHMENT_MB: z.coerce.number().int().positive().default(25),
+  ALLOWED_REQUEST_ATTACHMENT_TYPES: z
+    .string()
+    .default(
+      "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm",
+    ),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

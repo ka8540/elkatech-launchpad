@@ -6,6 +6,7 @@ import {
   CircleUser,
   ClipboardList,
   Gauge,
+  HardDrive,
   Inbox,
   LogOut,
   Menu,
@@ -342,6 +343,7 @@ const PortalShell = () => {
       ? [
           { to: "/app/admin", icon: Gauge, label: "Admin" },
           { to: "/app/users", icon: Users, label: "Users" },
+          { to: "/app/machines", icon: HardDrive, label: "Customer Machines" },
         ]
       : []),
   ];

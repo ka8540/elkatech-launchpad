@@ -452,6 +452,11 @@
     --lp-on-graphite: #f1efe9;
     --lp-on-graphite-soft: rgba(241, 239, 233, 0.66);
     --lp-glow: rgba(172, 83, 28, 0.18);
+    /* Re-point shadcn's focus ring + accent off the global electric blue onto
+       the portal copper, so Inputs/Selects/Buttons match the graphite theme. */
+    --accent: 24 65% 39%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 24 65% 45%;
   }
 
   .dark .lp {
@@ -471,6 +476,9 @@
     --lp-on-graphite: #f1efe9;
     --lp-on-graphite-soft: rgba(241, 239, 233, 0.66);
     --lp-glow: rgba(219, 138, 79, 0.16);
+    --accent: 27 67% 58%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 27 67% 58%;
   }
 
   /*
@@ -495,6 +503,9 @@
     --lp-graphite: #15171b;
     --lp-graphite-2: #1d2026;
     --lp-glow: rgba(172, 83, 28, 0.18);
+    --accent: 24 65% 39%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 24 65% 45%;
   }
 
   .dark .lp-portal {
@@ -512,6 +523,9 @@
     --lp-graphite: #08090b;
     --lp-graphite-2: #111317;
     --lp-glow: rgba(219, 138, 79, 0.16);
+    --accent: 27 67% 58%;
+    --accent-foreground: 0 0% 100%;
+    --ring: 27 67% 58%;
   }
 }
 

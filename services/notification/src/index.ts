@@ -88,7 +88,13 @@ function buildSesSends(
 const transporter = nodemailer.createTransport({
   host: env.SMTP_HOST,
   port: env.SMTP_PORT,
-  secure: false,
+  // Port 465 → implicit TLS (Resend production, Gmail SMTPS).
+  // Port 587/25/1025 → STARTTLS or plaintext (Mailpit dev).
+  secure: env.SMTP_PORT === 465,
+  auth:
+    env.SMTP_USER && env.SMTP_PASS
+      ? { user: env.SMTP_USER, pass: env.SMTP_PASS }
+      : undefined,
 });
 
 type EmailPayload = {

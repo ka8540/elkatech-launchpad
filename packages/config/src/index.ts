@@ -4,5 +4,6 @@ export * from "./env";
 export * from "./firebase";
 export * from "./http";
 export * from "./logger";
+export * from "./r2";
 export * from "./redis";
 export * from "./service";

@@ -5,9 +5,15 @@ import { useSession } from "@/hooks/use-session";
 type ProtectedRouteProps = {
   children: React.ReactNode;
   roles?: Role[];
+  // Set on the onboarding route itself so it doesn't redirect-loop.
+  allowIncompleteProfile?: boolean;
 };
 
-const ProtectedRoute = ({ children, roles }: ProtectedRouteProps) => {
+// Routes a customer with an incomplete profile may still reach (besides the
+// onboarding page itself, which is allowed via `allowIncompleteProfile`).
+const PROFILE_EXEMPT_PATHS = ["/app/complete-profile", "/app/account"];
+
+const ProtectedRoute = ({ children, roles, allowIncompleteProfile }: ProtectedRouteProps) => {
   const location = useLocation();
   const { data, isLoading } = useSession();
 
@@ -42,6 +48,18 @@ const ProtectedRoute = ({ children, roles }: ProtectedRouteProps) => {
   if (!data?.user) {
     const next = `${location.pathname}${location.search}`;
     return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
+  }
+
+  // Onboarding gate: a customer must finish their service profile before
+  // reaching the rest of the portal. Staff are never gated. The gateway
+  // enforces the same rule server-side on request creation.
+  if (
+    !allowIncompleteProfile &&
+    data.user.role === "customer" &&
+    !data.user.profileCompleted &&
+    !PROFILE_EXEMPT_PATHS.includes(location.pathname)
+  ) {
+    return <Navigate to="/app/complete-profile" replace />;
   }
 
   if (roles && !roles.includes(data.user.role)) {

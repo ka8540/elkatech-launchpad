@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import AuthPageShell from "@/components/AuthPageShell";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 
 const ResetPasswordPage = () => {
   const navigate = useNavigate();
@@ -42,8 +42,7 @@ const ResetPasswordPage = () => {
       >
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">New Password</label>
-          <Input
-            type="password"
+          <PasswordInput
             required
             minLength={8}
             value={password}

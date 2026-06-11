@@ -2,20 +2,45 @@ import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { z } from "zod";
 import {
+  adminLinkMachineInputSchema,
+  adminMachineListQuerySchema,
   assignRequestInputSchema,
   cancelRequestInputSchema,
   catalogProductSchema,
+  confirmAttachmentInputSchema,
+  createCustomerMachineInputSchema,
+  createCustomerRequestInputSchema,
   createRequestMessageInputSchema,
   createServiceRequestInputSchema,
+  customerMachinePublicSchema,
+  customerMachineSchema,
+  ISSUE_TYPE_LABELS,
+  issueTypeSchema,
+  presignAttachmentInputSchema,
+  requestAttachmentSchema,
   requestMessageSchema,
   requestStatusGroupSchema,
   requestStatusSchema,
   roleSchema,
   serviceRequestSchema,
+  updateCustomerMachineInputSchema,
   updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
 } from "@elkatech/contracts";
-import { fetchJson, getDb, getEnv, internalHeaders } from "@elkatech/config";
+import {
+  attachmentKindFor,
+  attachmentReadUrl,
+  buildAttachmentObjectKey,
+  fetchJson,
+  getDb,
+  getEnv,
+  internalHeaders,
+  InternalFetchError,
+  isAllowedAttachmentType,
+  isR2Configured,
+  maxAttachmentBytes,
+  presignAttachmentUpload,
+} from "@elkatech/config";
 import {
   canClaimRequest,
   canEditRequestDetails,
@@ -76,6 +101,10 @@ function triggerNotificationPoll(): void {
   void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
     method: "POST",
     headers: internalHeaders(),
+    // internalHeaders() sets Content-Type: application/json, so we must send a
+    // (empty) JSON body — Fastify rejects an empty body with that content type
+    // (FST_ERR_CTP_EMPTY_JSON_BODY).
+    body: "{}",
   }).catch(() => {
     // Best-effort. The setInterval poller will catch up next time the
     // function happens to be warm, and the row stays in the outbox until
@@ -132,6 +161,8 @@ function mapRequestRow(row: any) {
     customerId: row.customer_id,
     productId: row.product_id,
     productSnapshot: row.product_snapshot,
+    customerMachineId: row.customer_machine_id ?? null,
+    issueType: row.issue_type ?? null,
     subject: row.subject,
     description: row.description,
     contactPhone: row.contact_phone,
@@ -143,6 +174,160 @@ function mapRequestRow(row: any) {
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   });
+}
+
+function toDateString(value: unknown): string | null {
+  if (!value) return null;
+  // `date` columns come back as Date or "YYYY-MM-DD" depending on the driver;
+  // normalise to a plain date string.
+  try {
+    return new Date(value as string).toISOString().slice(0, 10);
+  } catch {
+    return null;
+  }
+}
+
+/** Full machine record — admin/engineer view (includes internal serial). */
+function mapMachineRow(row: any) {
+  return customerMachineSchema.parse({
+    id: row.id,
+    customerId: row.customer_id,
+    productId: row.product_id,
+    productSnapshot: row.product_snapshot,
+    displayLabel: row.display_label,
+    unitNumber: row.unit_number,
+    internalSerialNumber: row.internal_serial_number,
+    siteName: row.site_name,
+    siteLocation: row.site_location,
+    contactPhone: row.contact_phone,
+    purchaseDate: toDateString(row.purchase_date),
+    installDate: toDateString(row.install_date),
+    status: row.status,
+    notes: row.notes,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
+  });
+}
+
+/** Customer-safe machine view — never exposes the internal serial or notes. */
+function mapMachinePublic(row: any) {
+  return customerMachinePublicSchema.parse({
+    id: row.id,
+    productId: row.product_id,
+    productName: row.product_snapshot?.name ?? row.product_id,
+    displayLabel: row.display_label,
+    unitNumber: row.unit_number,
+    siteName: row.site_name,
+    siteLocation: row.site_location,
+    contactPhone: row.contact_phone,
+    status: row.status,
+  });
+}
+
+async function getMachineById(machineId: string): Promise<any | null> {
+  const rows = await sql<any[]>`
+    select * from service_desk.customer_machines where id = ${machineId} limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+/**
+ * Validate that a customer can receive a machine assignment: the user must
+ * exist, be a customer, and not be suspended/rejected (removed users are hard-
+ * deleted, so a missing user surfaces as a 404 from getUserById). Returns an
+ * error message string, or null when the customer is eligible.
+ */
+async function customerAssignmentError(customerId: string): Promise<string | null> {
+  let user;
+  try {
+    user = await getUserById(customerId);
+  } catch (error) {
+    if (error instanceof InternalFetchError && error.status === 404) {
+      return "Customer not found.";
+    }
+    throw error;
+  }
+  if (user.role !== "customer") {
+    return "Machines can only be linked to customer accounts.";
+  }
+  const approval = (user as { approvalStatus?: string }).approvalStatus;
+  if (approval === "suspended" || approval === "rejected") {
+    return "Machines cannot be linked to a suspended or rejected customer.";
+  }
+  return null;
+}
+
+/** Insert a machine for a customer. Site location and contact phone default
+ *  from the customer's saved profile when the admin doesn't override them, so
+ *  admin never has to retype already-known contact details. Shared by the
+ *  per-user route (customer in the URL) and the dashboard route (customer in
+ *  the body). Returns the created row, or a user-facing error message. */
+async function createMachineForCustomer(
+  customerId: string,
+  input: z.infer<typeof createCustomerMachineInputSchema>,
+): Promise<{ row?: any; error?: string }> {
+  let product;
+  try {
+    product = await getCatalogProduct(input.productId);
+  } catch {
+    return { error: "Unknown product." };
+  }
+
+  // Resolve site + phone: explicit override → customer profile default.
+  let siteLocation = input.siteLocation?.trim() ?? "";
+  let contactPhone = input.contactPhone?.trim() ?? "";
+  if (!siteLocation || !contactPhone) {
+    try {
+      const { profile } = await getUserProfile(customerId);
+      if (!siteLocation) siteLocation = addressSummary(profile);
+      if (!contactPhone) contactPhone = profile?.contactPhone?.trim() ?? "";
+    } catch {
+      // Profile lookup failed — fall through to the missing-site guard below.
+    }
+  }
+  if (!siteLocation) {
+    return { error: "Add a customer address or enter a machine installation site." };
+  }
+
+  const productSnapshot = {
+    id: product.id,
+    categorySlug: product.categorySlug,
+    slug: product.slug,
+    name: product.name,
+    priceDisplay: product.priceDisplay,
+  };
+  const unit = input.unitNumber?.trim();
+  const displayLabel =
+    input.displayLabel?.trim() || `${product.name}${unit ? ` — Unit ${unit}` : ""}`;
+
+  const machineId = randomUUID();
+  await sql`
+    insert into service_desk.customer_machines (
+      id, customer_id, product_id, product_snapshot, display_label, unit_number,
+      internal_serial_number, site_name, site_location, contact_phone,
+      purchase_date, install_date, status, notes
+    )
+    values (
+      ${machineId},
+      ${customerId},
+      ${product.id},
+      ${sql.json(productSnapshot as any)},
+      ${displayLabel},
+      ${unit || null},
+      ${input.internalSerialNumber?.trim() || null},
+      ${input.siteName?.trim() || null},
+      ${siteLocation},
+      ${contactPhone || null},
+      ${input.purchaseDate?.trim() || null},
+      ${input.installDate?.trim() || null},
+      ${"active"},
+      ${input.notes?.trim() || null}
+    )
+  `;
+  const rows = await sql<any[]>`
+    select * from service_desk.customer_machines where id = ${machineId} limit 1
+  `;
+  return { row: rows[0] };
 }
 
 async function getCatalogProduct(productId: string) {
@@ -167,6 +352,48 @@ async function getUserById(userId: string) {
   });
 }
 
+type CustomerProfileLite = {
+  displayName: string;
+  companyName: string | null;
+  contactPhone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+};
+
+async function getUserProfile(userId: string) {
+  return fetchJson<{
+    user: { id: string; email: string; displayName: string };
+    profile: CustomerProfileLite;
+  }>(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/profile`, {
+    headers: internalHeaders(),
+  });
+}
+
+/** A one-line site/location string from a customer's saved profile address.
+ *  Used as the default machine installation site when the admin doesn't enter
+ *  an explicit override. */
+function addressSummary(profile: Partial<CustomerProfileLite> | null | undefined): string {
+  if (!profile) return "";
+  const cityState = [profile.city, profile.state].map((v) => v?.trim()).filter(Boolean).join(", ");
+  return [profile.addressLine1?.trim(), cityState]
+    .filter(Boolean)
+    .join(", ")
+    .trim();
+}
+
+/** Admin-only gate for customer-machine management. */
+function ensureAdmin(actor: UserContext, reply: any): boolean {
+  if (actor.role !== "admin") {
+    reply.code(403).send({ message: "Forbidden" });
+    return false;
+  }
+  return true;
+}
+
 app.get("/health", async () => ({
   ok: true,
   service: "service-desk",
@@ -179,6 +406,132 @@ app.post("/requests", async (request, reply) => {
   }
 
   const actor = getUserContext(request.headers);
+  const body = request.body as Record<string, unknown> | null;
+
+  // ── Machine-based customer flow ──────────────────────────────────────────
+  // The customer never types product / serial / location — they're derived
+  // from the selected machine. Subject is auto-generated from issue + label.
+  if (body && typeof body === "object" && "customerMachineId" in body) {
+    const input = createCustomerRequestInputSchema.parse(body);
+    const machine = await getMachineById(input.customerMachineId);
+    if (!machine) {
+      return reply.code(404).send({ message: "Machine not found." });
+    }
+    if (machine.status !== "active") {
+      return reply.code(400).send({ message: "This machine is no longer active." });
+    }
+    // Ownership: a customer may only raise a request for their own machine.
+    // Spoofing another customer's machine id is rejected here, server-side.
+    if (actor.role === "customer" && machine.customer_id !== actor.id) {
+      return reply.code(403).send({ message: "Forbidden" });
+    }
+    // Admin-on-behalf: when a target customer is named, the machine must
+    // actually belong to them (guards against a mismatched selection).
+    if (input.customerId && machine.customer_id !== input.customerId) {
+      return reply.code(400).send({ message: "This machine does not belong to that customer." });
+    }
+
+    const ownerId: string = machine.customer_id;
+    let ownerEmail = actor.email;
+    if (ownerId !== actor.id) {
+      try {
+        const owner = await getUserById(ownerId);
+        ownerEmail = owner.email;
+      } catch {
+        // Fall back to actor email; the request still records the owner id.
+      }
+    }
+
+    // Contact phone fallback: explicit override → machine phone → profile phone.
+    let contactPhone = (input.contactPhone ?? "").trim() || (machine.contact_phone ?? "").trim();
+    if (!contactPhone) {
+      try {
+        const { profile } = await getUserProfile(ownerId);
+        contactPhone = (profile?.contactPhone ?? "").trim();
+      } catch {
+        // ignore — handled by the guard below
+      }
+    }
+    if (!contactPhone) {
+      return reply.code(400).send({
+        message: "Add a contact phone to your profile before creating a request.",
+      });
+    }
+
+    const issueType = issueTypeSchema.parse(input.issueType);
+    const label: string = machine.display_label;
+    const subject = `${ISSUE_TYPE_LABELS[issueType]} — ${label}`;
+    const requestId = randomUUID();
+    const requestNumber = buildRequestNumber();
+    const now = new Date().toISOString();
+
+    await sql`
+      insert into service_desk.requests (
+        id,
+        request_number,
+        customer_id,
+        customer_email,
+        product_id,
+        product_snapshot,
+        customer_machine_id,
+        issue_type,
+        subject,
+        description,
+        contact_phone,
+        site_location,
+        serial_number,
+        priority,
+        status
+      )
+      values (
+        ${requestId},
+        ${requestNumber},
+        ${ownerId},
+        ${ownerEmail},
+        ${machine.product_id},
+        ${sql.json(machine.product_snapshot as any)},
+        ${machine.id},
+        ${issueType},
+        ${subject},
+        ${input.description},
+        ${contactPhone},
+        ${machine.site_location},
+        ${machine.internal_serial_number ?? null},
+        ${input.priority},
+        ${"new"}
+      )
+    `;
+
+    await addHistory(requestId, actor, "request_created", {
+      requestNumber,
+      productId: machine.product_id,
+      customerMachineId: machine.id,
+      issueType,
+    });
+    await emitOutbox("request.created", requestId, {
+      requestId,
+      requestNumber,
+      customerId: ownerId,
+      customerEmail: ownerEmail,
+      customerName: actor.displayName,
+      productName: machine.product_snapshot?.name ?? machine.product_id,
+      productId: machine.product_id,
+      customerMachineId: machine.id,
+      machineLabel: label,
+      issueType,
+      location: machine.site_location,
+      subject,
+      status: "new",
+      createdAt: now,
+    });
+
+    const insertedRows = await sql<any[]>`
+      select * from service_desk.requests where id = ${requestId} limit 1
+    `;
+    return mapRequestRow(insertedRows[0]);
+  }
+
+  // ── Legacy product-based flow (admin/back-compat) ────────────────────────
   const input = createServiceRequestInputSchema.parse(request.body);
   const product = await getCatalogProduct(input.productId);
   const requestId = randomUUID();
@@ -392,24 +745,75 @@ app.get("/requests/:requestId", async (request, reply) => {
   );
   const participantMap = new Map(participantEntries);
 
-  return {
-    request: serviceRequestSchema.parse({
-      id: current.id,
-      requestNumber: current.request_number,
-      customerId: current.customer_id,
-      productId: current.product_id,
-      productSnapshot: current.product_snapshot,
-      subject: current.subject,
-      description: current.description,
-      contactPhone: current.contact_phone,
-      siteLocation: current.site_location,
-      serialNumber: current.serial_number,
-      priority: current.priority,
-      status: current.status,
-      assignedEngineerId: current.assigned_engineer_id,
-      createdAt: new Date(current.created_at).toISOString(),
-      updatedAt: new Date(current.updated_at).toISOString(),
+  const isStaff = actor.role !== "customer";
+
+  // Serial number is internal/admin-only on the customer-machine model — never
+  // surface it to the customer who raised the request.
+  const requestPayload = mapRequestRow(current);
+  if (!isStaff) {
+    requestPayload.serialNumber = null;
+  }
+
+  // Attachments (photo/video evidence). Each gets a fresh short-lived read URL.
+  const attachmentRows = await sql<any[]>`
+    select *
+    from service_desk.request_attachments
+    where request_id = ${params.requestId}
+    order by created_at asc
+  `;
+  const attachments = await Promise.all(
+    attachmentRows.map(async (a) => {
+      let url = "";
+      try {
+        url = await attachmentReadUrl({ objectKey: a.object_key, fileName: a.file_name });
+      } catch {
+        // R2 unreachable/unconfigured — return metadata with an empty URL so
+        // the page still lists the file rather than 500-ing.
+      }
+      return requestAttachmentSchema.parse({
+        id: a.id,
+        requestId: a.request_id,
+        uploadedBy: a.uploaded_by,
+        fileName: a.file_name,
+        contentType: a.content_type,
+        sizeBytes: Number(a.size_bytes),
+        kind: a.kind,
+        url,
+        createdAt: new Date(a.created_at).toISOString(),
+      });
     }),
+  );
+
+  // The linked machine, if any. Staff see the full record (internal serial);
+  // the customer sees the safe view. Null for legacy requests or if the
+  // machine was later removed — the request still renders from its own snapshot.
+  let machine: unknown = null;
+  if (current.customer_machine_id) {
+    const machineRow = await getMachineById(current.customer_machine_id);
+    if (machineRow) {
+      machine = isStaff ? mapMachineRow(machineRow) : mapMachinePublic(machineRow);
+    }
+  }
+
+  // Customer identity for staff (name + workshop). Tolerant of lookup failure.
+  let customer: { displayName: string; companyName: string | null } | null = null;
+  if (isStaff) {
+    try {
+      const { user, profile } = await getUserProfile(current.customer_id);
+      customer = {
+        displayName: profile?.displayName ?? user.displayName,
+        companyName: profile?.companyName ?? null,
+      };
+    } catch {
+      customer = null;
+    }
+  }
+
+  return {
+    request: requestPayload,
+    attachments,
+    machine,
+    customer,
     assignedEngineer: (() => {
       if (!current.assigned_engineer_id) return null;
       const user = participantMap.get(current.assigned_engineer_id);
@@ -931,6 +1335,371 @@ app.post("/requests/:requestId/cancel", async (request, reply) => {
   });
 
   return { ok: true };
+});
+
+// ─── Customer machines: customer-facing read ────────────────────────────────
+// The current user's own active machines, safe view only (no internal serial).
+app.get("/me/machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  const rows = await sql<any[]>`
+    select *
+    from service_desk.customer_machines
+    where customer_id = ${actor.id}
+      and status = 'active'
+    order by created_at asc
+  `;
+  return rows.map(mapMachinePublic);
+});
+
+// ─── Customer machines: admin management ────────────────────────────────────
+const customerParamSchema = z.object({ customerId: z.string().uuid() });
+const machineParamSchema = z.object({ machineId: z.string().uuid() });
+
+app.get("/admin/customers/:customerId/machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const params = customerParamSchema.parse(request.params);
+  const rows = await sql<any[]>`
+    select *
+    from service_desk.customer_machines
+    where customer_id = ${params.customerId}
+    order by created_at desc
+  `;
+  return rows.map(mapMachineRow);
+});
+
+app.post("/admin/customers/:customerId/machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const params = customerParamSchema.parse(request.params);
+  const input = createCustomerMachineInputSchema.parse(request.body);
+
+  const customerError = await customerAssignmentError(params.customerId);
+  if (customerError) {
+    return reply.code(400).send({ message: customerError });
+  }
+  const result = await createMachineForCustomer(params.customerId, input);
+  if (result.error || !result.row) {
+    return reply.code(400).send({ message: result.error ?? "Could not link machine." });
+  }
+  const machineRow = result.row;
+  await emitOutbox("customer_machine.linked", machineRow.id, {
+    machineId: machineRow.id,
+    customerId: params.customerId,
+    productId: machineRow.product_id,
+    productName: machineRow.product_snapshot?.name ?? machineRow.product_id,
+    displayLabel: machineRow.display_label,
+    linkedBy: actor.id,
+  });
+  return reply.code(201).send(mapMachineRow(machineRow));
+});
+
+// ── Dashboard collection API: list all assignments (admin) ──────────────────
+app.get("/admin/customer-machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const query = adminMachineListQuerySchema.parse(request.query);
+
+  const rows = await sql<any[]>`
+    select *
+    from service_desk.customer_machines
+    where (${query.customerId ?? null}::uuid is null or customer_id = ${query.customerId ?? null})
+      and (${query.productId ?? null}::text is null or product_id = ${query.productId ?? null})
+      and (${query.status ?? null}::text is null or status = ${query.status ?? null})
+    order by updated_at desc
+  `;
+  return rows.map(mapMachineRow);
+});
+
+// ── Dashboard collection API: link a machine to a chosen customer (admin) ───
+app.post("/admin/customer-machines", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const input = adminLinkMachineInputSchema.parse(request.body);
+
+  const customerError = await customerAssignmentError(input.customerId);
+  if (customerError) {
+    return reply.code(400).send({ message: customerError });
+  }
+  const { customerId, ...machineInput } = input;
+  const result = await createMachineForCustomer(customerId, machineInput);
+  if (result.error || !result.row) {
+    return reply.code(400).send({ message: result.error ?? "Could not link machine." });
+  }
+  const machineRow = result.row;
+  await emitOutbox("customer_machine.linked", machineRow.id, {
+    machineId: machineRow.id,
+    customerId,
+    productId: machineRow.product_id,
+    productName: machineRow.product_snapshot?.name ?? machineRow.product_id,
+    displayLabel: machineRow.display_label,
+    linkedBy: actor.id,
+  });
+  return reply.code(201).send(mapMachineRow(machineRow));
+});
+
+app.patch("/admin/machines/:machineId", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const params = machineParamSchema.parse(request.params);
+  const input = updateCustomerMachineInputSchema.parse(request.body);
+
+  const existing = await getMachineById(params.machineId);
+  if (!existing) {
+    return reply.code(404).send({ message: "Machine not found." });
+  }
+
+  const keep = <T>(provided: T | undefined, current: T): T =>
+    provided === undefined ? current : provided;
+  const next = {
+    displayLabel: input.displayLabel?.trim() || existing.display_label,
+    unitNumber: keep(input.unitNumber, existing.unit_number ?? null),
+    internalSerialNumber: keep(
+      input.internalSerialNumber,
+      existing.internal_serial_number ?? null,
+    ),
+    siteName: keep(input.siteName, existing.site_name ?? null),
+    siteLocation: input.siteLocation?.trim() || existing.site_location,
+    contactPhone: keep(input.contactPhone, existing.contact_phone ?? null),
+    purchaseDate: keep(input.purchaseDate, toDateString(existing.purchase_date)),
+    installDate: keep(input.installDate, toDateString(existing.install_date)),
+    status: keep(input.status, existing.status),
+    notes: keep(input.notes, existing.notes ?? null),
+  };
+
+  await sql`
+    update service_desk.customer_machines set
+      display_label = ${next.displayLabel},
+      unit_number = ${next.unitNumber},
+      internal_serial_number = ${next.internalSerialNumber},
+      site_name = ${next.siteName},
+      site_location = ${next.siteLocation},
+      contact_phone = ${next.contactPhone},
+      purchase_date = ${next.purchaseDate || null},
+      install_date = ${next.installDate || null},
+      status = ${next.status},
+      notes = ${next.notes},
+      updated_at = now()
+    where id = ${params.machineId}
+  `;
+  const rows = await sql<any[]>`
+    select * from service_desk.customer_machines where id = ${params.machineId} limit 1
+  `;
+  return mapMachineRow(rows[0]);
+});
+
+// Deactivate (soft). The row is kept so existing requests that reference it
+// still render; status flips to 'inactive' so it drops out of the customer's
+// machine list and can't be used for new requests.
+app.delete("/admin/machines/:machineId", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  if (!ensureAdmin(actor, reply)) return;
+  const params = machineParamSchema.parse(request.params);
+  const existing = await getMachineById(params.machineId);
+  if (!existing) {
+    return reply.code(404).send({ message: "Machine not found." });
+  }
+  await sql`
+    update service_desk.customer_machines
+    set status = 'inactive', updated_at = now()
+    where id = ${params.machineId}
+  `;
+  return { ok: true };
+});
+
+// ─── Request attachments (Cloudflare R2) ────────────────────────────────────
+async function loadRequestForAttachment(requestId: string) {
+  const rows = await sql<any[]>`
+    select * from service_desk.requests where id = ${requestId} limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+// Step 1: issue a presigned PUT so the browser uploads straight to R2.
+app.post("/requests/:requestId/attachments/presign", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  if (!isR2Configured()) {
+    return reply.code(501).send({ message: "Attachments are not configured." });
+  }
+  const actor = getUserContext(request.headers);
+  const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
+  const input = presignAttachmentInputSchema.parse(request.body);
+
+  if (!isAllowedAttachmentType(input.contentType)) {
+    return reply.code(400).send({ message: "Unsupported file type." });
+  }
+  if (input.sizeBytes > maxAttachmentBytes()) {
+    return reply.code(400).send({ message: "File is too large." });
+  }
+  if (!attachmentKindFor(input.contentType)) {
+    return reply.code(400).send({ message: "Unsupported file type." });
+  }
+
+  const current = await loadRequestForAttachment(params.requestId);
+  if (!current) return reply.code(404).send({ message: "Request not found." });
+  if (
+    !canViewRequest(toWorkflowActor(actor), {
+      customerId: current.customer_id,
+      assignedEngineerId: current.assigned_engineer_id,
+      status: current.status,
+    })
+  ) {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  const objectKey = buildAttachmentObjectKey(params.requestId, input.fileName);
+  const { uploadUrl, headers } = await presignAttachmentUpload({
+    objectKey,
+    contentType: input.contentType,
+  });
+  return { uploadUrl, objectKey, headers, maxBytes: maxAttachmentBytes() };
+});
+
+// Step 2: persist the metadata after a successful direct upload.
+app.post("/requests/:requestId/attachments", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  if (!isR2Configured()) {
+    return reply.code(501).send({ message: "Attachments are not configured." });
+  }
+  const actor = getUserContext(request.headers);
+  const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
+  const input = confirmAttachmentInputSchema.parse(request.body);
+
+  const kind = attachmentKindFor(input.contentType);
+  if (!isAllowedAttachmentType(input.contentType) || !kind) {
+    return reply.code(400).send({ message: "Unsupported file type." });
+  }
+  if (input.sizeBytes > maxAttachmentBytes()) {
+    return reply.code(400).send({ message: "File is too large." });
+  }
+  // The object key must live under this request's prefix — blocks writing a
+  // metadata row that points at another request's (or arbitrary) object.
+  if (!input.objectKey.startsWith(`service-requests/${params.requestId}/`)) {
+    return reply.code(400).send({ message: "Invalid object key." });
+  }
+
+  const current = await loadRequestForAttachment(params.requestId);
+  if (!current) return reply.code(404).send({ message: "Request not found." });
+  if (
+    !canViewRequest(toWorkflowActor(actor), {
+      customerId: current.customer_id,
+      assignedEngineerId: current.assigned_engineer_id,
+      status: current.status,
+    })
+  ) {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  const attachmentId = randomUUID();
+  await sql`
+    insert into service_desk.request_attachments (
+      id, request_id, uploaded_by, object_key, file_name, content_type, size_bytes, kind
+    )
+    values (
+      ${attachmentId},
+      ${params.requestId},
+      ${actor.id},
+      ${input.objectKey},
+      ${input.fileName},
+      ${input.contentType},
+      ${input.sizeBytes},
+      ${kind}
+    )
+  `;
+  await addHistory(params.requestId, actor, "attachment_added", { kind });
+
+  let url = "";
+  try {
+    url = await attachmentReadUrl({ objectKey: input.objectKey, fileName: input.fileName });
+  } catch {
+    /* metadata is saved; URL can be regenerated on read */
+  }
+  return reply.code(201).send(
+    requestAttachmentSchema.parse({
+      id: attachmentId,
+      requestId: params.requestId,
+      uploadedBy: actor.id,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      kind,
+      url,
+      createdAt: new Date().toISOString(),
+    }),
+  );
+});
+
+app.get("/requests/:requestId/attachments", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const actor = getUserContext(request.headers);
+  const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
+
+  const current = await loadRequestForAttachment(params.requestId);
+  if (!current) return reply.code(404).send({ message: "Request not found." });
+  if (
+    !canViewRequest(toWorkflowActor(actor), {
+      customerId: current.customer_id,
+      assignedEngineerId: current.assigned_engineer_id,
+      status: current.status,
+    })
+  ) {
+    return reply.code(403).send({ message: "Forbidden" });
+  }
+
+  const rows = await sql<any[]>`
+    select *
+    from service_desk.request_attachments
+    where request_id = ${params.requestId}
+    order by created_at asc
+  `;
+  return Promise.all(
+    rows.map(async (a) => {
+      let url = "";
+      try {
+        url = await attachmentReadUrl({ objectKey: a.object_key, fileName: a.file_name });
+      } catch {
+        /* keep empty */
+      }
+      return requestAttachmentSchema.parse({
+        id: a.id,
+        requestId: a.request_id,
+        uploadedBy: a.uploaded_by,
+        fileName: a.file_name,
+        contentType: a.content_type,
+        sizeBytes: Number(a.size_bytes),
+        kind: a.kind,
+        url,
+        createdAt: new Date(a.created_at).toISOString(),
+      });
+    }),
+  );
 });
 
 const port = Number(new URL(env.SERVICE_DESK_URL).port || "4003");

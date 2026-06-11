@@ -44,6 +44,19 @@ type UserRow = {
   approval_status: z.infer<typeof approvalStatusSchema>;
   firebase_uid: string | null;
   account_origin: AccountOrigin | null;
+  // Customer service-profile columns (migration 006). Optional on the type so
+  // the service still compiles/runs against an un-migrated database.
+  company_name?: string | null;
+  contact_phone?: string | null;
+  alternate_phone?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  profile_completed?: boolean | null;
+  profile_completed_at?: string | null;
   created_at: string;
 };
 
@@ -56,8 +69,52 @@ function mapUser(row: UserRow) {
     emailVerified: row.email_verified,
     approvalStatus: row.approval_status ?? "approved",
     accountOrigin: (row.account_origin ?? "self_signup") as AccountOrigin,
+    // Un-migrated databases (column absent → undefined) treat everyone as
+    // complete so the onboarding gate never traps users on old environments.
+    profileCompleted: row.profile_completed ?? true,
     createdAt: new Date(row.created_at).toISOString(),
   };
+}
+
+/** Full customer service profile for the profile GET/PATCH endpoints. */
+function mapProfile(row: UserRow) {
+  return {
+    displayName: row.display_name,
+    companyName: row.company_name ?? null,
+    contactPhone: row.contact_phone ?? null,
+    alternatePhone: row.alternate_phone ?? null,
+    addressLine1: row.address_line1 ?? null,
+    addressLine2: row.address_line2 ?? null,
+    city: row.city ?? null,
+    state: row.state ?? null,
+    postalCode: row.postal_code ?? null,
+    country: row.country ?? null,
+    profileCompleted: row.profile_completed ?? true,
+    profileCompletedAt: row.profile_completed_at
+      ? new Date(row.profile_completed_at).toISOString()
+      : null,
+  };
+}
+
+// The six fields that must all be present for a customer profile to count as
+// "complete". Optional fields (alt phone, address line 2, postal code,
+// country) don't gate completion.
+function isProfileComplete(p: {
+  displayName?: string | null;
+  companyName?: string | null;
+  contactPhone?: string | null;
+  addressLine1?: string | null;
+  city?: string | null;
+  state?: string | null;
+}): boolean {
+  return Boolean(
+    p.displayName?.trim() &&
+      p.companyName?.trim() &&
+      p.contactPhone?.trim() &&
+      p.addressLine1?.trim() &&
+      p.city?.trim() &&
+      p.state?.trim(),
+  );
 }
 
 async function findUserById(userId: string): Promise<UserRow | null> {
@@ -90,6 +147,30 @@ async function hasRemovedAtColumn(): Promise<boolean> {
     });
   }
   return removedAtColumnPromise;
+}
+
+// Detect whether migration 006 (customer profile columns) has been applied.
+// Probed once and cached so the profile endpoints degrade to display-name-only
+// on un-migrated databases instead of throwing "undefined column".
+let profileColumnsPromise: Promise<boolean> | null = null;
+async function hasProfileColumns(): Promise<boolean> {
+  if (!profileColumnsPromise) {
+    profileColumnsPromise = (async () => {
+      const rows = await sql<{ exists: boolean }[]>`
+        select true as exists
+        from information_schema.columns
+        where table_schema = 'auth'
+          and table_name = 'users'
+          and column_name = 'profile_completed'
+        limit 1
+      `;
+      return rows.length > 0;
+    })().catch((error) => {
+      profileColumnsPromise = null;
+      throw error;
+    });
+  }
+  return profileColumnsPromise;
 }
 
 // Generic existence check for a table on the connected database. Used by the
@@ -168,6 +249,9 @@ function triggerNotificationPoll(): void {
   void fetch(`${env.NOTIFICATION_SERVICE_URL}/process-outbox`, {
     method: "POST",
     headers: internalHeaders(),
+    // Empty JSON body required — internalHeaders() sets Content-Type:
+    // application/json and Fastify rejects an empty body with that type.
+    body: "{}",
   }).catch(() => {
     /* best-effort */
   });
@@ -639,30 +723,112 @@ app.get("/internal/users/:id", async (request, reply) => {
   return mapUser(user);
 });
 
-// Self-service profile update. Only the display name is mutable here — role,
-// approval status, email, and password are governed by other dedicated flows
-// so a user can never escalate themselves via this endpoint.
+// Customer service profile read. Returns both the session-shaped user and the
+// full profile. Used by the gateway for /api/me/profile (self) and
+// /api/admin/users/:id/profile (admin view).
+app.get("/internal/users/:id/profile", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const user = await findUserById(params.id);
+  if (!user) return reply.code(404).send({ message: "User not found." });
+  return reply.send({ user: mapUser(user), profile: mapProfile(user) });
+});
+
+// Self-service / admin profile update. Role, approval status, email, and
+// password are never touched here — only profile/contact fields — so a user
+// can never escalate themselves through this endpoint. `profile_completed` is
+// derived from whether the six required fields are all present (never set
+// directly by the client), so onboarding auto-completes and a partial edit
+// can't fake completion.
+const profilePatchSchema = z.object({
+  displayName: z.string().trim().min(2).max(80).optional(),
+  companyName: z.string().trim().max(120).nullable().optional(),
+  contactPhone: z.string().trim().max(30).nullable().optional(),
+  alternatePhone: z.string().trim().max(30).nullable().optional(),
+  addressLine1: z.string().trim().max(200).nullable().optional(),
+  addressLine2: z.string().trim().max(200).nullable().optional(),
+  city: z.string().trim().max(80).nullable().optional(),
+  state: z.string().trim().max(80).nullable().optional(),
+  postalCode: z.string().trim().max(20).nullable().optional(),
+  country: z.string().trim().max(80).nullable().optional(),
+});
+
 app.patch("/internal/users/:id/profile", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });
   }
-  const paramsSchema = z.object({ id: z.string().uuid() });
-  const params = paramsSchema.parse(request.params);
-  const bodySchema = z.object({
-    displayName: z.string().trim().min(2).max(80),
-  });
-  const input = bodySchema.parse(request.body);
+  const params = z.object({ id: z.string().uuid() }).parse(request.params);
+  const input = profilePatchSchema.parse(request.body);
 
   const existing = await findUserById(params.id);
   if (!existing) return reply.code(404).send({ message: "User not found." });
 
+  const supportsProfile = await hasProfileColumns();
+  if (!supportsProfile) {
+    // Legacy database: only the display name is updatable.
+    if (input.displayName) {
+      await sql`
+        update auth.users
+        set display_name = ${input.displayName}, updated_at = now()
+        where id = ${params.id}
+      `;
+    }
+    const updated = await findUserById(params.id);
+    return reply.send({
+      user: updated ? mapUser(updated) : null,
+      profile: updated ? mapProfile(updated) : null,
+    });
+  }
+
+  // Merge provided fields over the existing row: `undefined` leaves a field
+  // as-is, `null`/"" clears an optional field. display_name is NOT NULL so an
+  // empty value falls back to the current name.
+  const keep = <T>(provided: T | undefined, current: T): T =>
+    provided === undefined ? current : provided;
+  const next = {
+    displayName:
+      input.displayName && input.displayName.trim()
+        ? input.displayName.trim()
+        : existing.display_name,
+    companyName: keep(input.companyName, existing.company_name ?? null),
+    contactPhone: keep(input.contactPhone, existing.contact_phone ?? null),
+    alternatePhone: keep(input.alternatePhone, existing.alternate_phone ?? null),
+    addressLine1: keep(input.addressLine1, existing.address_line1 ?? null),
+    addressLine2: keep(input.addressLine2, existing.address_line2 ?? null),
+    city: keep(input.city, existing.city ?? null),
+    state: keep(input.state, existing.state ?? null),
+    postalCode: keep(input.postalCode, existing.postal_code ?? null),
+    country: keep(input.country, existing.country ?? null),
+  };
+
+  const complete = isProfileComplete(next);
+
   await sql`
-    update auth.users
-    set display_name = ${input.displayName}, updated_at = now()
+    update auth.users set
+      display_name = ${next.displayName},
+      company_name = ${next.companyName},
+      contact_phone = ${next.contactPhone},
+      alternate_phone = ${next.alternatePhone},
+      address_line1 = ${next.addressLine1},
+      address_line2 = ${next.addressLine2},
+      city = ${next.city},
+      state = ${next.state},
+      postal_code = ${next.postalCode},
+      country = ${next.country},
+      profile_completed = ${complete},
+      profile_completed_at = ${
+        complete ? sql`coalesce(profile_completed_at, now())` : sql`null`
+      },
+      updated_at = now()
     where id = ${params.id}
   `;
   const updated = await findUserById(params.id);
-  return reply.send({ user: updated ? mapUser(updated) : null });
+  return reply.send({
+    user: updated ? mapUser(updated) : null,
+    profile: updated ? mapProfile(updated) : null,
+  });
 });
 
 app.post("/internal/invite", async (request, reply) => {

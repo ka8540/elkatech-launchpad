@@ -15,6 +15,7 @@ import {
 } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   google_oauth_failed: "Google sign-in failed. Please try again or continue with email.",
@@ -45,6 +46,8 @@ function isLegacyFallbackError(error: unknown): boolean {
 }
 
 function landingPathForUser(user: AuthUser, next: string): string {
+  // Customers must finish onboarding before anything else.
+  if (user.role === "customer" && !user.profileCompleted) return "/app/complete-profile";
   if (next) return next;
   if (user.role === "customer") return "/app/requests";
   return "/app/queue";
@@ -228,8 +231,7 @@ const LoginPage = () => {
         </div>
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">Password</label>
-          <Input
-            type="password"
+          <PasswordInput
             required
             value={form.password}
             onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
