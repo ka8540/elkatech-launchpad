@@ -100564,8 +100564,11 @@ async function fetchJson(input, init = {}) {
   if (init.body == null && init.headers) {
     const headers = new Headers(init.headers);
     if (headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
-      headers.delete("content-type");
-      safeInit = { ...init, headers };
+      const method = init.method?.toUpperCase() ?? "GET";
+      if (method === "GET" || method === "HEAD") {
+        headers.delete("content-type");
+      }
+      safeInit = method === "GET" || method === "HEAD" ? { ...init, headers } : { ...init, headers, body: "{}" };
     }
   }
   const response = await fetch(input, safeInit);

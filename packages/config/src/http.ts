@@ -23,16 +23,21 @@ export async function fetchJson<T>(
   input: string,
   init: RequestInit = {},
 ): Promise<T> {
-  // Fastify rejects requests that declare `Content-Type: application/json`
-  // but carry no body (FST_ERR_CTP_EMPTY_JSON_BODY). Strip the JSON
-  // content-type when we aren't actually sending a body so bodyless
-  // internal calls (DELETE, etc.) pass the downstream parser.
+  // Fastify rejects JSON-labelled mutating requests without a JSON body.
+  // Send an empty object for bodyless internal mutations so downstream
+  // parsers consistently accept DELETE/POST/PATCH calls.
   let safeInit = init;
   if (init.body == null && init.headers) {
     const headers = new Headers(init.headers);
     if (headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
-      headers.delete("content-type");
-      safeInit = { ...init, headers };
+      const method = init.method?.toUpperCase() ?? "GET";
+      if (method === "GET" || method === "HEAD") {
+        headers.delete("content-type");
+      }
+      safeInit =
+        method === "GET" || method === "HEAD"
+          ? { ...init, headers }
+          : { ...init, headers, body: "{}" };
     }
   }
 
