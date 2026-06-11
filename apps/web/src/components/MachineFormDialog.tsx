@@ -206,10 +206,10 @@ const MachineFormDialog = ({
                       key={c.id}
                       onClick={() => set("customerId")(c.id)}
                       className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors",
+                        "flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
                         c.id === form.customerId
-                          ? "bg-[var(--lp-accent)]/12 text-[var(--lp-accent)]"
-                          : "text-[var(--lp-ink-soft)] hover:bg-[var(--lp-panel-2)]",
+                          ? "border-[var(--lp-accent)]/60 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]"
+                          : "border-transparent text-[var(--lp-ink-soft)] hover:bg-[var(--lp-panel-2)]",
                       )}
                     >
                       <span className="min-w-0 truncate">
