@@ -17,7 +17,7 @@
     "dev:service-desk": "npm run dev -w @elkatech/service-desk",
     "dev:notification": "npm run dev -w @elkatech/notification",
     "dev:infra": "docker compose up -d postgres mailpit",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm --prefix packages/contracts run build && npm --prefix packages/config run build && npm --prefix services/auth run build && npm --prefix services/catalog run build && npm --prefix services/gateway run build && npm --prefix services/service-desk run build && npm --prefix services/notification run build && npm --prefix apps/web run build",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "db:migrate": "tsx scripts/db-migrate.ts",
