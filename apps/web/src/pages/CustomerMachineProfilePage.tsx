@@ -1,13 +1,13 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, type LinkProps } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArrowLeft,
   CalendarDays,
-  ChevronDown,
   ClipboardList,
   ExternalLink,
+  Eye,
   HardDrive,
   History,
   Loader2,
@@ -17,8 +17,8 @@ import {
   Plus,
   RotateCcw,
   UserRound,
-  Users,
   Wrench,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
@@ -47,14 +47,15 @@ import MachineFormDialog from "@/components/MachineFormDialog";
 const cardSurface = "lp-card border";
 
 type ProfileResponse = { user: AuthUser; profile: CustomerProfile };
-type MachineActionTone = "edit" | "request" | "archive" | "reactivate" | "history";
+type MachineActionTone = "view" | "edit" | "request" | "archive" | "reactivate" | "neutral";
 
 const machineActionClass: Record<MachineActionTone, string> = {
+  view: "border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
   edit: "border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-accent)]/55 hover:bg-[var(--lp-accent)]/10 hover:text-[var(--lp-accent)]",
   request: "border-emerald-400/30 bg-emerald-400/10 text-emerald-700 hover:border-emerald-400/55 hover:bg-emerald-400/15 dark:text-emerald-200",
   archive: "border-amber-400/35 bg-amber-400/10 text-amber-700 hover:border-amber-400/60 hover:bg-amber-400/15 dark:text-amber-200",
   reactivate: "border-emerald-400/35 bg-emerald-400/10 text-emerald-700 hover:border-emerald-400/60 hover:bg-emerald-400/15 dark:text-emerald-200",
-  history: "border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
+  neutral: "border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] hover:border-[var(--lp-line-strong)] hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]",
 };
 
 const priorityClasses: Record<string, string> = {
@@ -110,6 +111,10 @@ function profileAddress(profile?: CustomerProfile | null) {
 
 function productLabel(machine: CustomerMachine) {
   return machine.productSnapshot?.name ?? machine.productId;
+}
+
+function productCategory(machine: CustomerMachine) {
+  return machine.productSnapshot?.categorySlug ?? machine.productId;
 }
 
 function machineLabel(machine: CustomerMachine | undefined) {
@@ -181,7 +186,7 @@ function MachineStatusBadge({ status }: { status: CustomerMachine["status"] }) {
       )}
     >
       <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-[var(--lp-faint)]")} />
-      {active ? "Active" : "Inactive / archived"}
+      {active ? "Active" : "Inactive"}
     </span>
   );
 }
@@ -202,7 +207,35 @@ function PriorityBadge({ priority }: { priority: string }) {
   );
 }
 
-function ActionButton({
+function IconActionButton({
+  tone,
+  label,
+  className,
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  tone: MachineActionTone;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      className={cn(
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs font-semibold transition-colors duration-150",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-45",
+        machineActionClass[tone],
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CompactActionButton({
   tone,
   children,
   className,
@@ -226,18 +259,18 @@ function ActionButton({
   );
 }
 
-function ActionLink({
+function CompactActionLink({
   tone,
   children,
   className,
   ...props
-}: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+}: LinkProps & {
   tone: MachineActionTone;
 }) {
   return (
     <Link
       className={cn(
-        "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors duration-150",
+        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors duration-150",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40",
         machineActionClass[tone],
         className,
@@ -249,8 +282,193 @@ function ActionLink({
   );
 }
 
-function scrollToHistory() {
-  document.getElementById("service-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
+      {children}
+    </h3>
+  );
+}
+
+function MachineDetailDrawer({
+  machine,
+  requests,
+  pending,
+  onClose,
+  onEdit,
+  onArchive,
+  onReactivate,
+}: {
+  machine: CustomerMachine | null;
+  requests: ServiceRequest[];
+  pending: boolean;
+  onClose: () => void;
+  onEdit: (machine: CustomerMachine) => void;
+  onArchive: (machine: CustomerMachine) => void;
+  onReactivate: (machine: CustomerMachine) => void;
+}) {
+  if (!machine) return null;
+  const active = machine.status === "active";
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <button
+        type="button"
+        aria-label="Close machine details"
+        className="absolute inset-0 cursor-default bg-black/45 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <aside className="relative flex h-full w-full max-w-xl flex-col border-l border-[var(--lp-line-strong)] bg-[var(--lp-panel)] shadow-2xl">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--lp-line)] px-5 py-4">
+          <div className="min-w-0">
+            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-accent)]">
+              Machine details
+            </p>
+            <h2 className="lp-display mt-1 break-words text-xl font-bold text-[var(--lp-ink)]">
+              {machine.displayLabel}
+            </h2>
+            <p className="mt-1 break-words text-sm text-[var(--lp-ink-soft)]">{productLabel(machine)}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] text-[var(--lp-ink-soft)] transition-colors hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="space-y-5">
+            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <SectionTitle>Machine overview</SectionTitle>
+                <MachineStatusBadge status={machine.status} />
+              </div>
+              <dl className="grid gap-4 sm:grid-cols-2">
+                <DetailLine label="Product name" value={productLabel(machine)} />
+                <DetailLine label="Category" value={productCategory(machine)} />
+                <DetailLine label="Nickname" value={machine.displayLabel} />
+                <DetailLine label="Unit number" value={machine.unitNumber} />
+                <DetailLine label="Serial number" value={machine.internalSerialNumber} />
+                <DetailLine label="Status" value={active ? "Active" : "Inactive / archived"} />
+              </dl>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
+              <SectionTitle>Installation</SectionTitle>
+              <dl className="mt-4 grid gap-4">
+                <DetailLine
+                  label="Full installation location"
+                  value={
+                    <span className="flex items-start gap-1.5">
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
+                      <span>{machine.siteLocation}</span>
+                    </span>
+                  }
+                />
+                <DetailLine
+                  label="Contact phone"
+                  value={
+                    machine.contactPhone ? (
+                      <span className="flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
+                        {machine.contactPhone}
+                      </span>
+                    ) : null
+                  }
+                />
+                <DetailLine label="Installed date" value={formatDate(machine.installDate)} />
+              </dl>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
+              <SectionTitle>Product snapshot</SectionTitle>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                <DetailLine label="Product ID" value={machine.productSnapshot?.id ?? machine.productId} />
+                <DetailLine label="Name" value={machine.productSnapshot?.name} />
+                <DetailLine label="Category" value={machine.productSnapshot?.categorySlug} />
+                <DetailLine label="Slug" value={machine.productSnapshot?.slug} />
+                <DetailLine label="Price display" value={machine.productSnapshot?.priceDisplay} />
+              </dl>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
+              <SectionTitle>Audit</SectionTitle>
+              <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+                <DetailLine label="Created by" value="Not captured" />
+                <DetailLine label="Created at" value={formatDateTime(machine.createdAt)} />
+                <DetailLine label="Updated at" value={formatDateTime(machine.updatedAt)} />
+                <DetailLine label="Internal notes" value={machine.notes} />
+              </dl>
+            </section>
+
+            <section className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4">
+              <SectionTitle>Related service requests</SectionTitle>
+              {requests.length === 0 ? (
+                <p className="mt-4 rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 px-3 py-2.5 text-sm text-[var(--lp-ink-soft)]">
+                  No service requests found for this machine yet.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  {requests.slice(0, 5).map((request) => (
+                    <Link
+                      key={request.id}
+                      to={`/app/requests/${request.id}`}
+                      className="block rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 p-3 transition-colors hover:border-[var(--lp-accent)]/45"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-[var(--lp-ink)]">{request.requestNumber}</span>
+                          <span className="mt-1 block truncate text-xs text-[var(--lp-ink-soft)]">{request.subject}</span>
+                        </div>
+                        <ExternalLink className="h-4 w-4 shrink-0 text-[var(--lp-faint)]" />
+                      </div>
+                      <span className="mt-2 flex flex-wrap gap-1.5">
+                        <RequestStatusBadge request={request} />
+                        <PriorityBadge priority={request.priority} />
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+
+        <footer className="flex shrink-0 flex-col gap-2 border-t border-[var(--lp-line)] px-5 py-4 sm:flex-row sm:flex-wrap sm:justify-end">
+          {active && (
+            <CompactActionLink
+              tone="request"
+              to={`/app/requests/new?customerId=${machine.customerId}&machineId=${machine.id}`}
+            >
+              <Wrench className="h-3.5 w-3.5" />
+              Create request
+            </CompactActionLink>
+          )}
+          <CompactActionButton tone="edit" onClick={() => onEdit(machine)}>
+            <Pencil className="h-3.5 w-3.5" />
+            Edit machine
+          </CompactActionButton>
+          {active ? (
+            <CompactActionButton tone="archive" disabled={pending} onClick={() => onArchive(machine)}>
+              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+              Archive
+            </CompactActionButton>
+          ) : (
+            <CompactActionButton tone="reactivate" disabled={pending} onClick={() => onReactivate(machine)}>
+              {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              Reactivate
+            </CompactActionButton>
+          )}
+          <CompactActionButton tone="neutral" onClick={onClose}>
+            Close
+          </CompactActionButton>
+        </footer>
+      </aside>
+    </div>
+  );
 }
 
 const CustomerMachineProfilePage = () => {
@@ -259,7 +477,7 @@ const CustomerMachineProfilePage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomerMachine | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<CustomerMachine | null>(null);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [pendingMachineId, setPendingMachineId] = useState<string | null>(null);
 
   const profileQuery = useQuery({
@@ -316,6 +534,10 @@ const CustomerMachineProfilePage = () => {
   const createRequestTo = activeMachines[0]
     ? `/app/requests/new?customerId=${customerId}&machineId=${activeMachines[0].id}`
     : `/app/requests/new?customerId=${customerId}`;
+  const selectedMachine = selectedMachineId ? machines.find((machine) => machine.id === selectedMachineId) ?? null : null;
+  const selectedMachineRequests = selectedMachine
+    ? relatedRequests.filter((request) => request.customerMachineId === selectedMachine.id)
+    : [];
 
   const statusMutation = useMutation({
     mutationFn: async ({ machine, action }: { machine: CustomerMachine; action: "archive" | "reactivate" }) => {
@@ -359,17 +581,81 @@ const CustomerMachineProfilePage = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin", "customer-machines"] });
   }
 
-  function toggleExpanded(machineId: string) {
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(machineId)) next.delete(machineId);
-      else next.add(machineId);
-      return next;
-    });
+  function openDetails(machine: CustomerMachine) {
+    setSelectedMachineId(machine.id);
+  }
+
+  function closeDetails() {
+    setSelectedMachineId(null);
   }
 
   const isLoading = profileQuery.isLoading || machinesQuery.isLoading || usersQuery.isLoading;
   const profileError = profileQuery.error instanceof ApiError ? profileQuery.error.message : null;
+
+  const renderMachineActions = (machine: CustomerMachine) => {
+    const pending = pendingMachineId === machine.id;
+    const active = machine.status === "active";
+
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
+        <IconActionButton
+          tone="view"
+          label={`View details for ${machine.displayLabel}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            openDetails(machine);
+          }}
+        >
+          <Eye className="h-4 w-4" />
+        </IconActionButton>
+        {active && (
+          <CompactActionLink
+            tone="request"
+            to={`/app/requests/new?customerId=${machine.customerId}&machineId=${machine.id}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Wrench className="h-3.5 w-3.5" />
+            Request
+          </CompactActionLink>
+        )}
+        <IconActionButton
+          tone="edit"
+          label={`Edit ${machine.displayLabel}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            openEdit(machine);
+          }}
+        >
+          <Pencil className="h-4 w-4" />
+        </IconActionButton>
+        {active ? (
+          <IconActionButton
+            tone="archive"
+            label={`Archive ${machine.displayLabel}`}
+            disabled={pending}
+            onClick={(event) => {
+              event.stopPropagation();
+              setConfirmArchive(machine);
+            }}
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+          </IconActionButton>
+        ) : (
+          <IconActionButton
+            tone="reactivate"
+            label={`Reactivate ${machine.displayLabel}`}
+            disabled={pending}
+            onClick={(event) => {
+              event.stopPropagation();
+              statusMutation.mutate({ machine, action: "reactivate" });
+            }}
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          </IconActionButton>
+        )}
+      </div>
+    );
+  };
 
   if (!customerId) {
     return (
@@ -505,9 +791,9 @@ const CustomerMachineProfilePage = () => {
       <section className={cn("min-w-0 overflow-hidden rounded-2xl", cardSurface)}>
         <div className="flex min-w-0 flex-col gap-3 border-b border-[var(--lp-line)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h2 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">Linked machines</h2>
+            <h2 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">Linked Machines</h2>
             <p className="mt-1 text-sm text-[var(--lp-ink-soft)]">
-              Full installed equipment details for this customer.
+              Installed equipment assigned to this customer.
             </p>
           </div>
           <Button
@@ -531,185 +817,139 @@ const CustomerMachineProfilePage = () => {
             <p className="mt-1 text-sm text-[var(--lp-ink-soft)]">Link an installed machine to start building this profile.</p>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--lp-line)]">
-            {machines.map((machine) => {
-              const pending = pendingMachineId === machine.id;
-              const expanded = expandedIds.has(machine.id);
-              const machineRequests = relatedRequests.filter((request) => request.customerMachineId === machine.id);
-              return (
-                <article key={machine.id} className="min-w-0 px-5 py-4">
-                  <div className="grid min-w-0 gap-3 lg:grid-cols-2 2xl:grid-cols-[1.2fr_0.75fr_0.75fr_0.9fr_1.1fr_0.85fr_0.8fr_0.85fr]">
+          <>
+            <div className="hidden lg:block">
+              <table className="w-full table-fixed border-collapse text-sm">
+                <colgroup>
+                  <col style={{ width: "23%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "13%" }} />
+                  <col style={{ width: "19%" }} />
+                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "9%" }} />
+                  <col style={{ width: "10%" }} />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-[var(--lp-line)] text-left">
+                    {["Machine / Product", "Nickname / Unit", "Serial number", "Installed site", "Status", "Updated", "Actions"].map((header) => (
+                      <th
+                        key={header}
+                        className={cn(
+                          "px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--lp-faint)]",
+                          header === "Actions" && "text-right",
+                        )}
+                      >
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {machines.map((machine) => (
+                    <tr
+                      key={machine.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openDetails(machine)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openDetails(machine);
+                        }
+                      }}
+                      className="cursor-pointer border-b border-[var(--lp-line)] align-middle transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
+                    >
+                      <td className="px-4 py-3">
+                        <span className="block truncate font-semibold text-[var(--lp-ink)]" title={productLabel(machine)}>
+                          {productLabel(machine)}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-[var(--lp-faint)]" title={productCategory(machine)}>
+                          {productCategory(machine)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="block truncate text-[var(--lp-ink-soft)]" title={machine.displayLabel}>
+                          {machine.displayLabel}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-[var(--lp-faint)]" title={machine.unitNumber ?? undefined}>
+                          {machine.unitNumber ? `Unit ${machine.unitNumber}` : "No unit"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="block truncate text-[var(--lp-ink-soft)]" title={machine.internalSerialNumber ?? undefined}>
+                          {machine.internalSerialNumber || "-"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="flex min-w-0 items-center gap-1.5 text-[var(--lp-ink-soft)]" title={machine.siteLocation}>
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
+                          <span className="truncate">{machine.siteLocation}</span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <MachineStatusBadge status={machine.status} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-[var(--lp-faint)]">{formatDate(machine.updatedAt)}</td>
+                      <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                        {renderMachineActions(machine)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="space-y-3 p-4 lg:hidden">
+              {machines.map((machine) => (
+                <article
+                  key={machine.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openDetails(machine)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openDetails(machine);
+                    }
+                  }}
+                  className="min-w-0 cursor-pointer rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/35 p-4 transition-colors hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35"
+                >
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[var(--lp-ink)]">{productLabel(machine)}</p>
+                      <p className="mt-0.5 truncate text-xs text-[var(--lp-faint)]">{productCategory(machine)}</p>
+                    </div>
+                    <MachineStatusBadge status={machine.status} />
+                  </div>
+                  <div className="mt-3 grid min-w-0 gap-2 text-sm sm:grid-cols-2">
                     <DetailLine
-                      label="Machine / Product"
+                      label="Nickname / Unit"
                       value={
                         <span>
-                          <span className="block font-semibold">{productLabel(machine)}</span>
-                          <span className="text-xs text-[var(--lp-faint)]">{machine.productSnapshot?.categorySlug ?? machine.productId}</span>
+                          <span className="block">{machine.displayLabel}</span>
+                          <span className="text-xs text-[var(--lp-faint)]">{machine.unitNumber ? `Unit ${machine.unitNumber}` : "No unit"}</span>
                         </span>
                       }
                     />
-                    <DetailLine label="Nickname" value={machine.displayLabel} />
-                    <DetailLine label="Unit number" value={machine.unitNumber} />
                     <DetailLine label="Serial number" value={machine.internalSerialNumber} />
                     <DetailLine
-                      label="Installation location"
+                      label="Installed site"
                       value={
-                        <span className="flex items-start gap-1.5">
-                          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
-                          <span>{machine.siteLocation}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
+                          <span className="truncate">{machine.siteLocation}</span>
                         </span>
                       }
                     />
-                    <DetailLine
-                      label="Contact phone"
-                      value={
-                        machine.contactPhone ? (
-                          <span className="flex items-center gap-1.5">
-                            <Phone className="h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
-                            {machine.contactPhone}
-                          </span>
-                        ) : null
-                      }
-                    />
-                    <DetailLine label="Installed date" value={formatDate(machine.installDate)} />
-                    <DetailLine label="Updated" value={formatDate(machine.updatedAt)} />
+                    <DetailLine label="Last updated" value={formatDate(machine.updatedAt)} />
                   </div>
-
-                  <div className="mt-4 flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                    <MachineStatusBadge status={machine.status} />
-                    <div className="flex flex-wrap gap-2">
-                      <ActionButton
-                        tone="edit"
-                        title={`Edit ${machine.displayLabel}`}
-                        aria-label={`Edit ${machine.displayLabel}`}
-                        onClick={() => openEdit(machine)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </ActionButton>
-                      {machine.status === "active" && (
-                        <ActionLink
-                          tone="request"
-                          to={`/app/requests/new?customerId=${machine.customerId}&machineId=${machine.id}`}
-                          title={`Create request for ${machine.displayLabel}`}
-                          aria-label={`Create request for ${machine.displayLabel}`}
-                        >
-                          <Wrench className="h-3.5 w-3.5" />
-                          Create request
-                        </ActionLink>
-                      )}
-                      <ActionButton
-                        tone="history"
-                        title={`View request history for ${machine.displayLabel}`}
-                        aria-label={`View request history for ${machine.displayLabel}`}
-                        onClick={scrollToHistory}
-                      >
-                        <History className="h-3.5 w-3.5" />
-                        History
-                      </ActionButton>
-                      {machine.status === "active" ? (
-                        <ActionButton
-                          tone="archive"
-                          title={`Archive ${machine.displayLabel}`}
-                          aria-label={`Archive ${machine.displayLabel}`}
-                          disabled={pending}
-                          onClick={() => setConfirmArchive(machine)}
-                        >
-                          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
-                          Archive
-                        </ActionButton>
-                      ) : (
-                        <ActionButton
-                          tone="reactivate"
-                          title={`Reactivate ${machine.displayLabel}`}
-                          aria-label={`Reactivate ${machine.displayLabel}`}
-                          disabled={pending}
-                          onClick={() => statusMutation.mutate({ machine, action: "reactivate" })}
-                        >
-                          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                          Reactivate
-                        </ActionButton>
-                      )}
-                      <ActionButton
-                        tone="history"
-                        aria-expanded={expanded}
-                        aria-controls={`machine-details-${machine.id}`}
-                        onClick={() => toggleExpanded(machine.id)}
-                        title={expanded ? "Hide machine details" : "Show machine details"}
-                      >
-                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} />
-                        Details
-                      </ActionButton>
-                    </div>
+                  <div className="mt-3 flex justify-end border-t border-[var(--lp-line)] pt-3" onClick={(event) => event.stopPropagation()}>
+                    {renderMachineActions(machine)}
                   </div>
-
-                  {expanded && (
-                    <div
-                      id={`machine-details-${machine.id}`}
-                      className="mt-4 grid min-w-0 gap-4 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/45 p-4 xl:grid-cols-3"
-                    >
-                      <section className="min-w-0">
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
-                          Product snapshot
-                        </h3>
-                        <dl className="grid gap-3">
-                          <DetailLine label="Product ID" value={machine.productSnapshot?.id ?? machine.productId} />
-                          <DetailLine label="Name" value={machine.productSnapshot?.name} />
-                          <DetailLine label="Category" value={machine.productSnapshot?.categorySlug} />
-                          <DetailLine label="Slug" value={machine.productSnapshot?.slug} />
-                          <DetailLine label="Price display" value={machine.productSnapshot?.priceDisplay} />
-                        </dl>
-                      </section>
-                      <section className="min-w-0">
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
-                          Installation and audit
-                        </h3>
-                        <dl className="grid gap-3">
-                          <DetailLine label="Full site location" value={machine.siteLocation} />
-                          <DetailLine label="Contact phone" value={machine.contactPhone} />
-                          <DetailLine label="Internal notes" value={machine.notes} />
-                          <DetailLine label="Created by" value="Not captured" />
-                          <DetailLine label="Created at" value={formatDateTime(machine.createdAt)} />
-                          <DetailLine label="Updated at" value={formatDateTime(machine.updatedAt)} />
-                        </dl>
-                      </section>
-                      <section className="min-w-0">
-                        <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--lp-faint)]">
-                          Related service requests
-                        </h3>
-                        {requestsQuery.isLoading ? (
-                          <p className="flex items-center gap-2 text-sm text-[var(--lp-faint)]">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading requests...
-                          </p>
-                        ) : machineRequests.length === 0 ? (
-                          <p className="rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 p-4 text-sm text-[var(--lp-ink-soft)]">
-                            Service request history will appear here.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {machineRequests.slice(0, 4).map((request) => (
-                              <Link
-                                key={request.id}
-                                to={`/app/requests/${request.id}`}
-                                className="block rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel)]/60 p-3 transition-colors hover:border-[var(--lp-accent)]/45"
-                              >
-                                <span className="block text-sm font-semibold text-[var(--lp-ink)]">{request.requestNumber}</span>
-                                <span className="mt-1 flex flex-wrap gap-1.5">
-                                  <RequestStatusBadge request={request} />
-                                  <PriorityBadge priority={request.priority} />
-                                </span>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                      </section>
-                    </div>
-                  )}
                 </article>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </section>
 
@@ -727,8 +967,8 @@ const CustomerMachineProfilePage = () => {
             <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : relatedRequests.length === 0 ? (
-          <div className="px-5 py-12 text-center">
-            <History className="mx-auto mb-3 h-7 w-7 text-[var(--lp-faint)]" />
+          <div className="px-5 py-10 text-center">
+            <History className="mx-auto mb-3 h-6 w-6 text-[var(--lp-faint)]" />
             <p className="text-sm font-medium text-[var(--lp-ink)]">Service request history will appear here.</p>
             <p className="mt-1 text-sm text-[var(--lp-ink-soft)]">No service requests are tied to this customer yet.</p>
           </div>
@@ -831,6 +1071,19 @@ const CustomerMachineProfilePage = () => {
           </>
         )}
       </section>
+
+      <MachineDetailDrawer
+        machine={selectedMachine}
+        requests={selectedMachineRequests}
+        pending={selectedMachine ? pendingMachineId === selectedMachine.id : false}
+        onClose={closeDetails}
+        onEdit={(machine) => {
+          closeDetails();
+          openEdit(machine);
+        }}
+        onArchive={setConfirmArchive}
+        onReactivate={(machine) => statusMutation.mutate({ machine, action: "reactivate" })}
+      />
 
       <MachineFormDialog
         open={dialogOpen}
