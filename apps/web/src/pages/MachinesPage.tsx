@@ -3,6 +3,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleSlash,
   Eye,
   HardDrive,
@@ -61,6 +64,88 @@ const actionToneClass: Record<ActionTone, string> = {
 
 const filterFieldClass =
   "h-10 rounded-xl border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)]/75 text-sm text-[var(--lp-ink)] shadow-none transition-colors placeholder:text-[var(--lp-faint)] focus:border-[var(--lp-accent)]/55 focus:outline-none focus:ring-2 focus:ring-[var(--lp-accent)]/15";
+
+/** Filter <select> with the native arrow hidden and a theme-matched chevron
+ *  overlaid (muted, copper on focus). Keeps native select behaviour. */
+function FilterSelect({
+  value,
+  onChange,
+  ariaLabel,
+  className,
+  children,
+}: {
+  value: string;
+  onChange: (event: React.ChangeEvent<HTMLSelectElement>) => void;
+  ariaLabel: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("group relative min-w-0", className)}>
+      <select
+        value={value}
+        onChange={onChange}
+        aria-label={ariaLabel}
+        className={cn(filterFieldClass, "peer w-full cursor-pointer appearance-none px-3 pr-9")}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)] transition-colors group-hover:text-[var(--lp-ink-soft)] peer-focus:text-[var(--lp-accent)]"
+      />
+    </div>
+  );
+}
+
+const PAGE_SIZE = 10;
+
+const pagerButtonClass =
+  "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/55 hover:text-[var(--lp-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-40";
+
+/** Compact range pager: ‹ 1–10 › — no labels, prev disabled on first page,
+ *  next disabled on last page. */
+function Pagination({
+  page,
+  totalPages,
+  rangeStart,
+  rangeEnd,
+  onPrev,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  rangeStart: number;
+  rangeEnd: number;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-2 sm:justify-end">
+      <button
+        type="button"
+        onClick={onPrev}
+        disabled={page <= 1}
+        aria-label="Previous page"
+        className={pagerButtonClass}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span className="lp-mono min-w-[58px] text-center text-xs font-medium tabular-nums text-[var(--lp-ink-soft)]">
+        {rangeStart}–{rangeEnd}
+      </span>
+      <button
+        type="button"
+        onClick={onNext}
+        disabled={page >= totalPages}
+        aria-label="Next page"
+        className={pagerButtonClass}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 function actionClasses(tone: ActionTone, className?: string) {
   return cn(
@@ -245,6 +330,7 @@ const MachinesPage = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [productFilter, setProductFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomerMachine | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<EnrichedMachine | null>(null);
@@ -316,6 +402,25 @@ const MachinesPage = () => {
   }, [enriched, search, statusFilter, productFilter]);
 
   const groups = useMemo(() => groupByCustomer(filteredMachines), [filteredMachines]);
+
+  // Pagination over the filtered + grouped rows (10 per page).
+  const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
+  const pagedGroups = useMemo(
+    () => groups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [groups, page],
+  );
+  const rangeStart = groups.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, groups.length);
+
+  // Reset to the first page whenever the filtered set changes (search/filters).
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, productFilter]);
+
+  // Keep the current page valid if rows shrink (e.g. after an archive).
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const statusMutation = useMutation({
     mutationFn: async ({ machine, action }: { machine: EnrichedMachine; action: "archive" | "reactivate" }) => {
@@ -489,19 +594,21 @@ const MachinesPage = () => {
           />
         </div>
         <div className="grid min-w-0 gap-2 sm:grid-cols-2 2xl:flex 2xl:w-auto 2xl:flex-none 2xl:flex-wrap 2xl:justify-end">
-          <select
+          <FilterSelect
+            ariaLabel="Filter by status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className={cn(filterFieldClass, "min-w-0 px-3 sm:min-w-[150px] 2xl:w-[168px]")}
+            className="sm:min-w-[150px] 2xl:w-[168px]"
           >
             <option value="all">All statuses</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive / archived</option>
-          </select>
-          <select
+          </FilterSelect>
+          <FilterSelect
+            ariaLabel="Filter by product"
             value={productFilter}
             onChange={(e) => setProductFilter(e.target.value)}
-            className={cn(filterFieldClass, "min-w-0 px-3 sm:min-w-[190px] 2xl:w-[240px]")}
+            className="sm:min-w-[190px] 2xl:w-[240px]"
           >
             <option value="all">All products</option>
             {products.map((p) => (
@@ -509,7 +616,7 @@ const MachinesPage = () => {
                 {p.name}
               </option>
             ))}
-          </select>
+          </FilterSelect>
         </div>
       </div>
 
@@ -554,7 +661,7 @@ const MachinesPage = () => {
                 </td>
               </tr>
             ) : (
-              groups.map((group) => {
+              pagedGroups.map((group) => {
                 const moreLabel = machineMoreLabel(group);
                 return (
                   <tr
@@ -627,7 +734,7 @@ const MachinesPage = () => {
             <p className="text-sm text-[var(--lp-ink-soft)]">{emptyText}</p>
           </div>
         ) : (
-          groups.map((group) => {
+          pagedGroups.map((group) => {
             const moreLabel = machineMoreLabel(group);
             return (
               <article
@@ -686,6 +793,18 @@ const MachinesPage = () => {
           })
         )}
       </div>
+
+      {/* Pagination — only when the filtered list exceeds one page */}
+      {!isLoading && groups.length > PAGE_SIZE && (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          onPrev={() => setPage((p) => Math.max(1, p - 1))}
+          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+        />
+      )}
 
       <MachineFormDialog
         open={dialogOpen}
