@@ -22,8 +22,10 @@ export function getCsrfToken() {
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method = init.method?.toUpperCase() ?? "GET";
   const headers = new Headers(init.headers ?? {});
+  const hasBody = init.body !== undefined && init.body !== null;
+  const body = method !== "GET" && method !== "HEAD" && !hasBody ? "{}" : init.body;
 
-  if (!headers.has("content-type") && init.body) {
+  if (!headers.has("content-type") && body) {
     headers.set("content-type", "application/json");
   }
 
@@ -37,6 +39,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const response = await fetch(path, {
     credentials: "include",
     ...init,
+    body,
     headers,
   });
 
