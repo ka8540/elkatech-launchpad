@@ -63146,7 +63146,10 @@ var createCustomerMachineInputSchema = external_exports.object({
   unitNumber: external_exports.string().trim().max(40).optional(),
   internalSerialNumber: external_exports.string().trim().max(120).optional(),
   siteName: external_exports.string().trim().max(120).optional(),
-  siteLocation: external_exports.string().trim().min(2).max(200),
+  // Optional: when omitted, the backend falls back to the customer's saved
+  // profile address. Only an admin "different installation site" override
+  // sends an explicit value.
+  siteLocation: external_exports.string().trim().min(2).max(200).optional(),
   contactPhone: external_exports.string().trim().max(30).optional(),
   purchaseDate: external_exports.string().trim().max(20).optional(),
   installDate: external_exports.string().trim().max(20).optional(),

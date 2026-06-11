@@ -98151,7 +98151,10 @@ var createCustomerMachineInputSchema = external_exports.object({
   unitNumber: external_exports.string().trim().max(40).optional(),
   internalSerialNumber: external_exports.string().trim().max(120).optional(),
   siteName: external_exports.string().trim().max(120).optional(),
-  siteLocation: external_exports.string().trim().min(2).max(200),
+  // Optional: when omitted, the backend falls back to the customer's saved
+  // profile address. Only an admin "different installation site" override
+  // sends an explicit value.
+  siteLocation: external_exports.string().trim().min(2).max(200).optional(),
   contactPhone: external_exports.string().trim().max(30).optional(),
   purchaseDate: external_exports.string().trim().max(20).optional(),
   installDate: external_exports.string().trim().max(20).optional(),
@@ -100907,7 +100910,20 @@ async function createMachineForCustomer(customerId, input) {
   try {
     product = await getCatalogProduct(input.productId);
   } catch {
-    return null;
+    return { error: "Unknown product." };
+  }
+  let siteLocation = input.siteLocation?.trim() ?? "";
+  let contactPhone = input.contactPhone?.trim() ?? "";
+  if (!siteLocation || !contactPhone) {
+    try {
+      const { profile } = await getUserProfile(customerId);
+      if (!siteLocation) siteLocation = addressSummary(profile);
+      if (!contactPhone) contactPhone = profile?.contactPhone?.trim() ?? "";
+    } catch {
+    }
+  }
+  if (!siteLocation) {
+    return { error: "Add a customer address or enter a machine installation site." };
   }
   const productSnapshot = {
     id: product.id,
@@ -100934,8 +100950,8 @@ async function createMachineForCustomer(customerId, input) {
       ${unit || null},
       ${input.internalSerialNumber?.trim() || null},
       ${input.siteName?.trim() || null},
-      ${input.siteLocation.trim()},
-      ${input.contactPhone?.trim() || null},
+      ${siteLocation},
+      ${contactPhone || null},
       ${input.purchaseDate?.trim() || null},
       ${input.installDate?.trim() || null},
       ${"active"},
@@ -100945,7 +100961,7 @@ async function createMachineForCustomer(customerId, input) {
   const rows = await sql`
     select * from service_desk.customer_machines where id = ${machineId} limit 1
   `;
-  return rows[0];
+  return { row: rows[0] };
 }
 async function getCatalogProduct(productId) {
   return fetchJson(
@@ -100964,6 +100980,11 @@ async function getUserProfile(userId) {
   return fetchJson(`${env2.AUTH_SERVICE_URL}/internal/users/${userId}/profile`, {
     headers: internalHeaders()
   });
+}
+function addressSummary(profile) {
+  if (!profile) return "";
+  const cityState = [profile.city, profile.state].map((v) => v?.trim()).filter(Boolean).join(", ");
+  return [profile.addressLine1?.trim(), cityState].filter(Boolean).join(", ").trim();
 }
 function ensureAdmin(actor, reply) {
   if (actor.role !== "admin") {
@@ -101803,10 +101824,11 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
   if (customerError) {
     return reply.code(400).send({ message: customerError });
   }
-  const machineRow = await createMachineForCustomer(params.customerId, input);
-  if (!machineRow) {
-    return reply.code(400).send({ message: "Unknown product." });
+  const result = await createMachineForCustomer(params.customerId, input);
+  if (result.error || !result.row) {
+    return reply.code(400).send({ message: result.error ?? "Could not link machine." });
   }
+  const machineRow = result.row;
   await emitOutbox("customer_machine.linked", machineRow.id, {
     machineId: machineRow.id,
     customerId: params.customerId,
@@ -101846,10 +101868,11 @@ app.post("/admin/customer-machines", async (request, reply) => {
     return reply.code(400).send({ message: customerError });
   }
   const { customerId, ...machineInput } = input;
-  const machineRow = await createMachineForCustomer(customerId, machineInput);
-  if (!machineRow) {
-    return reply.code(400).send({ message: "Unknown product." });
+  const result = await createMachineForCustomer(customerId, machineInput);
+  if (result.error || !result.row) {
+    return reply.code(400).send({ message: result.error ?? "Could not link machine." });
   }
+  const machineRow = result.row;
   await emitOutbox("customer_machine.linked", machineRow.id, {
     machineId: machineRow.id,
     customerId,

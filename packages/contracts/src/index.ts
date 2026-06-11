@@ -337,7 +337,10 @@ export const createCustomerMachineInputSchema = z.object({
   unitNumber: z.string().trim().max(40).optional(),
   internalSerialNumber: z.string().trim().max(120).optional(),
   siteName: z.string().trim().max(120).optional(),
-  siteLocation: z.string().trim().min(2).max(200),
+  // Optional: when omitted, the backend falls back to the customer's saved
+  // profile address. Only an admin "different installation site" override
+  // sends an explicit value.
+  siteLocation: z.string().trim().min(2).max(200).optional(),
   contactPhone: z.string().trim().max(30).optional(),
   purchaseDate: z.string().trim().max(20).optional(),
   installDate: z.string().trim().max(20).optional(),

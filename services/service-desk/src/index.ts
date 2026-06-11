@@ -253,20 +253,38 @@ async function customerAssignmentError(customerId: string): Promise<string | nul
   return null;
 }
 
-/** Insert a machine for a customer from a validated input. Shared by the
+/** Insert a machine for a customer. Site location and contact phone default
+ *  from the customer's saved profile when the admin doesn't override them, so
+ *  admin never has to retype already-known contact details. Shared by the
  *  per-user route (customer in the URL) and the dashboard route (customer in
- *  the body). Returns the created machine row, or null if the product is
- *  unknown. */
+ *  the body). Returns the created row, or a user-facing error message. */
 async function createMachineForCustomer(
   customerId: string,
   input: z.infer<typeof createCustomerMachineInputSchema>,
-): Promise<any | null> {
+): Promise<{ row?: any; error?: string }> {
   let product;
   try {
     product = await getCatalogProduct(input.productId);
   } catch {
-    return null;
+    return { error: "Unknown product." };
   }
+
+  // Resolve site + phone: explicit override → customer profile default.
+  let siteLocation = input.siteLocation?.trim() ?? "";
+  let contactPhone = input.contactPhone?.trim() ?? "";
+  if (!siteLocation || !contactPhone) {
+    try {
+      const { profile } = await getUserProfile(customerId);
+      if (!siteLocation) siteLocation = addressSummary(profile);
+      if (!contactPhone) contactPhone = profile?.contactPhone?.trim() ?? "";
+    } catch {
+      // Profile lookup failed — fall through to the missing-site guard below.
+    }
+  }
+  if (!siteLocation) {
+    return { error: "Add a customer address or enter a machine installation site." };
+  }
+
   const productSnapshot = {
     id: product.id,
     categorySlug: product.categorySlug,
@@ -294,8 +312,8 @@ async function createMachineForCustomer(
       ${unit || null},
       ${input.internalSerialNumber?.trim() || null},
       ${input.siteName?.trim() || null},
-      ${input.siteLocation.trim()},
-      ${input.contactPhone?.trim() || null},
+      ${siteLocation},
+      ${contactPhone || null},
       ${input.purchaseDate?.trim() || null},
       ${input.installDate?.trim() || null},
       ${"active"},
@@ -305,7 +323,7 @@ async function createMachineForCustomer(
   const rows = await sql<any[]>`
     select * from service_desk.customer_machines where id = ${machineId} limit 1
   `;
-  return rows[0];
+  return { row: rows[0] };
 }
 
 async function getCatalogProduct(productId: string) {
@@ -330,19 +348,37 @@ async function getUserById(userId: string) {
   });
 }
 
+type CustomerProfileLite = {
+  displayName: string;
+  companyName: string | null;
+  contactPhone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  country: string | null;
+};
+
 async function getUserProfile(userId: string) {
   return fetchJson<{
     user: { id: string; email: string; displayName: string };
-    profile: {
-      displayName: string;
-      companyName: string | null;
-      contactPhone: string | null;
-      city: string | null;
-      state: string | null;
-    };
+    profile: CustomerProfileLite;
   }>(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/profile`, {
     headers: internalHeaders(),
   });
+}
+
+/** A one-line site/location string from a customer's saved profile address.
+ *  Used as the default machine installation site when the admin doesn't enter
+ *  an explicit override. */
+function addressSummary(profile: Partial<CustomerProfileLite> | null | undefined): string {
+  if (!profile) return "";
+  const cityState = [profile.city, profile.state].map((v) => v?.trim()).filter(Boolean).join(", ");
+  return [profile.addressLine1?.trim(), cityState]
+    .filter(Boolean)
+    .join(", ")
+    .trim();
 }
 
 /** Admin-only gate for customer-machine management. */
@@ -1347,10 +1383,11 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
   if (customerError) {
     return reply.code(400).send({ message: customerError });
   }
-  const machineRow = await createMachineForCustomer(params.customerId, input);
-  if (!machineRow) {
-    return reply.code(400).send({ message: "Unknown product." });
+  const result = await createMachineForCustomer(params.customerId, input);
+  if (result.error || !result.row) {
+    return reply.code(400).send({ message: result.error ?? "Could not link machine." });
   }
+  const machineRow = result.row;
   await emitOutbox("customer_machine.linked", machineRow.id, {
     machineId: machineRow.id,
     customerId: params.customerId,
@@ -1396,10 +1433,11 @@ app.post("/admin/customer-machines", async (request, reply) => {
     return reply.code(400).send({ message: customerError });
   }
   const { customerId, ...machineInput } = input;
-  const machineRow = await createMachineForCustomer(customerId, machineInput);
-  if (!machineRow) {
-    return reply.code(400).send({ message: "Unknown product." });
+  const result = await createMachineForCustomer(customerId, machineInput);
+  if (result.error || !result.row) {
+    return reply.code(400).send({ message: result.error ?? "Could not link machine." });
   }
+  const machineRow = result.row;
   await emitOutbox("customer_machine.linked", machineRow.id, {
     machineId: machineRow.id,
     customerId,
