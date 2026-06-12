@@ -99152,6 +99152,9 @@ function canChangeRoles(role) {
 function canManageUsers(role) {
   return role === "admin" || role === "owner";
 }
+function canManageOperational(role) {
+  return role === "admin" || role === "owner";
+}
 function canAssignRequests(role) {
   return role === "admin" || role === "owner" || role === "support";
 }
@@ -102606,8 +102609,9 @@ app.get("/api/admin/users", async (request, reply) => {
 var adminMachineUserParams = external_exports.object({ userId: external_exports.string().uuid() });
 var adminMachineParams = external_exports.object({ machineId: external_exports.string().uuid() });
 app.get("/api/admin/users/:userId/machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   const { userId } = adminMachineUserParams.parse(request.params);
   try {
     return await fetchJson(`${env.SERVICE_DESK_URL}/admin/customers/${userId}/machines`, {
@@ -102618,8 +102622,9 @@ app.get("/api/admin/users/:userId/machines", async (request, reply) => {
   }
 });
 app.post("/api/admin/users/:userId/machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = adminMachineUserParams.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
@@ -102634,8 +102639,9 @@ app.post("/api/admin/users/:userId/machines", async (request, reply) => {
   }
 });
 app.patch("/api/admin/machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
@@ -102650,8 +102656,9 @@ app.patch("/api/admin/machines/:machineId", async (request, reply) => {
   }
 });
 app.delete("/api/admin/machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   try {
@@ -102664,8 +102671,9 @@ app.delete("/api/admin/machines/:machineId", async (request, reply) => {
   }
 });
 app.get("/api/admin/customer-machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   const query = adminMachineListQuerySchema.parse(request.query ?? {});
   const params = new URLSearchParams();
   if (query.customerId) params.set("customerId", query.customerId);
@@ -102682,8 +102690,9 @@ app.get("/api/admin/customer-machines", async (request, reply) => {
   }
 });
 app.post("/api/admin/customer-machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const input = adminLinkMachineInputSchema.parse(request.body);
   try {
@@ -102697,8 +102706,9 @@ app.post("/api/admin/customer-machines", async (request, reply) => {
   }
 });
 app.patch("/api/admin/customer-machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
@@ -102713,8 +102723,9 @@ app.patch("/api/admin/customer-machines/:machineId", async (request, reply) => {
   }
 });
 app.delete("/api/admin/customer-machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   try {

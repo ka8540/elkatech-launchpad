@@ -97894,6 +97894,9 @@ var NEVER = INVALID;
 
 // packages/contracts/src/index.ts
 var roleSchema = external_exports.enum(["customer", "engineer", "support", "owner", "admin"]);
+function canManageOperational(role) {
+  return role === "admin" || role === "owner";
+}
 function canAssignRequests(role) {
   return role === "admin" || role === "owner" || role === "support";
 }
@@ -101002,8 +101005,8 @@ function addressSummary(profile) {
   const cityState = [profile.city, profile.state].map((v) => v?.trim()).filter(Boolean).join(", ");
   return [profile.addressLine1?.trim(), cityState].filter(Boolean).join(", ").trim();
 }
-function ensureAdmin(actor, reply) {
-  if (actor.role !== "admin") {
+function ensureOperational(actor, reply) {
+  if (!canManageOperational(actor.role)) {
     reply.code(403).send({ message: "Forbidden" });
     return false;
   }
@@ -101818,7 +101821,7 @@ app.get("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const rows = await sql`
     select *
@@ -101833,7 +101836,7 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
   const customerError = await customerAssignmentError(params.customerId);
@@ -101860,7 +101863,7 @@ app.get("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const query = adminMachineListQuerySchema.parse(request.query);
   const rows = await sql`
     select *
@@ -101877,7 +101880,7 @@ app.post("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const input = adminLinkMachineInputSchema.parse(request.body);
   const customerError = await customerAssignmentError(input.customerId);
   if (customerError) {
@@ -101904,7 +101907,7 @@ app.patch("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
   const existing = await getMachineById(params.machineId);
@@ -101952,7 +101955,7 @@ app.delete("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const existing = await getMachineById(params.machineId);
   if (!existing) {

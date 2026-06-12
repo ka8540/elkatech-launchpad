@@ -27,6 +27,7 @@ import {
   updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
   canAssignRequests,
+  canManageOperational,
   type Role,
 } from "@elkatech/contracts";
 import {
@@ -388,8 +389,11 @@ function addressSummary(profile: Partial<CustomerProfileLite> | null | undefined
 }
 
 /** Admin-only gate for customer-machine management. */
-function ensureAdmin(actor: UserContext, reply: any): boolean {
-  if (actor.role !== "admin") {
+// Customer-machine management is an operational capability: admin and owner.
+// (Support can view machines through the activity dashboard but does not reach
+// these mutation/listing endpoints.) The gateway enforces the same set.
+function ensureOperational(actor: UserContext, reply: any): boolean {
+  if (!canManageOperational(actor.role)) {
     reply.code(403).send({ message: "Forbidden" });
     return false;
   }
@@ -1366,7 +1370,7 @@ app.get("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const rows = await sql<any[]>`
     select *
@@ -1382,7 +1386,7 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
 
@@ -1412,7 +1416,7 @@ app.get("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const query = adminMachineListQuerySchema.parse(request.query);
 
   const rows = await sql<any[]>`
@@ -1432,7 +1436,7 @@ app.post("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const input = adminLinkMachineInputSchema.parse(request.body);
 
   const customerError = await customerAssignmentError(input.customerId);
@@ -1461,7 +1465,7 @@ app.patch("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
 
@@ -1517,7 +1521,7 @@ app.delete("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const existing = await getMachineById(params.machineId);
   if (!existing) {
