@@ -26,6 +26,9 @@ import {
   updateCustomerMachineInputSchema,
   updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
+  canAssignRequests,
+  canManageOperational,
+  type Role,
 } from "@elkatech/contracts";
 import {
   attachmentKindFor,
@@ -344,7 +347,7 @@ async function getUserById(userId: string) {
     id: string;
     email: string;
     displayName: string;
-    role: "customer" | "engineer" | "admin";
+    role: Role;
     emailVerified: boolean;
     createdAt: string;
   }>(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
@@ -386,8 +389,11 @@ function addressSummary(profile: Partial<CustomerProfileLite> | null | undefined
 }
 
 /** Admin-only gate for customer-machine management. */
-function ensureAdmin(actor: UserContext, reply: any): boolean {
-  if (actor.role !== "admin") {
+// Customer-machine management is an operational capability: admin and owner.
+// (Support can view machines through the activity dashboard but does not reach
+// these mutation/listing endpoints.) The gateway enforces the same set.
+function ensureOperational(actor: UserContext, reply: any): boolean {
+  if (!canManageOperational(actor.role)) {
     reply.code(403).send({ message: "Forbidden" });
     return false;
   }
@@ -1106,7 +1112,8 @@ app.post("/requests/:requestId/assign", async (request, reply) => {
   }
 
   const actor = getUserContext(request.headers);
-  if (actor.role !== "admin") {
+  // Admin, owner and support can assign/reassign requests to engineers.
+  if (!canAssignRequests(actor.role)) {
     return reply.code(403).send({ message: "Forbidden" });
   }
 
@@ -1363,7 +1370,7 @@ app.get("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const rows = await sql<any[]>`
     select *
@@ -1379,7 +1386,7 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
 
@@ -1409,7 +1416,7 @@ app.get("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const query = adminMachineListQuerySchema.parse(request.query);
 
   const rows = await sql<any[]>`
@@ -1429,7 +1436,7 @@ app.post("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const input = adminLinkMachineInputSchema.parse(request.body);
 
   const customerError = await customerAssignmentError(input.customerId);
@@ -1458,7 +1465,7 @@ app.patch("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
 
@@ -1514,7 +1521,7 @@ app.delete("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const existing = await getMachineById(params.machineId);
   if (!existing) {
@@ -1700,6 +1707,115 @@ app.get("/requests/:requestId/attachments", async (request, reply) => {
       });
     }),
   );
+});
+
+// ── Customer-activity aggregates (internal) ─────────────────────────────────
+// Powers the Customer Activity dashboard. The gateway calls these with trusted
+// internal headers *after* enforcing the admin/owner/support RBAC, so there is
+// no per-actor role check here. Returns request + machine aggregates keyed by
+// customer id; the gateway joins them with the auth user list.
+app.get("/internal/customer-activity", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const perCustomer = await sql<any[]>`
+    select
+      customer_id,
+      count(*)::int as total_requests,
+      count(*) filter (where status not in ('resolved', 'closed'))::int as open_requests,
+      count(*) filter (where status = 'resolved')::int as resolved_requests,
+      count(*) filter (where status = 'waiting_for_customer')::int as pending_requests,
+      max(updated_at) as last_activity
+    from service_desk.requests
+    group by customer_id
+  `;
+  const latest = await sql<any[]>`
+    select distinct on (customer_id)
+      customer_id, subject, status, created_at
+    from service_desk.requests
+    order by customer_id, created_at desc
+  `;
+  const machines = await sql<any[]>`
+    select customer_id, count(*)::int as machine_count
+    from service_desk.customer_machines
+    where status = 'active'
+    group by customer_id
+  `;
+
+  const latestById = new Map(latest.map((r) => [r.customer_id, r]));
+  const machinesById = new Map(machines.map((r) => [r.customer_id, r.machine_count]));
+
+  const customers = perCustomer.map((r) => {
+    const latestRow = latestById.get(r.customer_id);
+    return {
+      customerId: r.customer_id,
+      totalRequests: r.total_requests,
+      openRequests: r.open_requests,
+      resolvedRequests: r.resolved_requests,
+      pendingRequests: r.pending_requests,
+      machineCount: machinesById.get(r.customer_id) ?? 0,
+      lastActivity: r.last_activity ? new Date(r.last_activity).toISOString() : null,
+      latestSubject: latestRow?.subject ?? null,
+      latestStatus: latestRow?.status ?? null,
+      latestAt: latestRow?.created_at ? new Date(latestRow.created_at).toISOString() : null,
+    };
+  });
+  // Customers that own machines but have no requests yet still matter.
+  for (const m of machines) {
+    if (!customers.some((c) => c.customerId === m.customer_id)) {
+      customers.push({
+        customerId: m.customer_id,
+        totalRequests: 0,
+        openRequests: 0,
+        resolvedRequests: 0,
+        pendingRequests: 0,
+        machineCount: m.machine_count,
+        lastActivity: null,
+        latestSubject: null,
+        latestStatus: null,
+        latestAt: null,
+      });
+    }
+  }
+
+  return { customers };
+});
+
+app.get("/internal/customer-activity/:customerId", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = z.object({ customerId: z.string().uuid() }).parse(request.params);
+
+  const requestRows = await sql<any[]>`
+    select *
+    from service_desk.requests
+    where customer_id = ${params.customerId}
+    order by created_at desc
+  `;
+  const machineRows = await sql<any[]>`
+    select *
+    from service_desk.customer_machines
+    where customer_id = ${params.customerId}
+    order by updated_at desc
+  `;
+
+  const stats = {
+    totalRequests: requestRows.length,
+    openRequests: requestRows.filter(
+      (r) => r.status !== "resolved" && r.status !== "closed",
+    ).length,
+    pendingRequests: requestRows.filter((r) => r.status === "waiting_for_customer").length,
+    resolvedRequests: requestRows.filter((r) => r.status === "resolved").length,
+    machineCount: machineRows.filter((r) => r.status === "active").length,
+  };
+
+  return {
+    stats,
+    requests: requestRows.map(mapRequestRow),
+    machines: machineRows.map(mapMachineRow),
+  };
 });
 
 const port = Number(new URL(env.SERVICE_DESK_URL).port || "4003");

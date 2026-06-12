@@ -1,7 +1,95 @@
 import { z } from "zod";
 
-export const roleSchema = z.enum(["customer", "engineer", "admin"]);
+export const roleSchema = z.enum(["customer", "engineer", "support", "owner", "admin"]);
 export type Role = z.infer<typeof roleSchema>;
+
+// ─── Role-based permission helpers ──────────────────────────────────────────
+// Single source of truth for what each role may do. Imported by the gateway
+// and services for *enforcement*, and by the web app for UI gating — so a
+// hidden button always lines up with a backend 403. Never gate a sensitive
+// action on UI alone; always call the matching helper on the backend too.
+//
+// Role overview:
+//   admin    — highest system role; everything, including permanent deletion.
+//   owner    — business operations; approve/suspend/assign roles (not admin),
+//              assign requests, view activity. CANNOT permanently delete data.
+//   support  — service operations; view activity, create requests for
+//              customers, assign requests. CANNOT manage users.
+//   engineer — handles assigned requests (unchanged).
+//   customer — own portal data only (unchanged).
+
+export const STAFF_ROLES = ["engineer", "support", "owner", "admin"] as const;
+
+export function isAdmin(role: Role): boolean {
+  return role === "admin";
+}
+export function isOwner(role: Role): boolean {
+  return role === "owner";
+}
+export function isSupport(role: Role): boolean {
+  return role === "support";
+}
+
+/** Permanent deletion / removal of user/customer data — admin only. */
+export function canDeleteUsers(role: Role): boolean {
+  return role === "admin";
+}
+/** Approve or reject pending accounts. */
+export function canApproveUsers(role: Role): boolean {
+  return role === "admin" || role === "owner";
+}
+/** Suspend or reactivate accounts. */
+export function canSuspendUsers(role: Role): boolean {
+  return role === "admin" || role === "owner";
+}
+/** Change another user's role (owner is further restricted, see below). */
+export function canChangeRoles(role: Role): boolean {
+  return role === "admin" || role === "owner";
+}
+/** See and use the Users management page at all. */
+export function canManageUsers(role: Role): boolean {
+  return role === "admin" || role === "owner";
+}
+/** Operational management (customer machines, etc.). */
+export function canManageOperational(role: Role): boolean {
+  return role === "admin" || role === "owner";
+}
+/** Assign / reassign requests to engineers. */
+export function canAssignRequests(role: Role): boolean {
+  return role === "admin" || role === "owner" || role === "support";
+}
+/** Create a service request on behalf of a customer. */
+export function canCreateRequestForCustomer(role: Role): boolean {
+  return role === "admin" || role === "owner" || role === "support";
+}
+/** View the customer-activity and support operations dashboards. */
+export function canViewCustomerActivity(role: Role): boolean {
+  return role === "admin" || role === "owner" || role === "support";
+}
+export function canViewSupportDashboard(role: Role): boolean {
+  return role === "admin" || role === "owner" || role === "support";
+}
+/** Access the system Admin panel (health, dangerous system controls). */
+export function canAccessAdminPanel(role: Role): boolean {
+  return role === "admin";
+}
+
+/** Roles `actor` is allowed to assign to other users. Owner can never grant admin. */
+export function assignableRolesFor(actor: Role): Role[] {
+  if (actor === "admin") return ["customer", "engineer", "support", "owner", "admin"];
+  if (actor === "owner") return ["customer", "engineer", "support", "owner"];
+  return [];
+}
+
+/**
+ * Whether `actorRole` may modify (role change / approve / suspend) a user who
+ * currently has `targetRole`. Owners must never touch admin accounts.
+ */
+export function canManageTargetUser(actorRole: Role, targetRole: Role): boolean {
+  if (actorRole === "admin") return true;
+  if (actorRole === "owner") return targetRole !== "admin";
+  return false;
+}
 
 export const requestPrioritySchema = z.enum(["low", "normal", "high", "urgent"]);
 export type RequestPriority = z.infer<typeof requestPrioritySchema>;
@@ -199,7 +287,7 @@ export const verifyEmailInputSchema = z.object({
 export const inviteUserInputSchema = z.object({
   email: z.string().email(),
   displayName: z.string().min(2),
-  role: z.enum(["customer", "engineer", "admin"]),
+  role: roleSchema,
 });
 
 export const changeUserRoleInputSchema = z.object({

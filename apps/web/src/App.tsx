@@ -30,6 +30,8 @@ import UsersPage from "@/pages/UsersPage";
 import MachinesPage from "@/pages/MachinesPage";
 import CustomerMachineProfilePage from "@/pages/CustomerMachineProfilePage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
+import CustomerActivityPage from "@/pages/CustomerActivityPage";
+import SupportDashboardPage from "@/pages/SupportDashboardPage";
 import AccountPage from "@/pages/AccountPage";
 
 const queryClient = new QueryClient();
@@ -85,8 +87,32 @@ const App = () => {
               <Route
                 path="queue"
                 element={
-                  <ProtectedRoute roles={["engineer", "admin"]}>
+                  <ProtectedRoute roles={["engineer", "support", "owner", "admin"]}>
                     <QueuePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="support"
+                element={
+                  <ProtectedRoute roles={["support", "owner", "admin"]}>
+                    <SupportDashboardPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="customer-activity"
+                element={
+                  <ProtectedRoute roles={["support", "owner", "admin"]}>
+                    <CustomerActivityPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="customer-activity/:customerId"
+                element={
+                  <ProtectedRoute roles={["support", "owner", "admin"]}>
+                    <CustomerActivityPage />
                   </ProtectedRoute>
                 }
               />
@@ -101,7 +127,7 @@ const App = () => {
               <Route
                 path="users"
                 element={
-                  <ProtectedRoute roles={["admin"]}>
+                  <ProtectedRoute roles={["owner", "admin"]}>
                     <UsersPage />
                   </ProtectedRoute>
                 }
@@ -109,7 +135,7 @@ const App = () => {
               <Route
                 path="machines"
                 element={
-                  <ProtectedRoute roles={["admin"]}>
+                  <ProtectedRoute roles={["owner", "admin"]}>
                     <MachinesPage />
                   </ProtectedRoute>
                 }
@@ -117,7 +143,7 @@ const App = () => {
               <Route
                 path="machines/:customerId"
                 element={
-                  <ProtectedRoute roles={["admin"]}>
+                  <ProtectedRoute roles={["owner", "admin"]}>
                     <CustomerMachineProfilePage />
                   </ProtectedRoute>
                 }

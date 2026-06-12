@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CustomerMachinePublic, IssueType, RequestPriority } from "@elkatech/contracts";
+import { canCreateRequestForCustomer } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
 import { uploadRequestAttachment } from "@/lib/attachments";
 import { useSession } from "@/hooks/use-session";
@@ -275,9 +276,9 @@ const RequestNewPage = () => {
   const { data: session } = useSession();
   const user = session?.user;
 
-  // Admins create requests on behalf of customers — never blocked by their own
-  // (empty) machine list.
-  if (user?.role === "admin") {
+  // Admin, owner and support create requests on behalf of customers — never
+  // blocked by their own (empty) machine list. Backend enforces the same.
+  if (user && canCreateRequestForCustomer(user.role)) {
     return <AdminCreateRequest />;
   }
 
