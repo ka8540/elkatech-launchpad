@@ -12,6 +12,25 @@ This repository contains:
 - Shared TypeScript/Zod contracts and shared backend configuration helpers.
 - Local development infrastructure for PostgreSQL and Mailpit.
 
+## Documentation
+
+Current product and technical documentation (PDF, regenerated from this branch's
+README and codebase). Editable Markdown sources sit alongside each PDF, and
+`docs/build_pdfs.py` rebuilds the PDFs from those sources.
+
+| Document | PDF | Source |
+| --- | --- | --- |
+| Product Requirements Document (PRD) | [docs/ElkaTech_PRD.pdf](docs/ElkaTech_PRD.pdf) | [docs/ElkaTech_PRD.md](docs/ElkaTech_PRD.md) |
+| Technical Requirements Document (TRD) | [docs/ElkaTech_TRD.pdf](docs/ElkaTech_TRD.pdf) | [docs/ElkaTech_TRD.md](docs/ElkaTech_TRD.md) |
+| App Flow / UI-UX Flow | [docs/ElkaTech_App_Flow_UI_UX.pdf](docs/ElkaTech_App_Flow_UI_UX.pdf) | [docs/ElkaTech_App_Flow_UI_UX.md](docs/ElkaTech_App_Flow_UI_UX.md) |
+| Database Schema Design | [docs/ElkaTech_Schema_Design.pdf](docs/ElkaTech_Schema_Design.pdf) | [docs/ElkaTech_Schema_Design.md](docs/ElkaTech_Schema_Design.md) |
+
+Regenerate the PDFs after editing any source:
+
+```sh
+python3 docs/build_pdfs.py
+```
+
 ## Features
 
 - Responsive public landing page with hero, about, work, brands, infrastructure, why-us, contact, and footer sections.
