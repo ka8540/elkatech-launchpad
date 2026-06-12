@@ -100089,7 +100089,7 @@ var coerce = {
 var NEVER = INVALID;
 
 // packages/contracts/src/index.ts
-var roleSchema = external_exports.enum(["customer", "engineer", "admin"]);
+var roleSchema = external_exports.enum(["customer", "engineer", "support", "owner", "admin"]);
 var requestPrioritySchema = external_exports.enum(["low", "normal", "high", "urgent"]);
 var requestStatusSchema = external_exports.enum([
   "new",
@@ -100234,7 +100234,7 @@ var verifyEmailInputSchema = external_exports.object({
 var inviteUserInputSchema = external_exports.object({
   email: external_exports.string().email(),
   displayName: external_exports.string().min(2),
-  role: external_exports.enum(["customer", "engineer", "admin"])
+  role: roleSchema
 });
 var changeUserRoleInputSchema = external_exports.object({
   role: roleSchema
@@ -102785,10 +102785,10 @@ var import_ioredis = __toESM(require_built3(), 1);
 var app = (0, import_fastify.default)({ logger: true });
 var sql = getDb();
 var env = getEnv();
-var ensureProfileColumnsPromise = null;
-function ensureProfileColumns() {
-  if (!ensureProfileColumnsPromise) {
-    ensureProfileColumnsPromise = sql.unsafe(
+var ensureAuthSchemaPromise = null;
+function ensureAuthSchema() {
+  if (!ensureAuthSchemaPromise) {
+    ensureAuthSchemaPromise = sql.unsafe(
       `alter table auth.users add column if not exists company_name text;
          alter table auth.users add column if not exists contact_phone text;
          alter table auth.users add column if not exists alternate_phone text;
@@ -102799,16 +102799,37 @@ function ensureProfileColumns() {
          alter table auth.users add column if not exists postal_code text;
          alter table auth.users add column if not exists country text default 'India';
          alter table auth.users add column if not exists profile_completed boolean not null default false;
-         alter table auth.users add column if not exists profile_completed_at timestamptz;`
+         alter table auth.users add column if not exists profile_completed_at timestamptz;
+         do $$
+         begin
+           if not exists (
+             select 1 from pg_constraint
+             where conname = 'users_role_check'
+               and pg_get_constraintdef(oid) like '%owner%'
+           ) then
+             alter table auth.users drop constraint if exists users_role_check;
+             alter table auth.users add constraint users_role_check
+               check (role in ('customer','engineer','support','owner','admin'));
+           end if;
+           if not exists (
+             select 1 from pg_constraint
+             where conname = 'tokens_role_check'
+               and pg_get_constraintdef(oid) like '%owner%'
+           ) then
+             alter table auth.tokens drop constraint if exists tokens_role_check;
+             alter table auth.tokens add constraint tokens_role_check
+               check (role in ('customer','engineer','support','owner','admin'));
+           end if;
+         end $$;`
     ).then(() => void 0).catch((error) => {
-      ensureProfileColumnsPromise = null;
+      ensureAuthSchemaPromise = null;
       throw error;
     });
   }
-  return ensureProfileColumnsPromise;
+  return ensureAuthSchemaPromise;
 }
 app.addHook("onRequest", async () => {
-  await ensureProfileColumns();
+  await ensureAuthSchema();
 });
 function resolvedProfileCompleted(row) {
   if (row.profile_completed === void 0) return true;
@@ -103880,7 +103901,7 @@ app.post("/internal/users/:id/role", async (request, reply) => {
       });
     }
   }
-  const grantingStaffRole = input.role === "engineer" || input.role === "admin";
+  const grantingStaffRole = input.role === "engineer" || input.role === "support" || input.role === "owner" || input.role === "admin";
   const origin = user.account_origin ?? "self_signup";
   const isStaffManaged = origin === "admin_invite" || origin === "legacy";
   if (grantingStaffRole && !isStaffManaged && user.role === "customer") {

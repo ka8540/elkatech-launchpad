@@ -33,17 +33,19 @@ const env = getEnv();
 
 // Preview deployments run against a per-branch Neon database (the Neon-Vercel
 // integration) that is forked once and never re-migrated, so it can be missing
-// migration 006's customer-profile columns. When `profile_completed` is absent,
-// `resolvedProfileCompleted` falls back to "treat as complete" and new
-// customers skip /app/complete-profile and land on the dashboard. We can't
-// migrate at build time (the Vercel build has no Neon DATABASE_URL — it falls
-// back to localhost), so guarantee the columns at runtime on the same
-// connection the handlers use. Idempotent and cached: at most one run per cold
-// start, and a no-op once the columns already exist (e.g. the production DB).
-let ensureProfileColumnsPromise: Promise<void> | null = null;
-function ensureProfileColumns(): Promise<void> {
-  if (!ensureProfileColumnsPromise) {
-    ensureProfileColumnsPromise = sql
+// migration 006's customer-profile columns and migration 008's relaxed role
+// check. When `profile_completed` is absent, `resolvedProfileCompleted` falls
+// back to "treat as complete" and new customers skip /app/complete-profile;
+// when the role check still only allows customer/engineer/admin, creating an
+// owner/support user fails. We can't migrate at build time (the Vercel build
+// has no Neon DATABASE_URL — it falls back to localhost), so guarantee the
+// schema at runtime on the same connection the handlers use. Idempotent and
+// cached: at most one run per cold start, and a no-op once the schema is
+// already current (e.g. the production DB).
+let ensureAuthSchemaPromise: Promise<void> | null = null;
+function ensureAuthSchema(): Promise<void> {
+  if (!ensureAuthSchemaPromise) {
+    ensureAuthSchemaPromise = sql
       .unsafe(
         `alter table auth.users add column if not exists company_name text;
          alter table auth.users add column if not exists contact_phone text;
@@ -55,22 +57,44 @@ function ensureProfileColumns(): Promise<void> {
          alter table auth.users add column if not exists postal_code text;
          alter table auth.users add column if not exists country text default 'India';
          alter table auth.users add column if not exists profile_completed boolean not null default false;
-         alter table auth.users add column if not exists profile_completed_at timestamptz;`,
+         alter table auth.users add column if not exists profile_completed_at timestamptz;
+         do $$
+         begin
+           if not exists (
+             select 1 from pg_constraint
+             where conname = 'users_role_check'
+               and pg_get_constraintdef(oid) like '%owner%'
+           ) then
+             alter table auth.users drop constraint if exists users_role_check;
+             alter table auth.users add constraint users_role_check
+               check (role in ('customer','engineer','support','owner','admin'));
+           end if;
+           if not exists (
+             select 1 from pg_constraint
+             where conname = 'tokens_role_check'
+               and pg_get_constraintdef(oid) like '%owner%'
+           ) then
+             alter table auth.tokens drop constraint if exists tokens_role_check;
+             alter table auth.tokens add constraint tokens_role_check
+               check (role in ('customer','engineer','support','owner','admin'));
+           end if;
+         end $$;`,
       )
       .then(() => undefined)
       .catch((error) => {
         // Don't cache the failure — let a later request retry.
-        ensureProfileColumnsPromise = null;
+        ensureAuthSchemaPromise = null;
         throw error;
       });
   }
-  return ensureProfileColumnsPromise;
+  return ensureAuthSchemaPromise;
 }
 
-// Guarantee the customer-profile schema exists before any handler reads or
-// writes auth.users. Cached, so this is a no-op after the first request.
+// Guarantee the auth schema (customer-profile columns + relaxed role check)
+// exists before any handler reads or writes auth.users. Cached, so this is a
+// no-op after the first request.
 app.addHook("onRequest", async () => {
-  await ensureProfileColumns();
+  await ensureAuthSchema();
 });
 
 type AccountOrigin = "self_signup" | "admin_invite" | "firebase_google" | "legacy";
@@ -1440,10 +1464,15 @@ app.post("/internal/users/:id/role", async (request, reply) => {
     }
   }
 
-  // Staff-only role moves (anything that grants engineer or admin) require
-  // the target to be a staff-managed account. Self-signup customers can be
-  // approved, suspended, or removed, but not promoted.
-  const grantingStaffRole = input.role === "engineer" || input.role === "admin";
+  // Staff-only role moves (anything that grants a staff role: engineer,
+  // support, owner, or admin) require the target to be a staff-managed
+  // account. Self-signup customers can be approved, suspended, or removed,
+  // but not promoted.
+  const grantingStaffRole =
+    input.role === "engineer" ||
+    input.role === "support" ||
+    input.role === "owner" ||
+    input.role === "admin";
   const origin = (user.account_origin ?? "self_signup") as AccountOrigin;
   const isStaffManaged = origin === "admin_invite" || origin === "legacy";
   if (grantingStaffRole && !isStaffManaged && user.role === "customer") {

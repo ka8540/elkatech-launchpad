@@ -62898,7 +62898,7 @@ function getRedis() {
 }
 
 // packages/contracts/src/index.ts
-var roleSchema = external_exports.enum(["customer", "engineer", "admin"]);
+var roleSchema = external_exports.enum(["customer", "engineer", "support", "owner", "admin"]);
 var requestPrioritySchema = external_exports.enum(["low", "normal", "high", "urgent"]);
 var requestStatusSchema = external_exports.enum([
   "new",
@@ -63043,7 +63043,7 @@ var verifyEmailInputSchema = external_exports.object({
 var inviteUserInputSchema = external_exports.object({
   email: external_exports.string().email(),
   displayName: external_exports.string().min(2),
-  role: external_exports.enum(["customer", "engineer", "admin"])
+  role: roleSchema
 });
 var changeUserRoleInputSchema = external_exports.object({
   role: roleSchema

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
+  Activity,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -8,6 +9,7 @@ import {
   Gauge,
   HardDrive,
   Inbox,
+  LifeBuoy,
   LogOut,
   Menu,
   Moon,
@@ -19,6 +21,14 @@ import {
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  canAccessAdminPanel,
+  canManageOperational,
+  canManageUsers,
+  canViewCustomerActivity,
+  canViewSupportDashboard,
+  type Role,
+} from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
 import { firebaseSignOut } from "@/lib/firebase";
 import { useSession } from "@/hooks/use-session";
@@ -315,7 +325,10 @@ const PortalShell = () => {
   });
 
   const user = data?.user;
-  const isStaff = user?.role === "engineer" || user?.role === "admin";
+  const role = user?.role as Role | undefined;
+  // Staff = anyone who works the queue (engineer, support, owner, admin).
+  const isStaff =
+    role === "engineer" || role === "support" || role === "owner" || role === "admin";
 
   const requestsItem: NavItem = {
     to: "/app/requests",
@@ -333,18 +346,26 @@ const PortalShell = () => {
     exact: true,
   };
 
+  // Role-driven nav. Each entry is gated by the same permission helper the
+  // backend uses, so the sidebar never offers a page the API would 403.
   const navItems: NavItem[] = [
     requestsItem,
     createRequestItem,
-    ...(isStaff
-      ? [{ to: "/app/queue", icon: Inbox, label: "Queue" }]
+    ...(isStaff ? [{ to: "/app/queue", icon: Inbox, label: "Queue" }] : []),
+    ...(role && canViewSupportDashboard(role)
+      ? [{ to: "/app/support", icon: LifeBuoy, label: "Support" }]
       : []),
-    ...(user?.role === "admin"
-      ? [
-          { to: "/app/admin", icon: Gauge, label: "Admin" },
-          { to: "/app/users", icon: Users, label: "Users" },
-          { to: "/app/machines", icon: HardDrive, label: "Customer Machines" },
-        ]
+    ...(role && canViewCustomerActivity(role)
+      ? [{ to: "/app/customer-activity", icon: Activity, label: "Customer Activity" }]
+      : []),
+    ...(role && canManageOperational(role)
+      ? [{ to: "/app/machines", icon: HardDrive, label: "Customer Machines" }]
+      : []),
+    ...(role && canManageUsers(role)
+      ? [{ to: "/app/users", icon: Users, label: "Users" }]
+      : []),
+    ...(role && canAccessAdminPanel(role)
+      ? [{ to: "/app/admin", icon: Gauge, label: "Admin" }]
       : []),
   ];
 

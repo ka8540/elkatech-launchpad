@@ -121,6 +121,54 @@ flowchart TD
 - Local development uses separate HTTP services on ports `4000` through `4004`; Vite proxies `/api` to the gateway on port `4000`.
 - Root `vercel.json` rewrites API paths to bundled handlers in `api/*.mjs` and SPA routes to `index.html`.
 
+## Portal roles and permissions
+
+The platform has five portal roles. Permission rules live in one place —
+`packages/contracts/src/index.ts` (`canDeleteUsers`, `canApproveUsers`,
+`canSuspendUsers`, `canChangeRoles`, `canAssignRequests`,
+`canCreateRequestForCustomer`, `canViewCustomerActivity`, `assignableRolesFor`,
+`canManageTargetUser`, …). The **gateway** calls these helpers to enforce every
+sensitive endpoint (returning `403`), and the **web app** calls the same helpers
+to gate UI, so a hidden control always corresponds to a backend rejection.
+Permissions are never enforced in React alone.
+
+| Capability | Admin | Owner | Support | Engineer | Customer |
+| --- | --- | --- | --- | --- | --- |
+| Permanently delete / remove user data | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Approve / reject users | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Suspend / reactivate users | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Change roles | ✅ (any) | ✅ (not admin) | ❌ | ❌ | ❌ |
+| View Users management page | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Customer Activity dashboard | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Support dashboard | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Assign / reassign requests | ✅ | ✅ | ✅ | claim only | ❌ |
+| Create request on behalf of a customer | ✅ | ✅ | ✅ | ❌ | own only |
+| Customer machine management | ✅ | ✅ | view only | ❌ | ❌ |
+| System Admin panel (health, danger zone) | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+- **Admin** — highest system role. Full access, including permanent deletion of
+  user/customer data and the system Admin panel.
+- **Owner** — business operations. Can approve/suspend users, change roles
+  (anything except admin — and never on an admin account), assign requests,
+  create requests for customers, and view all customer activity. **Cannot
+  permanently delete user/customer data** and has no access to the system Admin
+  danger zone. Owner hits a `403` ("Only admins can permanently delete user
+  data.") if the delete API is called directly.
+- **Support** — service operations. Views customer activity, creates requests
+  on behalf of customers, and assigns/reassigns requests to engineers. Cannot
+  approve, suspend, delete, or change roles, and never sees user-management
+  controls.
+- **Engineer** — handles assigned requests (unchanged); claims queue items.
+- **Customer** — creates and tracks their own requests (unchanged).
+
+Two dashboards serve the operational roles (admin/owner/support):
+`/app/customer-activity` (Customer Activity) and `/app/support` (Support
+operations + assignment). The database role check is relaxed by migration
+`008_owner_support_roles.sql`; existing users are never changed.
+
+> This feature branch was created from `dev`, and its PR targets `dev`. Never
+> branch from or push directly to `main`.
+
 ## Application Flow
 
 1. The browser loads `apps/web`, which mounts `ThemeProvider`, routing, toast providers, and scroll handling.

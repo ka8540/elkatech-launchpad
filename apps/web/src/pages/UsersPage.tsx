@@ -8,6 +8,11 @@ import type {
   AuthUser,
   Role,
 } from "@elkatech/contracts";
+import {
+  assignableRolesFor,
+  canDeleteUsers,
+  canManageTargetUser,
+} from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
@@ -33,7 +38,15 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type ApprovalAction = "approve" | "reject" | "suspend" | "reactivate";
-type InviteRole = "customer" | "engineer" | "admin";
+type InviteRole = "customer" | "engineer" | "support" | "owner" | "admin";
+
+const INVITE_ROLE_LABEL: Record<Role, string> = {
+  customer: "Customer / User",
+  engineer: "Engineer",
+  support: "Support",
+  owner: "Owner",
+  admin: "Admin",
+};
 
 type RoleFilter = "all" | Role;
 type StatusFilter = "all" | ApprovalStatus;
@@ -144,6 +157,11 @@ const UsersPage = () => {
   const queryClient = useQueryClient();
   const { data: sessionData } = useSession();
   const currentUserId = sessionData?.user?.id ?? null;
+  // The signed-in actor's role drives which management controls render. The
+  // backend enforces the same rules, so a hidden control always maps to a 403.
+  const actorRole = (sessionData?.user?.role ?? "admin") as Role;
+  const actorCanDelete = canDeleteUsers(actorRole);
+  const actorCanGrantAdmin = assignableRolesFor(actorRole).includes("admin");
 
   const [form, setForm] = useState({
     displayName: "",
@@ -414,7 +432,47 @@ const UsersPage = () => {
     }
 
     // ── Role-change actions (staff-managed only) ─────────────────────────
-    const canChangeRole = !isSelf && !isSystemAdmin && staffManaged;
+    // Owner may change roles but never on an admin account, and never grant
+    // admin — canManageTargetUser / actorCanGrantAdmin enforce that here, and
+    // the gateway re-checks both server-side.
+    const canChangeRole =
+      !isSelf && !isSystemAdmin && staffManaged && canManageTargetUser(actorRole, user.role);
+
+    const makeAdminButton = (key: string) =>
+      actorCanGrantAdmin ? (
+        <Button
+          key={key}
+          size="sm"
+          variant="outline"
+          className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
+          disabled={pending}
+          onClick={() =>
+            setConfirmState({
+              kind: "role",
+              user,
+              role: "admin",
+              title: `Promote ${user.displayName} to admin?`,
+              description:
+                "Admins can approve users, change roles, and access the full admin dashboard.",
+              confirmLabel: "Promote to admin",
+            })
+          }
+        >
+          Make admin
+        </Button>
+      ) : null;
+
+    const makeSupportButton = (
+      <Button
+        key="make-support"
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() => runRoleConfirm(user, "support", "changed to support")}
+      >
+        Make support
+      </Button>
+    );
 
     if (canChangeRole) {
       if (user.role === "customer") {
@@ -429,28 +487,8 @@ const UsersPage = () => {
             Make engineer
           </Button>,
         );
-        buttons.push(
-          <Button
-            key="promote-admin"
-            size="sm"
-            variant="outline"
-            className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
-            disabled={pending}
-            onClick={() =>
-              setConfirmState({
-                kind: "role",
-                user,
-                role: "admin",
-                title: `Promote ${user.displayName} to admin?`,
-                description:
-                  "Admins can approve users, change roles, and access the full admin dashboard.",
-                confirmLabel: "Promote to admin",
-              })
-            }
-          >
-            Make admin
-          </Button>,
-        );
+        buttons.push(makeSupportButton);
+        buttons.push(makeAdminButton("promote-admin"));
       } else if (user.role === "engineer") {
         buttons.push(
           <Button
@@ -463,28 +501,21 @@ const UsersPage = () => {
             Make customer
           </Button>,
         );
+        buttons.push(makeSupportButton);
+        buttons.push(makeAdminButton("promote-admin"));
+      } else if (user.role === "support") {
         buttons.push(
           <Button
-            key="promote-admin"
+            key="support-to-engineer"
             size="sm"
             variant="outline"
-            className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
             disabled={pending}
-            onClick={() =>
-              setConfirmState({
-                kind: "role",
-                user,
-                role: "admin",
-                title: `Promote ${user.displayName} to admin?`,
-                description:
-                  "Admins can approve users, change roles, and access the full admin dashboard.",
-                confirmLabel: "Promote to admin",
-              })
-            }
+            onClick={() => runRoleConfirm(user, "engineer", "changed to engineer")}
           >
-            Make admin
+            Make engineer
           </Button>,
         );
+        buttons.push(makeAdminButton("promote-admin"));
       } else if (user.role === "admin" && !isOnlyAdmin) {
         buttons.push(
           <Button
@@ -512,8 +543,11 @@ const UsersPage = () => {
       }
     }
 
-    // ── Remove user (permanent hard delete; never for self/system/any admin) ──
-    if (!isSelf && !isSystemAdmin && !isAdmin) {
+    // ── Remove user (permanent hard delete) ──────────────────────────────
+    // Admin-only. Owner never sees this control and the gateway returns 403
+    // ("Only admins can permanently delete user data.") if one calls the API
+    // directly. Never offered for self / system admin / any admin account.
+    if (actorCanDelete && !isSelf && !isSystemAdmin && !isAdmin) {
       buttons.push(
         <Button
           key="remove"
@@ -633,14 +667,16 @@ const UsersPage = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="customer">Customer / User</SelectItem>
-                <SelectItem value="engineer">Engineer</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
+                {assignableRolesFor(actorRole).map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {INVITE_ROLE_LABEL[r]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="mt-2 text-xs text-muted-foreground">
-              Customers can create service requests once approved. Engineers triage the queue.
-              Admins manage users and the platform.
+              Customers create service requests. Engineers triage the queue. Support assists
+              customers and assigns requests. Owners run operations. Admins manage the platform.
             </p>
           </div>
           <Button
