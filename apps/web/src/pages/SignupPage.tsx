@@ -220,7 +220,7 @@ const SignupPage = () => {
               setForm((current) => ({ ...current, displayName: event.target.value }))
             }
             placeholder="Your full name"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <div>
@@ -231,7 +231,7 @@ const SignupPage = () => {
             value={form.email}
             onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
             placeholder="you@company.com"
-            className="bg-background"
+            className="lp-field"
             readOnly={Boolean(inviteToken)}
           />
         </div>
@@ -245,7 +245,7 @@ const SignupPage = () => {
               setForm((current) => ({ ...current, password: event.target.value }))
             }
             placeholder="At least 8 characters"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <Button type="submit" variant="cta" size="lg" className="w-full" disabled={signupMutation.isPending}>

@@ -226,7 +226,7 @@ const LoginPage = () => {
             value={form.email}
             onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
             placeholder="you@company.com"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <div>
@@ -236,7 +236,7 @@ const LoginPage = () => {
             value={form.password}
             onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
             placeholder="Enter your password"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loginMutation.isPending}>
