@@ -23,7 +23,9 @@ import {
   STATUS_LABELS,
   USER_TABS,
   actionsFor,
+  canDecideApprovalFor,
   canManageRoleFor,
+  canReactivateFor,
   filterUsers,
   formatJoined,
   initialsFor,
@@ -62,6 +64,13 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type ApprovalAction = "approve" | "reject" | "suspend" | "reactivate";
+
+const STATUS_AFTER_ACTION: Record<ApprovalAction, ApprovalStatus> = {
+  approve: "approved",
+  reject: "rejected",
+  suspend: "suspended",
+  reactivate: "approved",
+};
 
 const PAGE_SIZE = 20;
 
@@ -217,6 +226,9 @@ const UsersPage = () => {
     queryKey: ["admin-users"],
     queryFn: () => apiRequest<AuthUser[]>("/api/admin/users"),
   });
+  const selectedDetailsUser = detailsUser
+    ? users.find((candidate) => candidate.id === detailsUser.id) ?? detailsUser
+    : null;
 
   const actor: ActorContext = useMemo(
     () => ({ role: actorRole, id: actorId, systemAdminId: resolveSystemAdminId(users) }),
@@ -259,8 +271,20 @@ const UsersPage = () => {
 
   const approvalMutation = useMutation({
     mutationFn: ({ userId, action }: { userId: string; action: ApprovalAction }) =>
-      apiRequest(`/api/admin/users/${userId}/${action}`, { method: "POST", body: "{}" }),
-    onSuccess: invalidate,
+      apiRequest<{ user?: AuthUser }>(`/api/admin/users/${userId}/${action}`, {
+        method: "POST",
+        body: "{}",
+      }),
+    onSuccess: async (data, variables) => {
+      queryClient.setQueryData<AuthUser[]>(["admin-users"], (old) =>
+        old?.map((user) =>
+          user.id === variables.userId
+            ? data.user ?? { ...user, approvalStatus: STATUS_AFTER_ACTION[variables.action] }
+            : user,
+        ),
+      );
+      await invalidate();
+    },
     onError: (error: unknown) =>
       toast.error(error instanceof ApiError ? error.message : "Unable to update this account."),
   });
@@ -324,14 +348,16 @@ const UsersPage = () => {
 
   const confirmCopy: Record<string, { title: string; description: string; label: string }> = {
     approve: {
-      title: `Approve ${confirm?.user.displayName ?? ""}?`,
-      description: "They will be able to sign in and create service requests.",
-      label: "Approve",
+      title: "Approve this account?",
+      description:
+        "This customer will be allowed to access the service portal and create service requests.",
+      label: "Approve account",
     },
     reject: {
-      title: `Reject ${confirm?.user.displayName ?? ""}?`,
-      description: "They will not be able to create service requests. You can reactivate them later.",
-      label: "Reject",
+      title: "Reject this account?",
+      description:
+        "This account will remain unable to use the service portal. This action can be reviewed later if reactivation is supported.",
+      label: "Reject account",
     },
     suspend: {
       title: `Suspend ${confirm?.user.displayName ?? ""}?`,
@@ -690,18 +716,35 @@ const UsersPage = () => {
         )}
       </section>
 
-      <InviteStaffDialog open={inviteOpen} onOpenChange={setInviteOpen} onInvited={invalidate} />
+      <InviteStaffDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        onInvited={invalidate}
+        actorRole={actorRole}
+      />
 
       <UserDetailsDrawer
-        user={detailsUser}
+        user={selectedDetailsUser}
         open={detailsUser !== null}
         onOpenChange={(open) => {
           if (!open) setDetailsUser(null);
         }}
-        canManageRole={detailsUser ? canManageRoleFor(detailsUser, actor) : false}
+        canDecideApproval={
+          selectedDetailsUser ? canDecideApprovalFor(selectedDetailsUser, actor) : false
+        }
+        canReactivate={
+          selectedDetailsUser ? canReactivateFor(selectedDetailsUser, actor) : false
+        }
+        isUpdatingAccess={approvalMutation.isPending}
+        onAccessAction={(action) => {
+          if (selectedDetailsUser) runAction(selectedDetailsUser, action);
+        }}
+        canManageRole={
+          selectedDetailsUser ? canManageRoleFor(selectedDetailsUser, actor) : false
+        }
         onManageRole={() => {
           // Reuse the same dialog rather than duplicating the workflow.
-          const target = detailsUser;
+          const target = selectedDetailsUser;
           setDetailsUser(null);
           setRoleUser(target);
         }}
@@ -770,8 +813,8 @@ function RowActions({
   onSelect: (action: UserActionId) => void;
 }) {
   // Agreed order: details → machines → manage role │ suspend/reactivate → remove
-  const SAFE_ORDER: UserActionId[] = ["details", "machines", "role", "approve", "reactivate"];
-  const RISKY_ORDER: UserActionId[] = ["suspend", "reject", "remove"];
+  const SAFE_ORDER: UserActionId[] = ["details", "machines", "role", "reactivate"];
+  const RISKY_ORDER: UserActionId[] = ["suspend", "remove"];
   const safe = SAFE_ORDER.filter((action) => actions.includes(action));
   const risky = RISKY_ORDER.filter((action) => actions.includes(action));
 

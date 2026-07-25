@@ -76,6 +76,7 @@ describe("PortalShell — desktop sidebar", () => {
       "Overview",
       "Requests",
       "Queue",
+      "Issue Reports",
       "Activity",
       "Customer Machines",
       "Users",
@@ -101,7 +102,7 @@ describe("PortalShell — desktop sidebar", () => {
 
   it("leaves the customer nav untouched", () => {
     renderShell("customer");
-    expect(linkLabels(0)).toEqual(["Requests"]);
+    expect(linkLabels(0)).toEqual(["Requests", "My Reports"]);
   });
 });
 
@@ -145,6 +146,7 @@ describe("PortalShell — collapsed sidebar", () => {
       "Overview",
       "Requests",
       "Queue",
+      "Issue Reports",
       "Activity",
       "Customer Machines",
       "Users",
@@ -157,6 +159,7 @@ describe("PortalShell — collapsed sidebar", () => {
       "Overview",
       "Requests",
       "Queue",
+      "Issue Reports",
       "Activity",
       "Customer Machines",
       "Users",

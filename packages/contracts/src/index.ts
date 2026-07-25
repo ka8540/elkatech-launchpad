@@ -74,6 +74,42 @@ export function canAccessAdminPanel(role: Role): boolean {
   return role === "admin";
 }
 
+/* ── Issue reports ─────────────────────────────────────────────────────────
+ * Customer submission and customer-owned history remain available through
+ * their dedicated routes. Every staff console, data and management permission
+ * is intentionally Admin-only until the product explicitly expands access.
+ */
+
+/** Anyone signed in may file a report about the platform. */
+export function canSubmitReport(_role: Role): boolean {
+  return true;
+}
+/** See every report, regardless of assignment. */
+export function canViewAllReports(role: Role): boolean {
+  return role === "admin";
+}
+/** Reach the staff Issue Reports console at all. */
+export function canViewReports(role: Role): boolean {
+  return role === "admin";
+}
+/** Change status, add internal notes, record a resolution, link a request. */
+export function canManageReports(role: Role): boolean {
+  return role === "admin";
+}
+/** Assign or reassign a report to a staff member. */
+export function canAssignReports(role: Role): boolean {
+  return role === "admin";
+}
+/** Take a resolved report back into Working. */
+export function canReopenReport(role: Role): boolean {
+  return role === "admin";
+}
+/** Turn a reporter reference back into an account. The report UI itself stays
+ *  anonymous for everyone; this is the deliberate, audited escape hatch. */
+export function canIdentifyReporter(role: Role): boolean {
+  return role === "admin";
+}
+
 /** Roles `actor` is allowed to assign to other users. Owner can never grant admin. */
 export function assignableRolesFor(actor: Role): Role[] {
   if (actor === "admin") return ["customer", "engineer", "support", "owner", "admin"];
@@ -1390,3 +1426,339 @@ export const activityPersonDetailSchema = z.object({
   eventCounts: z.record(z.string(), z.number().int()),
 });
 export type ActivityPersonDetail = z.infer<typeof activityPersonDetailSchema>;
+
+/* ═══ Issue reports ═══════════════════════════════════════════════════════
+ *
+ * Customer-submitted problem reports, tracked by staff through a three-step
+ * workflow. The defining constraint of this contract: NO staff-facing schema
+ * below carries the reporting customer's identity. There is no `reporterUserId`
+ * field, no email, no display name — a report is addressed only by its
+ * `reporterReference` (RPT-USR-8F3A2C), and re-identification is a separate,
+ * admin-only, audited call. Adding an identity field to `issueReportRowSchema`
+ * or `issueReportDetailSchema` would silently defeat the whole feature; the
+ * projection tests exist to catch exactly that.
+ */
+
+export const REPORT_TITLE_MAX = 200;
+export const REPORT_DESCRIPTION_MAX = 5000;
+export const REPORT_ERROR_MAX = 8000;
+export const REPORT_STEPS_MAX = 4000;
+export const REPORT_RESOLUTION_MAX = 4000;
+export const REPORT_NOTE_MAX = 4000;
+
+export const REPORTS_PAGE_SIZE_DEFAULT = 25;
+export const REPORTS_PAGE_SIZE_MAX = 100;
+
+/** How many reports one account may file per rolling 24h. Server-enforced in
+ *  addition to the gateway rate limit, which a determined client could evade
+ *  by spacing requests out. */
+export const REPORT_DAILY_LIMIT = 20;
+
+export const reportStatusSchema = z.enum(["new", "working", "resolved"]);
+export type ReportStatus = z.infer<typeof reportStatusSchema>;
+
+export const reportSeveritySchema = z.enum(["low", "medium", "high", "blocking"]);
+export type ReportSeverity = z.infer<typeof reportSeveritySchema>;
+
+export const reportAreaSchema = z.enum([
+  "login",
+  "account",
+  "service_requests",
+  "attachments",
+  "machines",
+  "dashboard",
+  "notifications",
+  "other",
+]);
+export type ReportArea = z.infer<typeof reportAreaSchema>;
+
+export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
+  new: "New",
+  working: "Working",
+  resolved: "Resolved",
+};
+
+export const REPORT_SEVERITY_LABELS: Record<ReportSeverity, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  blocking: "Blocking",
+};
+
+export const REPORT_SEVERITY_DESCRIPTIONS: Record<ReportSeverity, string> = {
+  low: "Minor annoyance. There is a workaround and work continues.",
+  medium: "Something is broken but the task can still be finished another way.",
+  high: "A core task cannot be completed. No reasonable workaround.",
+  blocking: "Work has stopped entirely and nothing can proceed.",
+};
+
+export const REPORT_AREA_LABELS: Record<ReportArea, string> = {
+  login: "Login",
+  account: "Account",
+  service_requests: "Service requests",
+  attachments: "Attachments",
+  machines: "Machines",
+  dashboard: "Dashboard",
+  notifications: "Notifications",
+  other: "Other",
+};
+
+/**
+ * Safe technical context. Every field is either a controlled value or a
+ * scrubbed one — there is deliberately no `userAgent`, no `url`, and no
+ * `query`. `route` is the path with its query string dropped and identifier
+ * segments collapsed, and browser/OS are coarse families rather than versions.
+ */
+export const reportBrowserSchema = z.enum([
+  "chrome",
+  "safari",
+  "firefox",
+  "edge",
+  "other",
+]);
+export type ReportBrowser = z.infer<typeof reportBrowserSchema>;
+
+export const reportOsSchema = z.enum([
+  "macos",
+  "windows",
+  "linux",
+  "ios",
+  "android",
+  "other",
+]);
+export type ReportOs = z.infer<typeof reportOsSchema>;
+
+export const REPORT_BROWSER_LABELS: Record<ReportBrowser, string> = {
+  chrome: "Chrome",
+  safari: "Safari",
+  firefox: "Firefox",
+  edge: "Edge",
+  other: "Other",
+};
+
+export const REPORT_OS_LABELS: Record<ReportOs, string> = {
+  macos: "macOS",
+  windows: "Windows",
+  linux: "Linux",
+  ios: "iOS",
+  android: "Android",
+  other: "Other",
+};
+
+export const reportTechnicalContextSchema = z.object({
+  /** Scrubbed path only — never a full URL, never a query string. */
+  route: z.string().max(200).nullable(),
+  browser: reportBrowserSchema.nullable(),
+  operatingSystem: reportOsSchema.nullable(),
+  appVersion: z.string().max(80).nullable(),
+  correlationId: z.string().max(120).nullable(),
+  relatedRequestId: z.string().uuid().nullable(),
+  relatedMachineId: z.string().uuid().nullable(),
+});
+export type ReportTechnicalContext = z.infer<typeof reportTechnicalContextSchema>;
+
+export const createIssueReportInputSchema = z.object({
+  title: z.string().trim().min(4).max(REPORT_TITLE_MAX),
+  description: z.string().trim().min(10).max(REPORT_DESCRIPTION_MAX),
+  exactError: z.string().trim().max(REPORT_ERROR_MAX).optional(),
+  stepsToReproduce: z.string().trim().max(REPORT_STEPS_MAX).optional(),
+  applicationArea: reportAreaSchema,
+  severity: reportSeveritySchema,
+  // Client-supplied context is advisory: the server re-validates every field
+  // against these schemas and drops anything that does not match, so a crafted
+  // client cannot smuggle a raw UA string or a full URL into storage.
+  context: reportTechnicalContextSchema.partial().optional(),
+});
+export type CreateIssueReportInput = z.infer<typeof createIssueReportInputSchema>;
+
+export const updateReportStatusInputSchema = z.object({
+  status: reportStatusSchema,
+});
+
+export const assignReportInputSchema = z.object({
+  /** null clears the assignment. */
+  assigneeId: z.string().uuid().nullable(),
+});
+
+export const createReportNoteInputSchema = z.object({
+  body: z.string().trim().min(1).max(REPORT_NOTE_MAX),
+  visibility: messageVisibilitySchema,
+});
+
+export const recordReportResolutionInputSchema = z.object({
+  resolution: z.string().trim().min(1).max(REPORT_RESOLUTION_MAX),
+});
+
+export const linkReportRequestInputSchema = z.object({
+  /** null unlinks. */
+  requestId: z.string().uuid().nullable(),
+});
+
+export const reporterLookupInputSchema = z.object({
+  reporterReference: z.string().trim().min(1).max(40),
+});
+
+/** One row in the staff Issue Reports table. Identity-free by construction. */
+export const issueReportRowSchema = z.object({
+  id: z.string(),
+  reportNumber: z.string(),
+  title: z.string(),
+  applicationArea: reportAreaSchema,
+  severity: reportSeveritySchema,
+  status: reportStatusSchema,
+  /** The only handle on the reporter that staff ever receive. */
+  reporterReference: z.string(),
+  assignedUserId: z.string().nullable(),
+  /** Staff display name — employees are not anonymised from each other, but
+   *  nothing beyond a name and role is ever included. */
+  assignedUserName: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type IssueReportRow = z.infer<typeof issueReportRowSchema>;
+
+export const issueReportSummarySchema = z.object({
+  new: z.number().int(),
+  working: z.number().int(),
+  resolved: z.number().int(),
+  blocking: z.number().int(),
+});
+export type IssueReportSummary = z.infer<typeof issueReportSummarySchema>;
+
+export const issueReportListResponseSchema = z.object({
+  reports: z.array(issueReportRowSchema),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+  summary: issueReportSummarySchema,
+});
+export type IssueReportListResponse = z.infer<typeof issueReportListResponseSchema>;
+
+export const issueReportNoteSchema = z.object({
+  id: z.string(),
+  visibility: messageVisibilitySchema,
+  body: z.string(),
+  authorName: z.string().nullable(),
+  authorRole: roleSchema,
+  createdAt: z.string(),
+});
+export type IssueReportNote = z.infer<typeof issueReportNoteSchema>;
+
+export const issueReportEventSchema = z.object({
+  id: z.string(),
+  eventType: z.string(),
+  /** Role recorded at the time of the action, not the actor's role today. */
+  actorRole: roleSchema,
+  /** Safe staff label ("Support"/"Admin" + name). Null for system entries. */
+  actorLabel: z.string().nullable(),
+  previousValue: z.string().nullable(),
+  newValue: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type IssueReportEvent = z.infer<typeof issueReportEventSchema>;
+
+export const issueReportAttachmentSchema = z.object({
+  id: z.string(),
+  fileName: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number(),
+  /** Always a short-lived signed URL — report evidence never gets a permanent
+   *  public URL, even when the bucket has a public base configured. */
+  url: z.string(),
+  createdAt: z.string(),
+});
+export type IssueReportAttachment = z.infer<typeof issueReportAttachmentSchema>;
+
+/** Full staff view. Still identity-free: `reporterReference` only. */
+export const issueReportDetailSchema = z.object({
+  id: z.string(),
+  reportNumber: z.string(),
+  title: z.string(),
+  description: z.string(),
+  exactError: z.string().nullable(),
+  stepsToReproduce: z.string().nullable(),
+  applicationArea: reportAreaSchema,
+  severity: reportSeveritySchema,
+  status: reportStatusSchema,
+  reporterReference: z.string(),
+  assignedUserId: z.string().nullable(),
+  assignedUserName: z.string().nullable(),
+  relatedRequestId: z.string().nullable(),
+  relatedRequestNumber: z.string().nullable(),
+  relatedMachineId: z.string().nullable(),
+  resolution: z.string().nullable(),
+  context: reportTechnicalContextSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+  notes: z.array(issueReportNoteSchema),
+  history: z.array(issueReportEventSchema),
+  attachments: z.array(issueReportAttachmentSchema),
+  /** Statuses this actor may move the report to right now. */
+  allowedTransitions: z.array(reportStatusSchema),
+});
+export type IssueReportDetail = z.infer<typeof issueReportDetailSchema>;
+
+/**
+ * What the reporting customer sees. Separate schema rather than a filtered
+ * detail: internal notes, the reporter reference, assignment and technical
+ * metadata have no field to live in, so they cannot leak through a missed
+ * `delete` on the server.
+ */
+export const myIssueReportRowSchema = z.object({
+  id: z.string(),
+  reportNumber: z.string(),
+  title: z.string(),
+  applicationArea: reportAreaSchema,
+  severity: reportSeveritySchema,
+  status: reportStatusSchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type MyIssueReportRow = z.infer<typeof myIssueReportRowSchema>;
+
+export const myIssueReportDetailSchema = z.object({
+  id: z.string(),
+  reportNumber: z.string(),
+  title: z.string(),
+  description: z.string(),
+  exactError: z.string().nullable(),
+  stepsToReproduce: z.string().nullable(),
+  applicationArea: reportAreaSchema,
+  severity: reportSeveritySchema,
+  status: reportStatusSchema,
+  /** Public resolution text only — never an internal note. */
+  resolution: z.string().nullable(),
+  /** Staff replies explicitly marked customer_visible. */
+  responses: z.array(
+    z.object({
+      id: z.string(),
+      body: z.string(),
+      createdAt: z.string(),
+    }),
+  ),
+  attachments: z.array(issueReportAttachmentSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  resolvedAt: z.string().nullable(),
+});
+export type MyIssueReportDetail = z.infer<typeof myIssueReportDetailSchema>;
+
+export const issueReportListQuerySchema = z.object({
+  search: z.string().trim().max(200).optional(),
+  status: reportStatusSchema.optional(),
+  severity: reportSeveritySchema.optional(),
+  area: reportAreaSchema.optional(),
+  assignee: z.string().optional(),
+  /** Inclusive ISO date bounds on created_at (YYYY-MM-DD). */
+  from: z.string().trim().max(40).optional(),
+  to: z.string().trim().max(40).optional(),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(REPORTS_PAGE_SIZE_MAX)
+    .default(REPORTS_PAGE_SIZE_DEFAULT),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type IssueReportListQuery = z.infer<typeof issueReportListQuerySchema>;

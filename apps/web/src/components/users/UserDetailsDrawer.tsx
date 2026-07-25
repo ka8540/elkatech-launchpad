@@ -1,8 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ActivityPersonDetail, AuthUser } from "@elkatech/contracts";
+import { Info } from "lucide-react";
+import { useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   ORIGIN_LABELS,
   ROLE_LABELS,
@@ -30,17 +44,27 @@ export default function UserDetailsDrawer({
   user,
   open,
   onOpenChange,
+  canDecideApproval = false,
+  canReactivate = false,
+  isUpdatingAccess = false,
+  onAccessAction,
   canManageRole = false,
   onManageRole,
 }: {
   user: AuthUser | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Approval and reactivation permissions are derived by the caller's shared RBAC helpers. */
+  canDecideApproval?: boolean;
+  canReactivate?: boolean;
+  isUpdatingAccess?: boolean;
+  onAccessAction?: (action: "approve" | "reject" | "reactivate") => void;
   /** Caller decides via the shared RBAC helpers; the drawer never re-derives it. */
   canManageRole?: boolean;
   /** Hands off to the page's ManageRoleDialog — no duplicate role logic here. */
   onManageRole?: () => void;
 }) {
+  const [approvalTipOpen, setApprovalTipOpen] = useState(false);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["user-details", user?.id],
     queryFn: () => apiRequest<ActivityPersonDetail>(`/api/activity/people/${user!.id}`),
@@ -52,10 +76,19 @@ export default function UserDetailsDrawer({
   const workload = extended?.workload;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setApprovalTipOpen(false);
+        onOpenChange(nextOpen);
+      }}
+    >
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Account details</SheetTitle>
+          <SheetDescription className="sr-only">
+            Review this account&apos;s information, status, and permitted management actions.
+          </SheetDescription>
         </SheetHeader>
 
         {user && (
@@ -120,26 +153,101 @@ export default function UserDetailsDrawer({
               )}
             </dl>
 
-            {canManageRole && onManageRole ? (
-              <div className="space-y-2">
+            {canDecideApproval && onAccessAction && (
+              <section
+                aria-labelledby="approval-decision-title"
+                className="space-y-3 border-t border-[var(--lp-line)] pt-5"
+              >
+                <div className="flex items-center gap-1.5">
+                  <h3
+                    id="approval-decision-title"
+                    className="text-sm font-semibold text-[var(--lp-ink)]"
+                  >
+                    Approval decision
+                  </h3>
+                  <TooltipProvider delayDuration={100}>
+                    <Tooltip open={approvalTipOpen}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="About approval decisions"
+                          onPointerEnter={() => setApprovalTipOpen(true)}
+                          onPointerLeave={() => setApprovalTipOpen(false)}
+                          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[var(--lp-faint)] transition-colors hover:text-[var(--lp-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45"
+                        >
+                          <Info aria-hidden="true" className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="top"
+                        className="max-w-[220px] px-2 py-1 text-xs leading-4"
+                      >
+                        Review details first. Role changes require confirmation.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant="cta"
+                    disabled={isUpdatingAccess}
+                    onClick={() => onAccessAction("approve")}
+                  >
+                    Approve account
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-rose-300 text-rose-700 hover:border-rose-400 hover:bg-rose-500/[0.08] hover:text-rose-700 dark:border-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
+                    disabled={isUpdatingAccess}
+                    onClick={() => onAccessAction("reject")}
+                  >
+                    Reject account
+                  </Button>
+                </div>
+              </section>
+            )}
+
+            {canReactivate && onAccessAction && (
+              <section
+                aria-labelledby="reactivate-account-title"
+                className="space-y-3 border-t border-[var(--lp-line)] pt-5"
+              >
+                <div className="space-y-1">
+                  <h3
+                    id="reactivate-account-title"
+                    className="text-sm font-semibold text-[var(--lp-ink)]"
+                  >
+                    Account access
+                  </h3>
+                  <p className="text-xs leading-5 text-[var(--lp-faint)]">
+                    Restore this account&apos;s access to the service portal.
+                  </p>
+                </div>
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
+                  variant="cta"
                   className="w-full"
-                  onClick={onManageRole}
+                  disabled={isUpdatingAccess}
+                  onClick={() => onAccessAction("reactivate")}
                 >
-                  Manage role
+                  Reactivate account
                 </Button>
-                <p className="text-xs leading-5 text-[var(--lp-faint)]">
-                  Role changes open a confirmation step before anything is applied.
-                </p>
-              </div>
-            ) : (
-              <p className="text-xs leading-5 text-[var(--lp-faint)]">
-                Role changes are available through the account actions menu when permitted.
-              </p>
+              </section>
             )}
+
+            {canManageRole && onManageRole ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={onManageRole}
+              >
+                Manage role
+              </Button>
+            ) : null}
           </div>
         )}
       </SheetContent>

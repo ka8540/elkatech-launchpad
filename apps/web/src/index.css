@@ -335,6 +335,13 @@
   }
 
   .auth-industrial {
+    /*
+     * Tells the browser this subtree is dark so UA-painted chrome — autofill
+     * backgrounds, scrollbars, date pickers — uses its dark variants. Without
+     * this the :root `color-scheme: light` wins and Chrome paints autofilled
+     * fields with a pale background behind our ivory ink.
+     */
+    color-scheme: dark;
     --lp-bg: #0b0c0e;
     --lp-panel: #16181d;
     --lp-panel-2: #1b1e24;
@@ -479,6 +486,35 @@
     --accent: 27 67% 58%;
     --accent-foreground: 0 0% 100%;
     --ring: 27 67% 58%;
+
+    /*
+     * Neutral charcoal surfaces for the shadcn tokens.
+     *
+     * The global `.dark` palette is navy (hue 215, 40–60% saturation) because
+     * it belongs to the blue product/marketing brand. The portal is graphite,
+     * so every primitive that paints `bg-background` / `bg-card` /
+     * `bg-popover` — Sheet, Dialog, AlertDialog, DropdownMenu, Select, Input,
+     * outline Button — must resolve to the same charcoal family as the
+     * --lp-* palette above, or it renders as a blue panel on a grey page.
+     *
+     * Values mirror the hexes above: 220 12% 5% = --lp-bg,
+     * 220 14% 10% = --lp-panel, 220 14% 12% = --lp-panel-2,
+     * 47 19% 91% = --lp-ink. Light mode is deliberately left alone.
+     */
+    --background: 220 12% 5%;
+    --foreground: 47 19% 91%;
+    --card: 220 14% 10%;
+    --card-foreground: 47 19% 91%;
+    --popover: 220 14% 10%;
+    --popover-foreground: 47 19% 91%;
+    --muted: 220 14% 12%;
+    --muted-foreground: 45 10% 68%;
+    --secondary: 220 12% 16%;
+    --secondary-foreground: 47 19% 91%;
+    --border: 220 10% 22%;
+    --input: 220 10% 22%;
+    --primary: 47 19% 91%;
+    --primary-foreground: 220 14% 10%;
   }
 
   /*
@@ -526,6 +562,28 @@
     --accent: 27 67% 58%;
     --accent-foreground: 0 0% 100%;
     --ring: 27 67% 58%;
+
+    /*
+     * Same neutral charcoal family as `.dark .lp`, shifted one step up the
+     * hierarchy: a portaled surface (drawer, dialog, menu) floats ABOVE the
+     * page, so `--background` here is the panel tone rather than the page
+     * tone. Result: app 5% → drawer/modal/menu 10% → nested card/row 12–14%
+     * → border 22%. Light mode is deliberately left alone.
+     */
+    --background: 220 14% 10%;
+    --foreground: 47 19% 91%;
+    --card: 220 14% 12%;
+    --card-foreground: 47 19% 91%;
+    --popover: 220 14% 10%;
+    --popover-foreground: 47 19% 91%;
+    --muted: 220 13% 14%;
+    --muted-foreground: 45 10% 68%;
+    --secondary: 220 12% 17%;
+    --secondary-foreground: 47 19% 91%;
+    --border: 220 10% 22%;
+    --input: 220 10% 22%;
+    --primary: 47 19% 91%;
+    --primary-foreground: 220 14% 10%;
   }
 }
 
@@ -559,6 +617,18 @@
   }
 
   /*
+   * `body` carries the global `bg-background`, which is the blue brand navy in
+   * dark mode. The graphite shells paint over it, but anything past the shell
+   * — mobile rubber-band overscroll, the strip behind a scaled-back drawer —
+   * still flashes navy. Repaint the root whenever a graphite shell is mounted.
+   * The hex is repeated rather than read from --lp-bg because that token is
+   * declared on `.lp`, i.e. on a descendant of the element being styled.
+   */
+  .dark:has(.lp) body {
+    background-color: #0b0c0e;
+  }
+
+  /*
    * Matte form-field surface. Tailwind v3 silently drops the opacity
    * modifier on arbitrary CSS-var backgrounds with hex values
    * (`bg-[var(--lp-panel-2)]/85` produces no rule), which combined with
@@ -586,13 +656,6 @@
   .lp-field:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-  }
-  /* Neutralize browser autofill flash to white-on-white in dark mode */
-  .lp-field:-webkit-autofill {
-    -webkit-text-fill-color: var(--lp-ink);
-    box-shadow: 0 0 0 1000px var(--lp-panel-2) inset;
-    caret-color: var(--lp-ink);
-    transition: background-color 9999s ease-in-out 0s;
   }
 
   /*
@@ -660,4 +723,58 @@
       animation: none;
     }
   }
+}
+
+/*
+ * Global browser-autofill normalization.
+ *
+ * Chrome/Safari repaint autofilled fields with their own background and text
+ * color, which lands as near-invisible text on our dark themes. This lives
+ * outside @layer on purpose: unlayered rules outrank every Tailwind layer, so
+ * it applies to *every* input in the app — auth, onboarding, portal dialogs —
+ * without each field having to opt in via a specific class.
+ *
+ * Rather than force one background color (which would flatten fields that
+ * intentionally differ), the long transition delay keeps the element's own
+ * background from ever being visibly replaced, and -webkit-text-fill-color
+ * restores theme-aware ink. Border/shadow transitions are re-declared so
+ * focus-ring animations survive the shorthand.
+ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: hsl(var(--foreground));
+  caret-color: hsl(var(--accent));
+  transition:
+    background-color 0s 9999s,
+    color 0s 9999s,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+input:-webkit-autofill:disabled,
+input:-webkit-autofill[readonly],
+textarea:-webkit-autofill:disabled,
+textarea:-webkit-autofill[readonly],
+select:-webkit-autofill:disabled {
+  -webkit-text-fill-color: hsl(var(--muted-foreground));
+}
+
+/*
+ * Firefox tints autofilled fields with a `filter` instead of a background.
+ * Wrapped in :is() so autoprefixer leaves the standard `:autofill` alone —
+ * given the bare selector it rewrites it to the -webkit- form, which drops
+ * Firefox coverage entirely.
+ */
+input:is(:autofill),
+textarea:is(:autofill),
+select:is(:autofill) {
+  filter: none;
 }

@@ -55,6 +55,7 @@ import {
   verifyFirebaseIdTokenForRequest,
 } from "@elkatech/config";
 import { evaluateApprovalGate } from "./approval";
+import { registerReportRoutes } from "./reports";
 import {
   canAccessActivityDirectory,
   canAccessPersonPage,
@@ -201,6 +202,15 @@ async function getTargetUserRole(userId: string): Promise<Role | null> {
     return null;
   }
 }
+
+// Surface Fastify's per-request id so the browser can quote it when the user
+// files an issue report. It is an opaque counter, carries no user data, and
+// makes an otherwise decorative "correlation ID" field genuinely traceable
+// back to a log line.
+app.addHook("onSend", async (request, reply, payload) => {
+  reply.header("x-correlation-id", request.id);
+  return payload;
+});
 
 app.get("/health", async () => ({
   ok: true,
@@ -1173,10 +1183,25 @@ app.delete("/api/admin/users/:userId", async (request: any, reply: any) => {
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
   try {
-    return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
+    const result = await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
       method: "DELETE",
       headers: internalHeaders({ "x-user-id": session.user.id }),
     });
+    // Issue reports live in service-desk with no FK to auth.users, so deleting
+    // the account would otherwise leave reports pointing at a dead id. Null the
+    // reporter id while keeping the anonymous reference: the report survives,
+    // the path back to a person does not. Best-effort — the account is already
+    // gone and failing the response would imply it wasn't.
+    try {
+      await fetchJson(`${env.SERVICE_DESK_URL}/internal/reports/anonymize-reporter`, {
+        method: "POST",
+        headers: internalHeaders(),
+        body: JSON.stringify({ userId }),
+      });
+    } catch (anonymizeError) {
+      request.log.error({ err: anonymizeError }, "report reporter anonymization failed");
+    }
+    return result;
   } catch (error) {
     if (error instanceof InternalFetchError) {
       // Forward business-rule rejections (4xx) verbatim, but never leak raw
@@ -1773,6 +1798,17 @@ app.get("/api/engineers", async (request, reply) => {
     { headers: internalHeaders() },
   );
   return users.map((u) => ({ id: u.id, displayName: u.displayName, email: u.email }));
+});
+
+// Issue-report routes live in their own module — this file is already large,
+// and the reports surface shares nothing with the request pipeline beyond the
+// session helpers passed in here.
+await registerReportRoutes(app, {
+  requireSession,
+  assertCsrf,
+  userHeaders,
+  forbidden,
+  fetchUserDirectory,
 });
 
 const port = Number(new URL(env.GATEWAY_URL).port || "4000");

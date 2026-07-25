@@ -224,6 +224,20 @@ export type ActorContext = {
   systemAdminId: string | null;
 };
 
+/** Approval decisions belong in Account details, not the row overflow menu. */
+export function canDecideApprovalFor(user: AuthUser, actor: ActorContext): boolean {
+  if (user.approvalStatus !== "pending_approval") return false;
+  if (isProtectedAccount(user, actor) || user.id === actor.id) return false;
+  return canApproveUsers(actor.role) && canManageTargetUser(actor.role, user.role);
+}
+
+/** The backend supports reactivation for both rejected and suspended accounts. */
+export function canReactivateFor(user: AuthUser, actor: ActorContext): boolean {
+  if (user.approvalStatus !== "rejected" && user.approvalStatus !== "suspended") return false;
+  if (isProtectedAccount(user, actor) || user.id === actor.id) return false;
+  return canSuspendUsers(actor.role) && canManageTargetUser(actor.role, user.role);
+}
+
 /**
  * Actions the actor may take on this row. Every entry maps to a gateway
  * endpoint the actor is permitted to call, so the menu can never offer
@@ -247,9 +261,6 @@ export function actionsFor(user: AuthUser, actor: ActorContext): UserActionId[] 
   if (canManageRoleFor(user, actor)) actions.push("role");
 
   if (canTouch && !isSelf) {
-    if (user.approvalStatus === "pending_approval" && canApproveUsers(actor.role)) {
-      actions.push("approve", "reject");
-    }
     if (user.approvalStatus === "approved" && canSuspendUsers(actor.role)) {
       actions.push("suspend");
     }
@@ -286,8 +297,8 @@ export function resolveSystemAdminId(users: AuthUser[]): string | null {
 
 /* ── Invite ──────────────────────────────────────────────────────────────── */
 
-/** Staff invitations are limited to the two operational roles. Owner and admin
- *  are intentionally not creatable from the UI. */
+/** Roles the invite dialog knows how to offer. Which of them a given actor
+ *  actually sees is decided by `invitableRolesFor` — never by the component. */
 export const INVITABLE_ROLES = [
   {
     value: "engineer" as const,
@@ -299,9 +310,38 @@ export const INVITABLE_ROLES = [
     label: "Support",
     description: "Coordinates customers, requests, and engineer assignments.",
   },
+  {
+    value: "admin" as const,
+    label: "Admin",
+    description: "Manages platform users, permissions, approvals, and operational settings.",
+  },
 ];
 
 export type InviteRole = (typeof INVITABLE_ROLES)[number]["value"];
+
+export type InvitableRole = (typeof INVITABLE_ROLES)[number];
+
+/**
+ * Invite options for this actor, derived from the same `assignableRolesFor`
+ * helper the gateway's `/api/admin/users/invite` handler enforces — so an owner
+ * (who may never grant admin) simply never sees the Admin card, and the card
+ * they do see always maps to a call the backend will accept. The backend stays
+ * authoritative; this only keeps the UI from offering a guaranteed 403.
+ */
+export function invitableRolesFor(actor: Role): InvitableRole[] {
+  const assignable = assignableRolesFor(actor);
+  return INVITABLE_ROLES.filter((role) => assignable.includes(role.value));
+}
+
+/** Whether this actor may invite an admin at all. */
+export function canInviteAdmins(actor: Role): boolean {
+  return assignableRolesFor(actor).includes("admin");
+}
+
+/** Shown under the role cards when Admin is selected — inviting one hands over
+ *  full platform management, so the choice gets an explicit warning. */
+export const INVITE_ADMIN_WARNING =
+  "Administrator access grants full platform management privileges, including user management, approvals, and operational controls. Invite only trusted personnel.";
 
 export function validateInvite(input: { displayName: string; email: string }): {
   displayName?: string;

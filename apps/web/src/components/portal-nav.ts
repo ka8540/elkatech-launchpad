@@ -1,9 +1,11 @@
 import {
   Activity,
+  Bug,
   ClipboardList,
   Gauge,
   HardDrive,
   Inbox,
+  MessageSquareWarning,
   Users,
   Users2,
 } from "lucide-react";
@@ -12,6 +14,7 @@ import {
   canManageOperational,
   canManageUsers,
   canViewCustomerActivity,
+  canViewReports,
   canViewSupportDashboard,
   type Role,
 } from "@elkatech/contracts";
@@ -53,6 +56,33 @@ export function buildNavItems(role: Role | undefined): NavItem[] {
       : []),
     requestsItem,
     ...(isStaff ? [{ to: "/app/queue", icon: Inbox, label: "Queue" }] : []),
+    // Admin-only staff console. Customer-owned reports use My Reports below.
+    ...(role && canViewReports(role)
+      ? [
+          {
+            to: "/app/reports",
+            icon: Bug,
+            label: "Issue Reports",
+            // `/app/reports/new` and the detail page live under this entry.
+            activeWhen: (pathname: string) =>
+              pathname === "/app/reports" || pathname.startsWith("/app/reports/"),
+          },
+        ]
+      : []),
+    // Customers get their own list instead; "Report a problem" lives on it.
+    ...(role === "customer"
+      ? [
+          {
+            to: "/app/my-reports",
+            icon: MessageSquareWarning,
+            label: "My Reports",
+            activeWhen: (pathname: string) =>
+              pathname === "/app/my-reports" ||
+              pathname.startsWith("/app/my-reports/") ||
+              pathname === "/app/reports/new",
+          },
+        ]
+      : []),
     ...(role && canViewSupportDashboard(role)
       ? [
           {

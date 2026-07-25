@@ -6,6 +6,8 @@ import type { AuthUser, Role } from "@elkatech/contracts";
 
 const apiRequest = vi.hoisted(() => vi.fn());
 const sessionRole = vi.hoisted(() => ({ current: "admin" as Role, id: "admin-me" }));
+const toastSuccess = vi.hoisted(() => vi.fn());
+const toastError = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/api", () => ({
   apiRequest,
@@ -16,6 +18,9 @@ vi.mock("@/lib/api", () => ({
       this.status = status;
     }
   },
+}));
+vi.mock("sonner", () => ({
+  toast: { success: toastSuccess, error: toastError },
 }));
 vi.mock("@/hooks/use-session", () => ({
   useSession: () => ({
@@ -112,8 +117,15 @@ async function openRowMenu(name: string) {
   return screen.findByRole("menu");
 }
 
+async function openDetails(name: string) {
+  fireEvent.click(within(await openRowMenu(name)).getByText("View details"));
+  return screen.findByRole("dialog", { name: "Account details" });
+}
+
 beforeEach(() => {
   apiRequest.mockReset();
+  toastSuccess.mockReset();
+  toastError.mockReset();
   sessionRole.current = "admin";
   sessionRole.id = "admin-me";
 });
@@ -322,14 +334,17 @@ describe("Users & Access — row actions", () => {
     expect(within(supportMenu).queryByText("View machines")).toBeNull();
   });
 
-  it("offers approve and reject only while pending", async () => {
+  it("removes approve and reject from a pending account's overflow menu", async () => {
     mockUsers();
     renderPage();
     await table().findByText("Pending Pat");
     const menu = await openRowMenu("Pending Pat");
-    expect(within(menu).getByText("Approve")).toBeInTheDocument();
-    expect(within(menu).getByText("Reject")).toBeInTheDocument();
+    expect(within(menu).queryByText("Approve")).toBeNull();
+    expect(within(menu).queryByText("Reject")).toBeNull();
     expect(within(menu).queryByText("Suspend")).toBeNull();
+    expect(within(menu).getByText("View details")).toBeInTheDocument();
+    expect(within(menu).getByText("View machines")).toBeInTheDocument();
+    expect(within(menu).getByText("Remove user")).toBeInTheDocument();
   });
 
   it("swaps suspend for reactivate on a suspended account", async () => {
@@ -356,22 +371,6 @@ describe("Users & Access — row actions", () => {
     expect(within(await openRowMenu("Kush Jayesh Ahir")).queryByText("Remove user")).toBeNull();
   });
 
-  it("confirms before an access-changing action and calls the right endpoint", async () => {
-    mockUsers();
-    renderPage();
-    await table().findByText("Pending Pat");
-    fireEvent.click(within(await openRowMenu("Pending Pat")).getByText("Approve"));
-
-    expect(await screen.findByText("Approve Pending Pat?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
-
-    await waitFor(() =>
-      expect(
-        apiRequest.mock.calls.some(([url]) => String(url) === "/api/admin/users/p-1/approve"),
-      ).toBe(true),
-    );
-  });
-
   it("opens the machines dialog from the menu", async () => {
     mockUsers();
     renderPage();
@@ -386,6 +385,217 @@ describe("Users & Access — row actions", () => {
     await table().findByText("Kush Jayesh Ahir");
     fireEvent.click(within(await openRowMenu("Kush Jayesh Ahir")).getByText("View details"));
     expect(await screen.findByText("Account details")).toBeInTheDocument();
+  });
+});
+
+describe("Users & Access — Account details approval", () => {
+  function approvalCalls(action?: "approve" | "reject") {
+    return apiRequest.mock.calls.filter(([url]) => {
+      const path = String(url);
+      return action
+        ? path === `/api/admin/users/p-1/${action}`
+        : path === "/api/admin/users/p-1/approve" || path === "/api/admin/users/p-1/reject";
+    });
+  }
+
+  it("shows one clean approval decision section for a pending account", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Pending Pat");
+    const drawer = await openDetails("Pending Pat");
+
+    expect(within(drawer).getByText("Approval decision")).toBeInTheDocument();
+    expect(
+      within(drawer).queryByText(
+        "Review the account information above before approving or rejecting access.",
+      ),
+    ).toBeNull();
+    expect(
+      within(drawer).queryByText(
+        "Role changes are available through the account actions menu when permitted.",
+      ),
+    ).toBeNull();
+    const info = within(drawer).getByRole("button", { name: "About approval decisions" });
+    expect(document.querySelector(".max-w-\\[220px\\]")).toBeNull();
+    fireEvent.pointerEnter(info);
+    await waitFor(() => expect(document.querySelector(".max-w-\\[220px\\]")).not.toBeNull());
+    expect(document.querySelector(".max-w-\\[220px\\]")).toHaveTextContent(
+      "Review details first. Role changes require confirmation.",
+    );
+    expect(within(drawer).getAllByRole("button", { name: "Approve account" })).toHaveLength(1);
+    expect(within(drawer).getAllByRole("button", { name: "Reject account" })).toHaveLength(1);
+  });
+
+  it("does not show pending actions for an approved account", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Kush Jayesh Ahir");
+    const drawer = await openDetails("Kush Jayesh Ahir");
+
+    expect(within(drawer).getByText("Approved")).toBeInTheDocument();
+    expect(within(drawer).queryByText("Approval decision")).toBeNull();
+    expect(within(drawer).queryByRole("button", { name: "Approve account" })).toBeNull();
+    expect(within(drawer).queryByRole("button", { name: "Reject account" })).toBeNull();
+  });
+
+  it("shows Rejected and only the supported reactivation action for a rejected account", async () => {
+    const rejected = user({
+      id: "r-1",
+      displayName: "Rejected Riley",
+      email: "riley@example.com",
+      approvalStatus: "rejected",
+    });
+    mockUsers([...FIXTURE, rejected]);
+    renderPage();
+    await table().findByText("Rejected Riley");
+    const drawer = await openDetails("Rejected Riley");
+
+    expect(within(drawer).getByText("Rejected")).toBeInTheDocument();
+    expect(within(drawer).queryByText("Approval decision")).toBeNull();
+    expect(within(drawer).queryByRole("button", { name: "Approve account" })).toBeNull();
+    expect(within(drawer).queryByRole("button", { name: "Reject account" })).toBeNull();
+    expect(within(drawer).getByRole("button", { name: "Reactivate account" })).toBeInTheDocument();
+  });
+
+  it("shows the supported reactivation action for a suspended account", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Suspended Sam");
+    const drawer = await openDetails("Suspended Sam");
+
+    expect(within(drawer).getByText("Suspended")).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Reactivate account" })).toBeInTheDocument();
+  });
+
+  it("requires approval confirmation and Cancel makes no API call", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Pending Pat");
+    const drawer = await openDetails("Pending Pat");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Approve account" }));
+
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Approve this account?")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "This customer will be allowed to access the service portal and create service requests.",
+      ),
+    ).toBeInTheDocument();
+    expect(approvalCalls()).toHaveLength(0);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(approvalCalls()).toHaveLength(0);
+    expect(within(drawer).getByRole("button", { name: "Approve account" })).toBeInTheDocument();
+  });
+
+  it("calls the existing approve endpoint only after confirmation", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Pending Pat");
+    const drawer = await openDetails("Pending Pat");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Approve account" }));
+    const dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Approve account" }));
+
+    await waitFor(() => expect(approvalCalls("approve")).toHaveLength(1));
+    expect(approvalCalls("reject")).toHaveLength(0);
+    expect(approvalCalls("approve")[0][1]).toMatchObject({ method: "POST", body: "{}" });
+  });
+
+  it("requires rejection confirmation, supports Cancel, and calls the reject endpoint", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Pending Pat");
+    const drawer = await openDetails("Pending Pat");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Reject account" }));
+
+    let dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Reject this account?")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "This account will remain unable to use the service portal. This action can be reviewed later if reactivation is supported.",
+      ),
+    ).toBeInTheDocument();
+    expect(approvalCalls()).toHaveLength(0);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(approvalCalls()).toHaveLength(0);
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Reject account" }));
+    dialog = await screen.findByRole("alertdialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reject account" }));
+    await waitFor(() => expect(approvalCalls("reject")).toHaveLength(1));
+    expect(approvalCalls("approve")).toHaveLength(0);
+  });
+
+  it("refreshes users, keeps the drawer open, and immediately shows the successful status", async () => {
+    const approved = { ...FIXTURE.find((candidate) => candidate.id === "p-1")!, approvalStatus: "approved" as const };
+    const refreshed = FIXTURE.map((candidate) => (candidate.id === approved.id ? approved : candidate));
+    let usersFetches = 0;
+    apiRequest.mockImplementation((url: string) => {
+      if (url === "/api/admin/users") {
+        usersFetches += 1;
+        return Promise.resolve(usersFetches === 1 ? FIXTURE : refreshed);
+      }
+      if (url.includes("/api/activity/people/")) {
+        return Promise.resolve({
+          person: { ...approved, companyName: "ABCD", lastSeenAt: null, workload: null },
+          machineCount: 2,
+          priorityDistribution: {},
+          eventCounts: {},
+        });
+      }
+      if (url === "/api/admin/users/p-1/approve") {
+        return Promise.resolve({ user: approved });
+      }
+      return Promise.resolve({});
+    });
+    renderPage();
+    await table().findByText("Pending Pat");
+    const drawer = await openDetails("Pending Pat");
+    fireEvent.click(within(drawer).getByRole("button", { name: "Approve account" }));
+    fireEvent.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", {
+        name: "Approve account",
+      }),
+    );
+
+    await waitFor(() => expect(usersFetches).toBeGreaterThan(1));
+    expect(screen.getByRole("dialog", { name: "Account details" })).toBeInTheDocument();
+    expect(within(drawer).getByText("Approved")).toBeInTheDocument();
+    expect(within(drawer).queryByText("Approval decision")).toBeNull();
+    expect(within(drawer).queryByRole("button", { name: "Approve account" })).toBeNull();
+    expect(within(drawer).queryByRole("button", { name: "Reject account" })).toBeNull();
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Pending Pat approved."));
+  });
+
+  it.each(["support", "engineer"] as const)(
+    "does not expose approval actions to the %s role",
+    async (role) => {
+      sessionRole.current = role;
+      sessionRole.id = `${role}-actor`;
+      mockUsers();
+      renderPage();
+      await table().findByText("Pending Pat");
+      const drawer = await openDetails("Pending Pat");
+
+      expect(within(drawer).queryByText("Approval decision")).toBeNull();
+      expect(within(drawer).queryByRole("button", { name: "Approve account" })).toBeNull();
+      expect(within(drawer).queryByRole("button", { name: "Reject account" })).toBeNull();
+    },
+  );
+
+  it("allows an owner through the shared approval RBAC helper", async () => {
+    sessionRole.current = "owner";
+    sessionRole.id = "owner-actor";
+    mockUsers();
+    renderPage();
+    await table().findByText("Pending Pat");
+    const drawer = await openDetails("Pending Pat");
+
+    expect(within(drawer).getByRole("button", { name: "Approve account" })).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Reject account" })).toBeInTheDocument();
   });
 });
 
@@ -410,22 +620,96 @@ describe("Users & Access — protected system account", () => {
 });
 
 describe("Users & Access — invite staff", () => {
-  it("opens a modal offering only Engineer and Support", async () => {
-    mockUsers();
-    renderPage();
+  async function openInvite() {
     await table().findByText("Kush Jayesh Ahir");
     fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+    return screen.findByRole("dialog");
+  }
 
-    const dialog = await screen.findByRole("dialog");
+  function roleValues(dialog: HTMLElement) {
+    return within(dialog).getAllByRole("radio").map((r) => (r as HTMLInputElement).value);
+  }
+
+  it("offers Engineer, Support and Admin to an admin actor", async () => {
+    mockUsers();
+    renderPage();
+    const dialog = await openInvite();
+
     expect(within(dialog).getByLabelText("Display name")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Email")).toBeInTheDocument();
 
-    const roles = within(dialog).getAllByRole("radio").map((r) => (r as HTMLInputElement).value);
-    expect(roles).toEqual(["engineer", "support"]);
-    expect(within(dialog).queryByText("Admin")).toBeNull();
+    expect(roleValues(dialog)).toEqual(["engineer", "support", "admin"]);
+    expect(within(dialog).getByText("Admin")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Manages platform users, permissions, approvals, and operational settings."),
+    ).toBeInTheDocument();
+    // Owner is still never creatable from this dialog.
     expect(within(dialog).queryByText("Owner")).toBeNull();
-    // The old copy promised admin promotion, which is no longer possible.
-    expect(within(dialog).queryByText(/Engineer or Admin privileges/)).toBeNull();
+  });
+
+  it("hides Admin entirely from an owner actor rather than disabling it", async () => {
+    sessionRole.current = "owner";
+    sessionRole.id = "o-1";
+    mockUsers();
+    renderPage();
+    const dialog = await openInvite();
+
+    expect(roleValues(dialog)).toEqual(["engineer", "support"]);
+    expect(within(dialog).queryByText("Admin")).toBeNull();
+    expect(within(dialog).queryByText(/full platform management privileges/)).toBeNull();
+  });
+
+  it("keeps Engineer and Support cards unchanged", async () => {
+    mockUsers();
+    renderPage();
+    const dialog = await openInvite();
+
+    expect(
+      within(dialog).getByText("Handles assigned service requests and updates work status."),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Coordinates customers, requests, and engineer assignments."),
+    ).toBeInTheDocument();
+    // Engineer stays the default selection.
+    const engineer = within(dialog).getAllByRole("radio")[0] as HTMLInputElement;
+    expect(engineer.checked).toBe(true);
+  });
+
+  it("warns only while Admin is selected, without a browser confirm", async () => {
+    mockUsers();
+    renderPage();
+    const dialog = await openInvite();
+
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Admin/ }));
+    const warning = within(dialog).getByRole("alert");
+    expect(warning.textContent).toContain(
+      "Administrator access grants full platform management privileges",
+    );
+    expect(warning.textContent).toContain("Invite only trusted personnel.");
+
+    // Switching back to a non-elevated role clears it again.
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Support/ }));
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+  });
+
+  it("updates the footer copy to match the selected role", async () => {
+    mockUsers();
+    renderPage();
+    const dialog = await openInvite();
+
+    expect(
+      within(dialog).getByText(/Invited staff receive the Engineer role\./),
+    ).toBeInTheDocument();
+    // The old copy claimed admin access was never granted through invitations.
+    expect(within(dialog).queryByText(/Owner and admin access is not granted/)).toBeNull();
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Admin/ }));
+    const footer = within(dialog).getByText(/Invited staff receive the Admin role\./);
+    expect(footer.textContent).toContain(
+      "Administrator invitations should be used only for trusted personnel.",
+    );
   });
 
   it("shows inline validation instead of relying on native tooltips", async () => {
@@ -473,6 +757,57 @@ describe("Users & Access — invite staff", () => {
         role: "engineer",
       });
     });
+  });
+
+  it("sends an admin invitation through the same endpoint", async () => {
+    mockUsers();
+    apiRequest.mockImplementation((url: string) => {
+      if (String(url).includes("/invite")) {
+        return Promise.resolve({ inviteUrl: "https://example.test/signup?token=xyz" });
+      }
+      return Promise.resolve(FIXTURE);
+    });
+    renderPage();
+    await table().findByText("Kush Jayesh Ahir");
+    fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Admin/ }));
+    fireEvent.change(within(dialog).getByLabelText("Display name"), {
+      target: { value: "Grace Hopper" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Email"), {
+      target: { value: "grace@example.com" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send invite" }));
+
+    await waitFor(() => {
+      const calls = apiRequest.mock.calls.filter(([u]) => String(u).includes("/invite"));
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toBe("/api/admin/users/invite");
+      expect(JSON.parse(calls[0][1].body)).toEqual({
+        displayName: "Grace Hopper",
+        email: "grace@example.com",
+        role: "admin",
+      });
+    });
+    // Same flow as any other role: the invite link takes over the dialog.
+    expect(await within(dialog).findByText("https://example.test/signup?token=xyz")).toBeInTheDocument();
+  });
+
+  it("still blocks an invalid admin invitation with inline validation", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Kush Jayesh Ahir");
+    fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Admin/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send invite" }));
+
+    expect(await within(dialog).findByText("Enter a display name.")).toBeInTheDocument();
+    expect(within(dialog).getByText("Enter an email address.")).toBeInTheDocument();
+    expect(apiRequest.mock.calls.some(([u]) => String(u).includes("/invite"))).toBe(false);
   });
 });
 

@@ -316,14 +316,16 @@ const PortalShell = () => {
         /* Collapsed: clean centered logo mark. The collapse/expand control now
            lives as a floating button on the sidebar edge (see desktop aside). */
         <div className="flex items-center justify-center border-b border-[var(--lp-line)] px-3 py-5">
-          <Link
-            to="/app/requests"
-            title="ElkaTech"
-            aria-label="ElkaTech"
-            className="flex h-11 w-11 items-center justify-center text-[var(--lp-ink)] transition-opacity hover:opacity-80"
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+            aria-expanded={false}
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--lp-ink)] transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45"
           >
             <ElkaTechMark size={40} />
-          </Link>
+          </button>
         </div>
       ) : (
         /* Expanded / mobile: brand block. */

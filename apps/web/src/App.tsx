@@ -34,6 +34,11 @@ import CustomerActivityPage from "@/pages/CustomerActivityPage";
 import PeopleActivityPage from "@/pages/PeopleActivityPage";
 import PersonActivityPage from "@/pages/PersonActivityPage";
 import AccountPage from "@/pages/AccountPage";
+import ReportsPage from "@/pages/ReportsPage";
+import ReportNewPage from "@/pages/ReportNewPage";
+import ReportDetailPage from "@/pages/ReportDetailPage";
+import MyReportsPage from "@/pages/MyReportsPage";
+import MyReportDetailPage from "@/pages/MyReportDetailPage";
 
 const queryClient = new QueryClient();
 
@@ -161,6 +166,27 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              {/* Submission and My Reports stay available to signed-in users.
+                  The staff console and its detail payload are Admin-only. */}
+              <Route path="reports/new" element={<ReportNewPage />} />
+              <Route
+                path="reports"
+                element={
+                  <ProtectedRoute roles={["admin"]}>
+                    <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="reports/:reportId"
+                element={
+                  <ProtectedRoute roles={["admin"]}>
+                    <ReportDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="my-reports" element={<MyReportsPage />} />
+              <Route path="my-reports/:reportId" element={<MyReportDetailPage />} />
               <Route path="account" element={<AccountPage />} />
             </Route>
 

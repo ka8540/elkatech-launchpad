@@ -72,3 +72,47 @@ describe("App route declarations", () => {
     expect(personPage.slice(0, 400)).not.toContain('"customer"');
   });
 });
+
+describe("issue report routes", () => {
+  const source = APP_SOURCE;
+
+  it("declares all five report routes", () => {
+    expect(source).toContain('path="reports"');
+    expect(source).toContain('path="reports/new"');
+    expect(source).toContain('path="reports/:reportId"');
+    expect(source).toContain('path="my-reports"');
+    expect(source).toContain('path="my-reports/:reportId"');
+  });
+
+  it("gates the staff console and detail to Admin only", () => {
+    const console_ = source.slice(source.indexOf('path="reports"'));
+    expect(console_.slice(0, 400)).toContain('roles={["admin"]}');
+    const detail = source.slice(source.indexOf('path="reports/:reportId"'));
+    expect(detail.slice(0, 400)).toContain('roles={["admin"]}');
+    for (const role of ["owner", "support", "engineer", "customer"]) {
+      expect(console_.slice(0, 400)).not.toContain(`"${role}"`);
+      expect(detail.slice(0, 400)).not.toContain(`"${role}"`);
+    }
+  });
+
+  it("leaves the submission form open to every signed-in role", () => {
+    // `reports/new` sits outside the staff gate deliberately: anyone can hit a
+    // bug, and the same form serves customers and staff. Slice to the end of
+    // this one Route element so the next route's gate is not read as its own.
+    const start = source.indexOf('path="reports/new"');
+    const element = source.slice(start, source.indexOf("/>", start));
+    expect(element).toContain("ReportNewPage");
+    expect(element).not.toContain("ProtectedRoute");
+  });
+
+  it("keeps the customer view on its own route, not the staff detail route", () => {
+    // A customer must never resolve /app/reports/:id, which renders internal
+    // notes; their own report lives at /app/my-reports/:id and hits a
+    // different endpoint. Match on the opening tag — "MyReportDetailPage"
+    // contains "ReportDetailPage" as a substring.
+    const start = source.indexOf('path="my-reports/:reportId"');
+    const element = source.slice(start, source.indexOf("/>", start));
+    expect(element).toContain("<MyReportDetailPage");
+    expect(element).not.toContain("<ReportDetailPage");
+  });
+});

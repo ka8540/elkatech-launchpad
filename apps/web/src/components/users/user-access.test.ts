@@ -2,9 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { AuthUser, Role } from "@elkatech/contracts";
 import {
   INVITABLE_ROLES,
+  INVITE_ADMIN_WARNING,
   ROLE_WARNINGS,
   actionsFor,
+  canDecideApprovalFor,
+  canInviteAdmins,
   canManageRoleFor,
+  canReactivateFor,
+  invitableRolesFor,
   isElevatedRole,
   isStaffManaged,
   roleChangeOptions,
@@ -152,9 +157,10 @@ describe("row actions", () => {
     expect(actionsFor(user({ role: "engineer" }), admin)).not.toContain("machines");
   });
 
-  it("offers approve/reject only while pending", () => {
+  it("keeps approve/reject out of the row actions even while pending", () => {
     const pending = actionsFor(user({ approvalStatus: "pending_approval" }), admin);
-    expect(pending).toEqual(expect.arrayContaining(["approve", "reject"]));
+    expect(pending).not.toContain("approve");
+    expect(pending).not.toContain("reject");
     expect(actionsFor(user({ approvalStatus: "approved" }), admin)).not.toContain("approve");
   });
 
@@ -177,6 +183,31 @@ describe("row actions", () => {
   it("stops an owner from acting on an admin account", () => {
     const actions = actionsFor(user({ id: "a2", role: "admin" }), owner);
     expect(actions).toEqual(["details"]);
+  });
+
+  it("gates drawer approval decisions with status, manageability, and shared RBAC", () => {
+    const pending = user({ id: "pending", approvalStatus: "pending_approval" });
+    expect(canDecideApprovalFor(pending, admin)).toBe(true);
+    expect(canDecideApprovalFor(pending, owner)).toBe(true);
+    expect(canDecideApprovalFor(pending, { ...admin, role: "support" })).toBe(false);
+    expect(canDecideApprovalFor(pending, { ...admin, role: "engineer" })).toBe(false);
+    expect(canDecideApprovalFor(user({ approvalStatus: "approved" }), admin)).toBe(false);
+    expect(canDecideApprovalFor(pending, { ...admin, id: pending.id })).toBe(false);
+    expect(
+      canDecideApprovalFor(user({ id: "a2", role: "admin", approvalStatus: "pending_approval" }), owner),
+    ).toBe(false);
+  });
+
+  it("offers drawer reactivation only for supported states and permitted actors", () => {
+    expect(canReactivateFor(user({ approvalStatus: "rejected" }), admin)).toBe(true);
+    expect(canReactivateFor(user({ approvalStatus: "suspended" }), owner)).toBe(true);
+    expect(canReactivateFor(user({ approvalStatus: "approved" }), admin)).toBe(false);
+    expect(
+      canReactivateFor(user({ approvalStatus: "suspended" }), {
+        ...admin,
+        role: "support",
+      }),
+    ).toBe(false);
   });
 
   it("offers no state changes and no role change on your own row", () => {
@@ -224,9 +255,8 @@ describe("labels", () => {
 });
 
 describe("invite", () => {
-  it("offers exactly Engineer and Support", () => {
-    expect(INVITABLE_ROLES.map((r) => r.value)).toEqual(["engineer", "support"]);
-    expect(INVITABLE_ROLES.map((r) => r.value)).not.toContain("admin");
+  it("knows about Engineer, Support and Admin — never Owner or Customer", () => {
+    expect(INVITABLE_ROLES.map((r) => r.value)).toEqual(["engineer", "support", "admin"]);
     expect(INVITABLE_ROLES.map((r) => r.value)).not.toContain("owner");
     expect(INVITABLE_ROLES.map((r) => r.value)).not.toContain("customer");
   });
@@ -235,6 +265,46 @@ describe("invite", () => {
     for (const role of INVITABLE_ROLES) {
       expect(role.description.length).toBeGreaterThan(10);
     }
+  });
+
+  it("offers Admin only to an actor who may assign it", () => {
+    expect(invitableRolesFor("admin").map((r) => r.value)).toEqual([
+      "engineer",
+      "support",
+      "admin",
+    ]);
+    // An owner may never grant admin, so the option is absent rather than
+    // disabled — matching what the gateway would accept.
+    expect(invitableRolesFor("owner").map((r) => r.value)).toEqual(["engineer", "support"]);
+    expect(invitableRolesFor("support")).toEqual([]);
+    expect(invitableRolesFor("engineer")).toEqual([]);
+    expect(invitableRolesFor("customer")).toEqual([]);
+  });
+
+  it("derives admin-invite permission from the shared RBAC helper", () => {
+    expect(canInviteAdmins("admin")).toBe(true);
+    expect(canInviteAdmins("owner")).toBe(false);
+    expect(canInviteAdmins("support")).toBe(false);
+    expect(canInviteAdmins("engineer")).toBe(false);
+    expect(canInviteAdmins("customer")).toBe(false);
+  });
+
+  it("keeps Engineer and Support wording unchanged", () => {
+    const byValue = Object.fromEntries(INVITABLE_ROLES.map((r) => [r.value, r]));
+    expect(byValue.engineer.description).toBe(
+      "Handles assigned service requests and updates work status.",
+    );
+    expect(byValue.support.description).toBe(
+      "Coordinates customers, requests, and engineer assignments.",
+    );
+    expect(byValue.admin.description).toBe(
+      "Manages platform users, permissions, approvals, and operational settings.",
+    );
+  });
+
+  it("warns about the reach of administrator access", () => {
+    expect(INVITE_ADMIN_WARNING).toContain("full platform management privileges");
+    expect(INVITE_ADMIN_WARNING).toContain("Invite only trusted personnel.");
   });
 
   it("validates the invite form inline", () => {

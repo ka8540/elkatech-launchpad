@@ -21,6 +21,7 @@ describe("portal sidebar navigation", () => {
       "Overview",
       "Requests",
       "Queue",
+      "Issue Reports",
       "Activity",
       "Customer Machines",
       "Users",
@@ -50,9 +51,42 @@ describe("portal sidebar navigation", () => {
     ]);
   });
 
-  it("leaves engineer and customer navigation untouched", () => {
+  it("hides the staff reports console from Engineer and keeps customer My Reports", () => {
     expect(labelsFor("engineer")).toEqual(["Requests", "Queue"]);
-    expect(labelsFor("customer")).toEqual(["Requests"]);
+    expect(labelsFor("customer")).toEqual(["Requests", "My Reports"]);
+  });
+
+  it("offers Issue Reports only to Admin", () => {
+    expect(labelsFor("admin")).toContain("Issue Reports");
+    for (const role of ["owner", "support", "engineer", "customer"] as const) {
+      expect(pathsFor(role)).not.toContain("/app/reports");
+      expect(labelsFor(role)).not.toContain("Issue Reports");
+    }
+  });
+
+  it("never offers the customer report list to staff", () => {
+    for (const role of ["engineer", "support", "owner", "admin"] as const) {
+      expect(pathsFor(role)).not.toContain("/app/my-reports");
+    }
+  });
+
+  it("keeps Issue Reports highlighted on the detail and create pages", () => {
+    const reports = buildNavItems("admin").find((i) => i.label === "Issue Reports");
+    expect(reports?.to).toBe("/app/reports");
+    expect(reports?.activeWhen?.("/app/reports")).toBe(true);
+    expect(reports?.activeWhen?.("/app/reports/abc-123")).toBe(true);
+    expect(reports?.activeWhen?.("/app/reports/new")).toBe(true);
+    expect(reports?.activeWhen?.("/app/queue")).toBe(false);
+  });
+
+  it("keeps My Reports highlighted while a customer is filing one", () => {
+    const mine = buildNavItems("customer").find((i) => i.label === "My Reports");
+    expect(mine?.to).toBe("/app/my-reports");
+    expect(mine?.activeWhen?.("/app/my-reports")).toBe(true);
+    expect(mine?.activeWhen?.("/app/my-reports/abc-123")).toBe(true);
+    // The shared submission form has no nav entry of its own.
+    expect(mine?.activeWhen?.("/app/reports/new")).toBe(true);
+    expect(mine?.activeWhen?.("/app/requests")).toBe(false);
   });
 
   it("shows only Requests before the session resolves", () => {

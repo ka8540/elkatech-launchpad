@@ -55,6 +55,7 @@ import {
   isValidStatusTransition,
   type WorkflowActor,
 } from "./workflow";
+import { registerReportRoutes } from "./reports";
 
 const app = Fastify({ logger: true });
 const sql = getDb();
@@ -2212,6 +2213,10 @@ app.get("/internal/activity/:userId/tasks", async (request, reply) => {
     nextCursor: hasMore && last ? encodeCursor(last.updated_at, last.id) : null,
   };
 });
+
+// Issue-report routes live in their own module — this file is already large,
+// and reports share no state with the request pipeline beyond the connection.
+await registerReportRoutes(app);
 
 const port = Number(new URL(env.SERVICE_DESK_URL).port || "4003");
 

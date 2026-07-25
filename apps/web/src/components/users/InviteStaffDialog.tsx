@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import type { Role } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -14,21 +15,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { INVITABLE_ROLES, validateInvite, type InviteRole } from "./user-access";
+import {
+  INVITE_ADMIN_WARNING,
+  invitableRolesFor,
+  validateInvite,
+  type InviteRole,
+} from "./user-access";
 
 /**
- * Staff invitation. Lives in a modal so it stops occupying half the page, and
- * offers only the two operational roles — owner/admin cannot be created here.
+ * Staff invitation. Lives in a modal so it stops occupying half the page. The
+ * role cards on offer come from the shared RBAC helper, so Admin only appears
+ * for an actor the gateway would actually let create one.
  */
 export default function InviteStaffDialog({
   open,
   onOpenChange,
   onInvited,
+  actorRole,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInvited: () => void | Promise<void>;
+  actorRole: Role;
 }) {
+  const roles = useMemo(() => invitableRolesFor(actorRole), [actorRole]);
   const [form, setForm] = useState({
     displayName: "",
     email: "",
@@ -36,6 +46,11 @@ export default function InviteStaffDialog({
   });
   const [errors, setErrors] = useState<{ displayName?: string; email?: string }>({});
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+
+  // A role the actor is not allowed to offer can never be the one submitted,
+  // even if the permitted set narrows while the dialog is open.
+  const selectedRole = roles.find((role) => role.value === form.role) ?? roles[0];
+  const role = selectedRole?.value ?? "engineer";
 
   function reset() {
     setForm({ displayName: "", email: "", role: "engineer" });
@@ -50,7 +65,7 @@ export default function InviteStaffDialog({
         body: JSON.stringify({
           displayName: form.displayName.trim(),
           email: form.email.trim(),
-          role: form.role,
+          role,
         }),
       }),
     onSuccess: async (payload) => {
@@ -72,8 +87,6 @@ export default function InviteStaffDialog({
     if (Object.keys(nextErrors).length > 0) return;
     invite.mutate();
   }
-
-  const selectedRole = INVITABLE_ROLES.find((role) => role.value === form.role);
 
   return (
     <Dialog
@@ -171,12 +184,12 @@ export default function InviteStaffDialog({
             <fieldset>
               <legend className="mb-1.5 text-sm font-medium text-[var(--lp-ink)]">Role</legend>
               <div className="space-y-2">
-                {INVITABLE_ROLES.map((role) => (
+                {roles.map((option) => (
                   <label
-                    key={role.value}
+                    key={option.value}
                     className={cn(
                       "flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors",
-                      form.role === role.value
+                      role === option.value
                         ? "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/[0.07]"
                         : "border-[var(--lp-line)] hover:border-[var(--lp-line-strong)]",
                     )}
@@ -184,22 +197,37 @@ export default function InviteStaffDialog({
                     <input
                       type="radio"
                       name="invite-role"
-                      value={role.value}
-                      checked={form.role === role.value}
-                      onChange={() => setForm((current) => ({ ...current, role: role.value }))}
+                      value={option.value}
+                      checked={role === option.value}
+                      onChange={() => setForm((current) => ({ ...current, role: option.value }))}
                       className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--lp-accent)]"
                     />
                     <span className="min-w-0">
                       <span className="block text-sm font-medium text-[var(--lp-ink)]">
-                        {role.label}
+                        {option.label}
                       </span>
                       <span className="block text-xs leading-5 text-[var(--lp-ink-soft)]">
-                        {role.description}
+                        {option.description}
                       </span>
                     </span>
                   </label>
                 ))}
               </div>
+
+              {role === "admin" && (
+                <div
+                  role="alert"
+                  className="mt-2 flex gap-3 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3"
+                >
+                  <AlertTriangle
+                    aria-hidden="true"
+                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                  />
+                  <p className="min-w-0 text-xs leading-5 text-[var(--lp-ink-soft)]">
+                    {INVITE_ADMIN_WARNING}
+                  </p>
+                </div>
+              )}
             </fieldset>
 
             <DialogFooter>
@@ -220,8 +248,10 @@ export default function InviteStaffDialog({
               </Button>
             </DialogFooter>
             <p className="text-xs leading-5 text-[var(--lp-faint)]">
-              Invited staff receive the {selectedRole?.label} role. Owner and admin access is not
-              granted through invitations.
+              Invited staff receive the {selectedRole?.label} role.{" "}
+              {role === "admin"
+                ? "Administrator invitations should be used only for trusted personnel."
+                : "Owner access is not granted through invitations."}
             </p>
           </form>
         )}
