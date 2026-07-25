@@ -2,8 +2,10 @@ import type { AccountOrigin, ApprovalStatus, AuthUser, Role } from "@elkatech/co
 import {
   assignableRolesFor,
   canApproveUsers,
+  canChangeUserRole,
   canChangeRoles,
   canDeleteUsers,
+  canEditUserProfiles,
   canManageTargetUser,
   canSuspendUsers,
 } from "@elkatech/contracts";
@@ -25,12 +27,17 @@ export const USER_TABS: Array<{ id: UserTabId; label: string }> = [
   { id: "suspended", label: "Suspended" },
 ];
 
-/** Staff = anyone who is not a customer. */
+/** The segmented Staff tab contains operational staff, never Admin accounts. */
 export function isStaffRole(role: Role): boolean {
-  return role !== "customer";
+  return role !== "customer" && role !== "admin";
 }
 
 export function matchesTab(user: AuthUser, tab: UserTabId): boolean {
+  // Admin accounts are protected platform identities. They belong to the
+  // complete directory only and must never leak into status/role segments,
+  // even if legacy data contains a stale approval status.
+  if (user.role === "admin") return tab === "all";
+
   switch (tab) {
     case "customers":
       return user.role === "customer";
@@ -77,7 +84,7 @@ export const STATUS_LABELS: Record<ApprovalStatus, string> = {
 export const ORIGIN_LABELS: Record<AccountOrigin, string> = {
   self_signup: "Public signup",
   firebase_google: "Google signup",
-  admin_invite: "Staff invited",
+  admin_invite: "Invited account",
   legacy: "System account",
 };
 
@@ -146,12 +153,15 @@ export function sortUsers(users: AuthUser[]): AuthUser[] {
 }
 
 export function summarise(users: AuthUser[]) {
+  const segmentedUsers = users.filter((user) => user.role !== "admin");
   return {
     total: users.length,
-    customers: users.filter((u) => u.role === "customer").length,
-    activeStaff: users.filter((u) => isStaffRole(u.role) && u.approvalStatus === "approved").length,
-    pending: users.filter((u) => u.approvalStatus === "pending_approval").length,
-    suspended: users.filter((u) => u.approvalStatus === "suspended").length,
+    customers: segmentedUsers.filter((u) => u.role === "customer").length,
+    activeStaff: segmentedUsers.filter(
+      (u) => isStaffRole(u.role) && u.approvalStatus === "approved",
+    ).length,
+    pending: segmentedUsers.filter((u) => u.approvalStatus === "pending_approval").length,
+    suspended: segmentedUsers.filter((u) => u.approvalStatus === "suspended").length,
   };
 }
 
@@ -190,7 +200,6 @@ export const ROLE_WARNINGS: Partial<Record<Role, string>> = {
   owner: "Owner access grants operational and account-management privileges.",
   support: "Support can coordinate customers, requests, and engineer assignments.",
   engineer: "Engineers work assigned service requests and update their status.",
-  customer: "Customers only see their own machines and service requests.",
 };
 
 /**
@@ -201,18 +210,22 @@ export const ROLE_WARNINGS: Partial<Record<Role, string>> = {
 export function roleChangeOptions(user: AuthUser, actor: ActorContext): Role[] {
   if (!canChangeRoles(actor.role)) return [];
   if (!canManageTargetUser(actor.role, user.role)) return [];
-  return assignableRolesFor(actor.role).filter((role) => role !== user.role);
+  return assignableRolesFor(actor.role).filter((role) =>
+    canChangeUserRole(actor.role, user.role, role),
+  );
 }
 
 /**
  * Whether the Manage role action should be offered at all. Deliberately
  * conservative: never the protected system account, never your own row (a
  * self-demotion could lock you out), never a target RBAC says you cannot
- * manage, and never a self-signup customer.
+ * manage, and never a customer account. Customer identities must be removed
+ * and invited separately before they can receive staff access.
  */
 export function canManageRoleFor(user: AuthUser, actor: ActorContext): boolean {
   if (isProtectedAccount(user, actor)) return false;
   if (user.id === actor.id) return false;
+  if (user.role === "customer") return false;
   if (!isStaffManaged(user.accountOrigin)) return false;
   return roleChangeOptions(user, actor).length > 0;
 }
@@ -236,6 +249,16 @@ export function canReactivateFor(user: AuthUser, actor: ActorContext): boolean {
   if (user.approvalStatus !== "rejected" && user.approvalStatus !== "suspended") return false;
   if (isProtectedAccount(user, actor) || user.id === actor.id) return false;
   return canSuspendUsers(actor.role) && canManageTargetUser(actor.role, user.role);
+}
+
+/** Approved, manageable accounts may have profile fields edited by Admin. */
+export function canEditDetailsFor(user: AuthUser, actor: ActorContext): boolean {
+  if (user.approvalStatus !== "approved") return false;
+  if (isProtectedAccount(user, actor)) return false;
+  return (
+    canEditUserProfiles(actor.role) &&
+    canManageTargetUser(actor.role, user.role)
+  );
 }
 
 /**
@@ -300,6 +323,11 @@ export function resolveSystemAdminId(users: AuthUser[]): string | null {
 /** Roles the invite dialog knows how to offer. Which of them a given actor
  *  actually sees is decided by `invitableRolesFor` — never by the component. */
 export const INVITABLE_ROLES = [
+  {
+    value: "customer" as const,
+    label: "Customer",
+    description: "Uses the customer portal to manage machines and submit service requests.",
+  },
   {
     value: "engineer" as const,
     label: "Engineer",

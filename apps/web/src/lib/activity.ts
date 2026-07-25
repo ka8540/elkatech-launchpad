@@ -30,7 +30,7 @@ export const APPROVAL_LABELS: Record<ApprovalStatus, string> = {
 
 export const ORIGIN_LABELS: Record<AccountOrigin, string> = {
   self_signup: "Self signup",
-  admin_invite: "Staff invited",
+  admin_invite: "Invited account",
   firebase_google: "Google signup",
   legacy: "Legacy",
 };

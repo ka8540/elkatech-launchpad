@@ -39,7 +39,7 @@ function statusBadgeClass(status: AuthUser["approvalStatus"]) {
 function originLabel(origin: AuthUser["accountOrigin"]) {
   switch (origin) {
     case "admin_invite":
-      return "Staff invited";
+      return "Invited account";
     case "firebase_google":
       return "Google sign-in";
     case "legacy":

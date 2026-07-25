@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { landingPathForUser } from "@/lib/portal-landing";
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   google_oauth_failed: "Google sign-in failed. Please try again or continue with email.",
@@ -80,15 +81,6 @@ const SignupPage = () => {
     return result.user;
   }
 
-  function landingForRoleAndStatus(user: AuthUser): string {
-    if (user.role !== "customer") {
-      return user.role === "admin" ? "/app/queue" : "/app/queue";
-    }
-    // New customers complete their service profile before the portal.
-    if (!user.profileCompleted) return "/app/complete-profile";
-    return "/app/requests";
-  }
-
   const signupMutation = useMutation({
     mutationFn: async () => {
       // For invite-token signups the legacy backend flow handles role
@@ -120,7 +112,7 @@ const SignupPage = () => {
       queryClient.setQueryData(["session"], { user: result.user });
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       toast.success("Account created. An administrator will activate your account shortly.");
-      navigate(landingForRoleAndStatus(result.user));
+      navigate(landingPathForUser(result.user));
     },
     onError: (error: unknown) => {
       if (isSessionCookieBlockedError(error)) {
@@ -154,7 +146,7 @@ const SignupPage = () => {
       queryClient.setQueryData(["session"], { user });
       await queryClient.invalidateQueries({ queryKey: ["session"] });
       toast.success("Account created with Google.");
-      navigate(landingForRoleAndStatus(user));
+      navigate(landingPathForUser(user));
     },
     onError: (error: unknown) => {
       if (isSessionCookieBlockedError(error)) {

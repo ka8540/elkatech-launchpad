@@ -50,6 +50,10 @@ export function canChangeRoles(role: Role): boolean {
 export function canManageUsers(role: Role): boolean {
   return role === "admin" || role === "owner";
 }
+/** Edit another user's profile/contact fields — currently Admin-only. */
+export function canEditUserProfiles(role: Role): boolean {
+  return role === "admin";
+}
 /** Operational management (customer machines, etc.). */
 export function canManageOperational(role: Role): boolean {
   return role === "admin" || role === "owner";
@@ -72,6 +76,15 @@ export function canViewSupportDashboard(role: Role): boolean {
 /** Access the system Admin panel (health, dangerous system controls). */
 export function canAccessAdminPanel(role: Role): boolean {
   return role === "admin";
+}
+
+/** Primary portal destination after authentication or when opening `/app`. */
+export function portalHomePathForRole(
+  role: Role,
+): "/app/admin" | "/app/requests" | "/app/queue" {
+  if (role === "admin") return "/app/admin";
+  if (role === "customer") return "/app/requests";
+  return "/app/queue";
 }
 
 /* ── Issue reports ─────────────────────────────────────────────────────────
@@ -125,6 +138,24 @@ export function canManageTargetUser(actorRole: Role, targetRole: Role): boolean 
   if (actorRole === "admin") return true;
   if (actorRole === "owner") return targetRole !== "admin";
   return false;
+}
+
+/**
+ * Whether an existing account may move between two roles. Customer identities
+ * are deliberately isolated from staff identities: converting in either
+ * direction would carry customer-owned data across a privilege boundary.
+ * Create a separate account through the invitation flow instead.
+ */
+export function canChangeUserRole(
+  actorRole: Role,
+  currentRole: Role,
+  nextRole: Role,
+): boolean {
+  if (!canChangeRoles(actorRole)) return false;
+  if (currentRole === "customer" || nextRole === "customer") return false;
+  if (currentRole === nextRole) return false;
+  if (!canManageTargetUser(actorRole, currentRole)) return false;
+  return assignableRolesFor(actorRole).includes(nextRole);
 }
 
 export const requestPrioritySchema = z.enum(["low", "normal", "high", "urgent"]);
@@ -389,6 +420,51 @@ export const customerProfileSchema = z.object({
   profileCompletedAt: z.string().nullable().optional(),
 });
 export type CustomerProfile = z.infer<typeof customerProfileSchema>;
+
+// ─── Scalable customer picker ───────────────────────────────────────────────
+// Machine linking and other operational flows use this deliberately small
+// projection instead of downloading every AuthUser and filtering in React.
+export const CUSTOMER_PICKER_MIN_SEARCH_LENGTH = 2;
+export const CUSTOMER_PICKER_PAGE_SIZE_DEFAULT = 15;
+export const CUSTOMER_PICKER_PAGE_SIZE_MAX = 20;
+
+export const customerPickerQuerySchema = z
+  .object({
+    search: z
+      .string()
+      .trim()
+      .min(CUSTOMER_PICKER_MIN_SEARCH_LENGTH)
+      .max(120)
+      .optional(),
+    customerId: z.string().uuid().optional(),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(CUSTOMER_PICKER_PAGE_SIZE_MAX)
+      .default(CUSTOMER_PICKER_PAGE_SIZE_DEFAULT),
+    cursor: z.string().max(200).optional(),
+  })
+  .refine((query) => Boolean(query.search || query.customerId), {
+    message: "Search or customerId is required.",
+  });
+export type CustomerPickerQuery = z.infer<typeof customerPickerQuerySchema>;
+
+export const customerPickerCustomerSchema = z.object({
+  id: z.string().uuid(),
+  displayName: z.string(),
+  email: z.string().email(),
+  companyName: z.string().nullable(),
+  approvalStatus: approvalStatusSchema,
+  profileCompleted: z.boolean(),
+});
+export type CustomerPickerCustomer = z.infer<typeof customerPickerCustomerSchema>;
+
+export const customerPickerResponseSchema = z.object({
+  customers: z.array(customerPickerCustomerSchema),
+  nextCursor: z.string().nullable(),
+});
+export type CustomerPickerResponse = z.infer<typeof customerPickerResponseSchema>;
 
 // Onboarding form — all required fields must be present to mark the profile
 // complete. Optional fields may be omitted entirely (the frontend drops empty

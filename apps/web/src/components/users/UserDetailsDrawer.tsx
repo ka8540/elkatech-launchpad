@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ActivityPersonDetail, AuthUser } from "@elkatech/contracts";
-import { Info } from "lucide-react";
+import { Info, Pencil } from "lucide-react";
 import { useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,8 @@ export default function UserDetailsDrawer({
   onAccessAction,
   canManageRole = false,
   onManageRole,
+  canEditDetails = false,
+  onEditDetails,
 }: {
   user: AuthUser | null;
   open: boolean;
@@ -63,6 +65,10 @@ export default function UserDetailsDrawer({
   canManageRole?: boolean;
   /** Hands off to the page's ManageRoleDialog — no duplicate role logic here. */
   onManageRole?: () => void;
+  /** Approved-profile editing permission is derived by the caller's shared RBAC helper. */
+  canEditDetails?: boolean;
+  /** Opens the focused profile-edit dialog; access fields remain separate. */
+  onEditDetails?: () => void;
 }) {
   const [approvalTipOpen, setApprovalTipOpen] = useState(false);
   const { data, isLoading, isError } = useQuery({
@@ -152,6 +158,20 @@ export default function UserDetailsDrawer({
                 </>
               )}
             </dl>
+
+            {canEditDetails && onEditDetails && (
+              <section className="border-t border-[var(--lp-line)] pt-5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={onEditDetails}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit user details
+                </Button>
+              </section>
+            )}
 
             {canDecideApproval && onAccessAction && (
               <section

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Link, useParams, type LinkProps } from "react-router-dom";
+import { Link, useLocation, useParams, type LinkProps } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -34,6 +34,7 @@ import type {
 import { ApiError, apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PAGE_CONTAINER, PAGE_CONTAINER_READING } from "@/lib/page-layout";
+import { customerMachineProfileReturnTo } from "@/lib/customer-machine-navigation";
 import { getRequestStatusLabel, REQUEST_STATUS_BADGE_CLASSES } from "@/lib/request-status";
 import { Button } from "@/components/ui/button";
 import {
@@ -177,12 +178,12 @@ function MetricCard({
     <div className={cn("min-w-0 rounded-2xl p-4", cardSurface)}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="lp-mono break-words text-[10px] font-medium uppercase leading-4 tracking-[0.14em] text-[var(--lp-faint)]">
+          <p className="lp-mono min-h-8 break-words text-[10px] font-medium uppercase leading-4 tracking-[0.14em] text-[var(--lp-faint)]">
             {label}
           </p>
           <p
             className={cn(
-              "mt-2 min-w-0 break-words text-[var(--lp-ink)]",
+              "mt-2 flex min-h-8 min-w-0 items-center break-words text-[var(--lp-ink)]",
               valueClassName ?? "text-2xl font-bold",
             )}
           >
@@ -656,12 +657,14 @@ function MachineDetailDrawer({
 
 const CustomerMachineProfilePage = () => {
   const { customerId = "" } = useParams();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomerMachine | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<CustomerMachine | null>(null);
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [pendingMachineId, setPendingMachineId] = useState<string | null>(null);
+  const backTo = customerMachineProfileReturnTo(location.state);
 
   const profileQuery = useQuery({
     queryKey: ["admin", "user", customerId, "profile"],
@@ -828,9 +831,9 @@ const CustomerMachineProfilePage = () => {
   if (!customerId) {
     return (
       <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
-        <Link to="/app/machines" className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
+        <Link to={backTo} className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
           <ArrowLeft className="h-4 w-4" />
-          Back to Customer Machines
+          Back
         </Link>
         <div className={cn("rounded-2xl p-6 text-center", cardSurface)}>
           <h1 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">Customer not found</h1>
@@ -843,9 +846,9 @@ const CustomerMachineProfilePage = () => {
   if (profileQuery.isError) {
     return (
       <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
-        <Link to="/app/machines" className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
+        <Link to={backTo} className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
           <ArrowLeft className="h-4 w-4" />
-          Back to Customer Machines
+          Back
         </Link>
         <div className={cn("rounded-2xl p-6 text-center", cardSurface)}>
           <h1 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">Customer Machine Profile</h1>
@@ -859,11 +862,11 @@ const CustomerMachineProfilePage = () => {
     <div className={cn(PAGE_CONTAINER, "overflow-x-hidden")}>
       {/* Back navigation, top-left — separate from the primary header actions. */}
       <Link
-        to="/app/machines"
+        to={backTo}
         className="inline-flex h-9 w-fit items-center gap-2 rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-4 text-sm font-medium text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Customer Machines
+        Back
       </Link>
 
       <header className={cn("min-w-0 overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>

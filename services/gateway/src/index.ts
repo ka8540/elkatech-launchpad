@@ -36,15 +36,18 @@ import {
   assignableRolesFor,
   canApproveUsers,
   canAssignRequests,
+  canChangeUserRole,
   canChangeRoles,
   canCreateRequestForCustomer,
   canDeleteUsers,
+  canEditUserProfiles,
   canManageOperational,
   canManageTargetUser,
   canManageUsers,
   canSuspendUsers,
   canViewCustomerActivity,
   canViewSupportDashboard,
+  portalHomePathForRole,
   type Role,
 } from "@elkatech/contracts";
 import {
@@ -56,6 +59,10 @@ import {
 } from "@elkatech/config";
 import { evaluateApprovalGate } from "./approval";
 import { registerReportRoutes } from "./reports";
+import {
+  customerPickerQueryString,
+  registerCustomerPickerRoute,
+} from "./customer-picker";
 import {
   canAccessActivityDirectory,
   canAccessPersonPage,
@@ -338,6 +345,7 @@ app.get("/api/admin/users/:userId/profile", async (request: any, reply: any) => 
 app.patch("/api/admin/users/:userId/profile", async (request: any, reply: any) => {
   const session = await requireSession(request, reply, ["admin"]);
   if (!session) return;
+  if (!canEditUserProfiles(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = z.object({ userId: z.string().uuid() }).parse(request.params);
   const input = adminUpdateProfileInputSchema.parse(request.body);
@@ -632,7 +640,7 @@ app.get("/api/auth/google/callback", async (request, reply) => {
     setSessionCookies(reply, oauthResult);
 
     // Redirect to portal
-    const defaultPath = oauthResult.user.role === "customer" ? "/app/requests" : "/app/queue";
+    const defaultPath = portalHomePathForRole(oauthResult.user.role);
     return reply.redirect(returnTo || defaultPath);
   } catch {
     return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
@@ -934,6 +942,18 @@ app.get("/api/admin/users", async (request, reply) => {
   });
 });
 
+await registerCustomerPickerRoute(app, {
+  requireSession,
+  forbidden,
+  fetchCustomerPage: (query) =>
+    fetchJson(
+      `${env.AUTH_SERVICE_URL}/internal/customers/search?${customerPickerQueryString(query)}`,
+      { headers: internalHeaders() },
+    ),
+  forwardError: (request, reply, error) =>
+    forwardServiceError(request, reply, error, "customer picker search failed"),
+});
+
 // ─── Admin: customer machine management ─────────────────────────────────────
 const adminMachineUserParams = z.object({ userId: z.string().uuid() });
 const adminMachineParams = z.object({ machineId: z.string().uuid() });
@@ -1017,10 +1037,27 @@ app.get("/api/admin/customer-machines", async (request: any, reply: any) => {
   if (query.status) params.set("status", query.status);
   const qs = params.toString();
   try {
-    return await fetchJson(
+    const machines = await fetchJson<any[]>(
       `${env.SERVICE_DESK_URL}/admin/customer-machines${qs ? `?${qs}` : ""}`,
       { headers: userHeaders(session.user) },
     );
+    const customerIds = [...new Set(machines.map((machine) => machine.customerId))];
+    const customers =
+      customerIds.length === 0
+        ? []
+        : await fetchJson<Array<{ id: string; displayName: string; email: string }>>(
+            `${env.AUTH_SERVICE_URL}/internal/customers/lookup`,
+            {
+              method: "POST",
+              headers: internalHeaders(),
+              body: JSON.stringify({ customerIds }),
+            },
+          );
+    const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+    return machines.map((machine) => ({
+      ...machine,
+      customer: customerById.get(machine.customerId) ?? null,
+    }));
   } catch (error) {
     return forwardServiceError(request, reply, error, "admin customer-machines list failed");
   }
@@ -1084,7 +1121,7 @@ app.post("/api/admin/users/invite", async (request, reply) => {
   if (!assertCsrf(request, reply)) return;
 
   const input = inviteUserInputSchema.parse(request.body);
-  // Owner may invite any non-admin role; admin may invite anyone.
+  // Owner may invite any non-admin role, including customers; admin may invite anyone.
   if (!assignableRolesFor(session.user.role).includes(input.role)) {
     return forbidden(reply, "You are not allowed to invite a user with that role.");
   }
@@ -1148,8 +1185,8 @@ app.post("/api/admin/users/:userId/reactivate", (request, reply) =>
 );
 
 app.post("/api/admin/users/:userId/role", async (request: any, reply: any) => {
-  // Admin and owner can change roles. Owner may only grant non-admin roles
-  // (assignableRolesFor) and may never modify an admin account.
+  // Admin and owner can move staff accounts between permitted staff roles.
+  // Customer identities are never converted to or from staff identities.
   const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
   if (!canChangeRoles(session.user.role)) return forbidden(reply);
@@ -1157,12 +1194,26 @@ app.post("/api/admin/users/:userId/role", async (request: any, reply: any) => {
   const { userId } = approvalUserParams.parse(request.params);
   const input = z.object({ role: roleSchema }).parse(request.body);
 
-  if (!assignableRolesFor(session.user.role).includes(input.role)) {
-    return forbidden(reply, "You are not allowed to assign that role.");
+  if (input.role === "customer") {
+    return forbidden(
+      reply,
+      "Customer accounts cannot be converted to or from staff roles. Remove the account and send a new invitation instead.",
+    );
   }
   const targetRole = await getTargetUserRole(userId);
-  if (targetRole && !canManageTargetUser(session.user.role, targetRole)) {
-    return forbidden(reply, "You cannot modify an administrator account.");
+  if (
+    targetRole &&
+    !canChangeUserRole(session.user.role, targetRole, input.role)
+  ) {
+    return forbidden(
+      reply,
+      targetRole === "customer"
+        ? "Customer accounts cannot be converted to or from staff roles. Remove the account and send a new invitation instead."
+        : "You are not allowed to assign that role.",
+    );
+  }
+  if (!targetRole && !assignableRolesFor(session.user.role).includes(input.role)) {
+    return forbidden(reply, "You are not allowed to assign that role.");
   }
 
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/role`, {

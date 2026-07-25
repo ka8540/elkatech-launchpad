@@ -27,7 +27,7 @@ import {
  * confirm a plain-language summary. A role can never be changed by a single
  * click from the table, which is what made the old inline buttons dangerous.
  *
- * Options come from the shared `assignableRolesFor` helper, so the UI can only
+ * Options come from the shared role-transition helper, so the UI can only
  * offer what the gateway will accept — it re-checks on every request.
  */
 export default function ManageRoleDialog({

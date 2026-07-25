@@ -1,8 +1,9 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import type { ApprovalStatus, RequestStatus, Role } from "@elkatech/contracts";
 import { cn } from "@/lib/utils";
 import { getRequestStatusLabel, REQUEST_STATUS_BADGE_CLASSES } from "@/lib/request-status";
 import { APPROVAL_LABELS, REMOVED_USER_LABEL, roleLabel } from "@/lib/activity";
+import { customerMachineProfileState } from "@/lib/customer-machine-navigation";
 
 /* ── Shared table chrome ─────────────────────────────────────────────────── */
 
@@ -191,12 +192,17 @@ export function MachineLink({
   label: string | null | undefined;
   canView: boolean;
 }) {
+  const location = useLocation();
   if (!label) return <span className="text-[var(--lp-faint)]">—</span>;
   if (!canView || !customerId) {
     return <span className="text-[var(--lp-ink-soft)]">{label}</span>;
   }
   return (
-    <Link to={`/app/machines/${customerId}`} className={linkClasses}>
+    <Link
+      to={`/app/machines/${customerId}`}
+      state={customerMachineProfileState(location.pathname, location.search)}
+      className={linkClasses}
+    >
       {label}
     </Link>
   );

@@ -36,6 +36,7 @@ function renderReportRoute() {
         />
         <Route path="/app/queue" element={<div>staff home</div>} />
         <Route path="/app/requests" element={<div>customer home</div>} />
+        <Route path="/app/admin" element={<div>admin home</div>} />
       </Routes>
     </MemoryRouter>,
   );

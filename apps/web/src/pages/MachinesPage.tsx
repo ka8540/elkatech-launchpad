@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -19,10 +19,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { AuthUser, CatalogProduct, CustomerMachine } from "@elkatech/contracts";
+import type { CatalogProduct, CustomerMachine } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
 import { PAGE_CONTAINER } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
+import { customerMachineProfileState } from "@/lib/customer-machine-navigation";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -325,6 +326,7 @@ function CardField({
 /* Page */
 const MachinesPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const defaultCustomerId = searchParams.get("customerId") ?? undefined;
@@ -346,31 +348,14 @@ const MachinesPage = () => {
 
   const machinesQuery = useQuery({
     queryKey: ["admin", "customer-machines"],
-    queryFn: () => apiRequest<CustomerMachine[]>("/api/admin/customer-machines"),
-  });
-  const usersQuery = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => apiRequest<AuthUser[]>("/api/admin/users"),
+    queryFn: () => apiRequest<EnrichedMachine[]>("/api/admin/customer-machines"),
   });
   const productsQuery = useQuery({
     queryKey: ["catalog-products"],
     queryFn: () => apiRequest<CatalogProduct[]>("/api/catalog/products"),
   });
 
-  const userMap = useMemo(() => {
-    const map = new Map<string, AuthUser>();
-    for (const u of usersQuery.data ?? []) map.set(u.id, u);
-    return map;
-  }, [usersQuery.data]);
-
-  const enriched: EnrichedMachine[] = useMemo(
-    () =>
-      (machinesQuery.data ?? []).map((m) => {
-        const u = userMap.get(m.customerId);
-        return { ...m, customer: u ? { displayName: u.displayName, email: u.email } : null };
-      }),
-    [machinesQuery.data, userMap],
-  );
+  const enriched = useMemo(() => machinesQuery.data ?? [], [machinesQuery.data]);
 
   const stats = useMemo(() => {
     const active = enriched.filter((m) => m.status === "active");
@@ -463,7 +448,9 @@ const MachinesPage = () => {
   }
 
   function openCustomer(customerId: string) {
-    navigate(`/app/machines/${customerId}`);
+    navigate(`/app/machines/${customerId}`, {
+      state: customerMachineProfileState(location.pathname, location.search),
+    });
   }
 
   function onRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, customerId: string) {
@@ -473,7 +460,7 @@ const MachinesPage = () => {
     }
   }
 
-  const isLoading = machinesQuery.isLoading || usersQuery.isLoading;
+  const isLoading = machinesQuery.isLoading;
   const emptyText = enriched.length === 0 ? "No machines linked yet." : "No machines match your filters.";
 
   const renderActions = (group: CustomerMachineGroup) => {
@@ -804,7 +791,6 @@ const MachinesPage = () => {
       <MachineFormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        customers={usersQuery.data ?? []}
         products={products}
         editing={editing}
         defaultCustomerId={defaultCustomerId}

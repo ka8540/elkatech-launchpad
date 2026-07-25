@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { AuthUser, Role } from "@elkatech/contracts";
 
@@ -27,11 +27,6 @@ vi.mock("@/hooks/use-session", () => ({
     data: { user: { id: sessionRole.id, role: sessionRole.current } },
     isLoading: false,
   }),
-}));
-// Machines dialog pulls in the catalog/machine stack; the page only needs to
-// know it was asked to open.
-vi.mock("@/components/CustomerMachinesDialog", () => ({
-  default: ({ open }: { open: boolean }) => (open ? <div>machines dialog</div> : null),
 }));
 
 const { default: UsersPage } = await import("./UsersPage");
@@ -88,6 +83,22 @@ function mockUsers(list: AuthUser[] = FIXTURE) {
 
 let pageContainer: HTMLElement;
 
+function LocationProbe() {
+  const location = useLocation();
+  const returnTo =
+    location.state &&
+    typeof location.state === "object" &&
+    "customerMachineProfileReturnTo" in location.state
+      ? String(location.state.customerMachineProfileReturnTo)
+      : "";
+  return (
+    <>
+      <output data-testid="current-location">{location.pathname}</output>
+      <output data-testid="machine-profile-return-to">{returnTo}</output>
+    </>
+  );
+}
+
 /** Desktop table scope. The mobile list is in the DOM at the same time (CSS
  *  hides it), so unscoped queries match every row twice. */
 function table() {
@@ -103,6 +114,7 @@ function renderPage() {
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/app/users"]}>
         <UsersPage />
+        <LocationProbe />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -139,9 +151,9 @@ describe("Users & Access — layout", () => {
 
     expect(screen.getByRole("heading", { name: "Users & Access" })).toBeInTheDocument();
     expect(
-      screen.getByText("Manage customer accounts, staff invitations, approvals, and access status."),
+      screen.getByText("Manage customer accounts, user invitations, approvals, and access status."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Invite staff/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Invite user/ })).toBeInTheDocument();
 
     const metricLabels = Array.from(container.querySelectorAll("dl dt")).map((d) => d.textContent);
     expect(metricLabels).toEqual([
@@ -218,7 +230,7 @@ describe("Users & Access — tabs, search and filters", () => {
     expect(tabs).toEqual([
       "All6",
       "Customers2",
-      "Staff4",
+      "Staff3",
       "Pending approval1",
       "Suspended1",
     ]);
@@ -277,7 +289,7 @@ describe("Users & Access — tabs, search and filters", () => {
       "All account types",
       "Public signup",
       "Google signup",
-      "Staff invited",
+      "Invited account",
       "System account",
     ]);
   });
@@ -371,12 +383,20 @@ describe("Users & Access — row actions", () => {
     expect(within(await openRowMenu("Kush Jayesh Ahir")).queryByText("Remove user")).toBeNull();
   });
 
-  it("opens the machines dialog from the menu", async () => {
+  it("navigates View machines directly to the customer machine profile", async () => {
     mockUsers();
     renderPage();
     await table().findByText("Kush Jayesh Ahir");
     fireEvent.click(within(await openRowMenu("Kush Jayesh Ahir")).getByText("View machines"));
-    expect(await screen.findByText("machines dialog")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("current-location")).toHaveTextContent(
+        "/app/machines/c-1",
+      ),
+    );
+    expect(screen.getByTestId("machine-profile-return-to")).toHaveTextContent(
+      "/app/users",
+    );
+    expect(screen.queryByText(/Machines & profile/)).not.toBeInTheDocument();
   });
 
   it("opens the details drawer from the menu", async () => {
@@ -436,6 +456,40 @@ describe("Users & Access — Account details approval", () => {
     expect(within(drawer).queryByText("Approval decision")).toBeNull();
     expect(within(drawer).queryByRole("button", { name: "Approve account" })).toBeNull();
     expect(within(drawer).queryByRole("button", { name: "Reject account" })).toBeNull();
+    expect(
+      within(drawer).getByRole("button", { name: "Edit user details" }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "Edit user details" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Edit user details" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer profile editing before approval or to Owner", async () => {
+    mockUsers();
+    renderPage();
+    await table().findByText("Pending Pat");
+    let drawer = await openDetails("Pending Pat");
+    expect(
+      within(drawer).queryByRole("button", { name: "Edit user details" }),
+    ).toBeNull();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Account details" })).toBeNull(),
+    );
+
+    cleanup();
+    sessionRole.current = "owner";
+    sessionRole.id = "owner-me";
+    mockUsers();
+    renderPage();
+    await table().findByText("Kush Jayesh Ahir");
+    drawer = await openDetails("Kush Jayesh Ahir");
+    expect(
+      within(drawer).queryByRole("button", { name: "Edit user details" }),
+    ).toBeNull();
   });
 
   it("shows Rejected and only the supported reactivation action for a rejected account", async () => {
@@ -600,6 +654,22 @@ describe("Users & Access — Account details approval", () => {
 });
 
 describe("Users & Access — protected system account", () => {
+  it("keeps Admin in All only even when legacy status data says suspended", async () => {
+    mockUsers([
+      { ...SYSTEM_ADMIN, approvalStatus: "suspended" },
+      ...FIXTURE.filter((candidate) => candidate.id !== SYSTEM_ADMIN.id),
+    ]);
+    renderPage();
+
+    expect(await table().findByText("Platform Admin")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /Suspended/ }));
+    await waitFor(() =>
+      expect(table().queryByText("Platform Admin")).not.toBeInTheDocument(),
+    );
+    expect(table().getByText("Suspended Sam")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Suspended1" })).toBeInTheDocument();
+  });
+
   it("marks it protected and exposes no destructive action", async () => {
     mockUsers();
     const { container } = renderPage();
@@ -619,10 +689,10 @@ describe("Users & Access — protected system account", () => {
   });
 });
 
-describe("Users & Access — invite staff", () => {
+describe("Users & Access — invite users", () => {
   async function openInvite() {
     await table().findByText("Kush Jayesh Ahir");
-    fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Invite user/ }));
     return screen.findByRole("dialog");
   }
 
@@ -630,7 +700,7 @@ describe("Users & Access — invite staff", () => {
     return within(dialog).getAllByRole("radio").map((r) => (r as HTMLInputElement).value);
   }
 
-  it("offers Engineer, Support and Admin to an admin actor", async () => {
+  it("offers Customer, Engineer, Support and Admin to an admin actor", async () => {
     mockUsers();
     renderPage();
     const dialog = await openInvite();
@@ -638,7 +708,13 @@ describe("Users & Access — invite staff", () => {
     expect(within(dialog).getByLabelText("Display name")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Email")).toBeInTheDocument();
 
-    expect(roleValues(dialog)).toEqual(["engineer", "support", "admin"]);
+    expect(roleValues(dialog)).toEqual(["customer", "engineer", "support", "admin"]);
+    expect(within(dialog).getByText("Customer")).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(
+        "Uses the customer portal to manage machines and submit service requests.",
+      ),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText("Admin")).toBeInTheDocument();
     expect(
       within(dialog).getByText("Manages platform users, permissions, approvals, and operational settings."),
@@ -654,7 +730,7 @@ describe("Users & Access — invite staff", () => {
     renderPage();
     const dialog = await openInvite();
 
-    expect(roleValues(dialog)).toEqual(["engineer", "support"]);
+    expect(roleValues(dialog)).toEqual(["customer", "engineer", "support"]);
     expect(within(dialog).queryByText("Admin")).toBeNull();
     expect(within(dialog).queryByText(/full platform management privileges/)).toBeNull();
   });
@@ -671,7 +747,9 @@ describe("Users & Access — invite staff", () => {
       within(dialog).getByText("Coordinates customers, requests, and engineer assignments."),
     ).toBeInTheDocument();
     // Engineer stays the default selection.
-    const engineer = within(dialog).getAllByRole("radio")[0] as HTMLInputElement;
+    const engineer = within(dialog).getByRole("radio", {
+      name: /Engineer/,
+    }) as HTMLInputElement;
     expect(engineer.checked).toBe(true);
   });
 
@@ -700,13 +778,13 @@ describe("Users & Access — invite staff", () => {
     const dialog = await openInvite();
 
     expect(
-      within(dialog).getByText(/Invited staff receive the Engineer role\./),
+      within(dialog).getByText(/The invited user will receive the Engineer role\./),
     ).toBeInTheDocument();
     // The old copy claimed admin access was never granted through invitations.
     expect(within(dialog).queryByText(/Owner and admin access is not granted/)).toBeNull();
 
     fireEvent.click(within(dialog).getByRole("radio", { name: /Admin/ }));
-    const footer = within(dialog).getByText(/Invited staff receive the Admin role\./);
+    const footer = within(dialog).getByText(/The invited user will receive the Admin role\./);
     expect(footer.textContent).toContain(
       "Administrator invitations should be used only for trusted personnel.",
     );
@@ -716,7 +794,7 @@ describe("Users & Access — invite staff", () => {
     mockUsers();
     renderPage();
     await table().findByText("Kush Jayesh Ahir");
-    fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Invite user/ }));
 
     const dialog = await screen.findByRole("dialog");
     expect(dialog.querySelector("form")).toHaveAttribute("noValidate");
@@ -737,7 +815,7 @@ describe("Users & Access — invite staff", () => {
     });
     renderPage();
     await table().findByText("Kush Jayesh Ahir");
-    fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Invite user/ }));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText("Display name"), {
@@ -769,7 +847,7 @@ describe("Users & Access — invite staff", () => {
     });
     renderPage();
     await table().findByText("Kush Jayesh Ahir");
-    fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Invite user/ }));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("radio", { name: /Admin/ }));
@@ -795,11 +873,45 @@ describe("Users & Access — invite staff", () => {
     expect(await within(dialog).findByText("https://example.test/signup?token=xyz")).toBeInTheDocument();
   });
 
+  it("sends a customer invitation through the existing endpoint", async () => {
+    mockUsers();
+    apiRequest.mockImplementation((url: string) => {
+      if (String(url).includes("/invite")) {
+        return Promise.resolve({ inviteUrl: "https://example.test/signup?token=customer" });
+      }
+      return Promise.resolve(FIXTURE);
+    });
+    renderPage();
+    const dialog = await openInvite();
+
+    fireEvent.click(within(dialog).getByRole("radio", { name: /Customer/ }));
+    expect(
+      within(dialog).getByText(/They will complete their customer profile after signing in\./),
+    ).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText("Display name"), {
+      target: { value: "Customer One" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Email"), {
+      target: { value: "customer@example.com" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Send invite" }));
+
+    await waitFor(() => {
+      const call = apiRequest.mock.calls.find(([url]) => String(url).includes("/invite"));
+      expect(call).toBeTruthy();
+      expect(JSON.parse(call![1].body)).toEqual({
+        displayName: "Customer One",
+        email: "customer@example.com",
+        role: "customer",
+      });
+    });
+  });
+
   it("still blocks an invalid admin invitation with inline validation", async () => {
     mockUsers();
     renderPage();
     await table().findByText("Kush Jayesh Ahir");
-    fireEvent.click(screen.getByRole("button", { name: /Invite staff/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Invite user/ }));
 
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("radio", { name: /Admin/ }));
@@ -812,8 +924,15 @@ describe("Users & Access — invite staff", () => {
 });
 
 describe("Users & Access — manage role", () => {
-  it("offers Manage role for a staff-managed account and not for a Google signup", async () => {
-    mockUsers();
+  it("offers Manage role for staff but never for any customer account", async () => {
+    const invitedCustomer = user({
+      id: "invited-customer",
+      displayName: "Invited Customer",
+      email: "invited@example.com",
+      role: "customer",
+      accountOrigin: "admin_invite",
+    });
+    mockUsers([...FIXTURE, invitedCustomer]);
     renderPage();
     await table().findByText("Love Ahir");
 
@@ -823,6 +942,11 @@ describe("Users & Access — manage role", () => {
 
     // Kush signed up via Google — the UI must not promote them to staff.
     expect(within(await openRowMenu("Kush Jayesh Ahir")).queryByText("Manage role")).toBeNull();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+
+    // An admin-invited customer is still a customer and is equally immutable.
+    expect(within(await openRowMenu("Invited Customer")).queryByText("Manage role")).toBeNull();
   });
 
   it("does not offer Manage role on the protected Platform Admin row", async () => {
@@ -855,7 +979,7 @@ describe("Users & Access — manage role", () => {
     const offered = within(dialog).getAllByRole("radio").map((r) => (r as HTMLInputElement).value);
     // Love Ahir is Support today, so Support must not be offered back.
     expect(offered).not.toContain("support");
-    expect(offered).toEqual(["customer", "engineer", "owner", "admin"]);
+    expect(offered).toEqual(["engineer", "owner", "admin"]);
   });
 
   it("keeps confirm disabled until a different role is chosen, and needs a second step", async () => {

@@ -39,6 +39,7 @@ import ReportNewPage from "@/pages/ReportNewPage";
 import ReportDetailPage from "@/pages/ReportDetailPage";
 import MyReportsPage from "@/pages/MyReportsPage";
 import MyReportDetailPage from "@/pages/MyReportDetailPage";
+import PortalIndexRedirect from "@/components/PortalIndexRedirect";
 
 const queryClient = new QueryClient();
 
@@ -86,7 +87,7 @@ const App = () => {
                 </ProtectedRoute>
               }
             >
-              <Route index element={<Navigate to="requests" replace />} />
+              <Route index element={<PortalIndexRedirect />} />
               <Route path="requests" element={<RequestsPage />} />
               <Route path="requests/new" element={<RequestNewPage />} />
               <Route path="requests/:requestId" element={<RequestDetailPage />} />

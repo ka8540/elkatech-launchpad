@@ -23,7 +23,7 @@ import {
 } from "./user-access";
 
 /**
- * Staff invitation. Lives in a modal so it stops occupying half the page. The
+ * User invitation. Lives in a modal so it stops occupying half the page. The
  * role cards on offer come from the shared RBAC helper, so Admin only appears
  * for an actor the gateway would actually let create one.
  */
@@ -96,9 +96,9 @@ export default function InviteStaffDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Invite staff</DialogTitle>
+          <DialogTitle>Invite user</DialogTitle>
           <DialogDescription>
             The invited person receives a link to set up their own password.
           </DialogDescription>
@@ -248,10 +248,12 @@ export default function InviteStaffDialog({
               </Button>
             </DialogFooter>
             <p className="text-xs leading-5 text-[var(--lp-faint)]">
-              Invited staff receive the {selectedRole?.label} role.{" "}
-              {role === "admin"
-                ? "Administrator invitations should be used only for trusted personnel."
-                : "Owner access is not granted through invitations."}
+              The invited user will receive the {selectedRole?.label} role.{" "}
+              {role === "customer"
+                ? "They will complete their customer profile after signing in."
+                : role === "admin"
+                  ? "Administrator invitations should be used only for trusted personnel."
+                  : "Owner access is not granted through invitations."}
             </p>
           </form>
         )}

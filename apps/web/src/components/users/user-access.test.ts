@@ -6,6 +6,7 @@ import {
   ROLE_WARNINGS,
   actionsFor,
   canDecideApprovalFor,
+  canEditDetailsFor,
   canInviteAdmins,
   canManageRoleFor,
   canReactivateFor,
@@ -61,13 +62,23 @@ describe("tabs", () => {
     expect(matchesTab(users[1], "pending")).toBe(true);
     expect(matchesTab(users[3], "suspended")).toBe(true);
     expect(matchesTab(users[4], "all")).toBe(true);
+    expect(matchesTab(users[4], "staff")).toBe(false);
+    expect(
+      matchesTab(
+        user({ role: "admin", approvalStatus: "pending_approval" }),
+        "pending",
+      ),
+    ).toBe(false);
+    expect(
+      matchesTab(user({ role: "admin", approvalStatus: "suspended" }), "suspended"),
+    ).toBe(false);
   });
 
   it("counts every tab from one dataset", () => {
     expect(tabCounts(users)).toEqual({
       all: 5,
       customers: 2,
-      staff: 3,
+      staff: 2,
       pending: 1,
       suspended: 1,
     });
@@ -134,8 +145,9 @@ describe("sorting and summary", () => {
         user({ id: "2", role: "engineer" }),
         user({ id: "3", role: "support", approvalStatus: "suspended" }),
         user({ id: "4", role: "customer", approvalStatus: "pending_approval" }),
+        user({ id: "5", role: "admin", approvalStatus: "suspended" }),
       ]),
-    ).toEqual({ total: 4, customers: 2, activeStaff: 1, pending: 1, suspended: 1 });
+    ).toEqual({ total: 5, customers: 2, activeStaff: 1, pending: 1, suspended: 1 });
   });
 });
 
@@ -210,6 +222,27 @@ describe("row actions", () => {
     ).toBe(false);
   });
 
+  it("allows only Admin to edit approved manageable user details", () => {
+    const approved = user({ id: "approved", approvalStatus: "approved" });
+    expect(canEditDetailsFor(approved, admin)).toBe(true);
+    expect(canEditDetailsFor(approved, owner)).toBe(false);
+    expect(
+      canEditDetailsFor(approved, { ...admin, role: "support" }),
+    ).toBe(false);
+    expect(
+      canEditDetailsFor(
+        user({ id: "pending", approvalStatus: "pending_approval" }),
+        admin,
+      ),
+    ).toBe(false);
+    expect(
+      canEditDetailsFor(
+        user({ id: "system-1", role: "admin", approvalStatus: "approved" }),
+        admin,
+      ),
+    ).toBe(false);
+  });
+
   it("offers no state changes and no role change on your own row", () => {
     expect(actionsFor(user({ id: admin.id, accountOrigin: "admin_invite" }), admin)).toEqual([
       "details",
@@ -237,7 +270,7 @@ describe("labels", () => {
   it("maps account origins to product wording", () => {
     expect(originLabel(user({ accountOrigin: "self_signup" }), false)).toBe("Public signup");
     expect(originLabel(user({ accountOrigin: "firebase_google" }), false)).toBe("Google signup");
-    expect(originLabel(user({ accountOrigin: "admin_invite" }), false)).toBe("Staff invited");
+    expect(originLabel(user({ accountOrigin: "admin_invite" }), false)).toBe("Invited account");
     expect(originLabel(user({ accountOrigin: "admin_invite" }), true)).toBe("System account");
   });
 
@@ -255,10 +288,14 @@ describe("labels", () => {
 });
 
 describe("invite", () => {
-  it("knows about Engineer, Support and Admin — never Owner or Customer", () => {
-    expect(INVITABLE_ROLES.map((r) => r.value)).toEqual(["engineer", "support", "admin"]);
+  it("knows about Customer, Engineer, Support and Admin — never Owner", () => {
+    expect(INVITABLE_ROLES.map((r) => r.value)).toEqual([
+      "customer",
+      "engineer",
+      "support",
+      "admin",
+    ]);
     expect(INVITABLE_ROLES.map((r) => r.value)).not.toContain("owner");
-    expect(INVITABLE_ROLES.map((r) => r.value)).not.toContain("customer");
   });
 
   it("gives each invitable role a description", () => {
@@ -269,13 +306,18 @@ describe("invite", () => {
 
   it("offers Admin only to an actor who may assign it", () => {
     expect(invitableRolesFor("admin").map((r) => r.value)).toEqual([
+      "customer",
       "engineer",
       "support",
       "admin",
     ]);
     // An owner may never grant admin, so the option is absent rather than
     // disabled — matching what the gateway would accept.
-    expect(invitableRolesFor("owner").map((r) => r.value)).toEqual(["engineer", "support"]);
+    expect(invitableRolesFor("owner").map((r) => r.value)).toEqual([
+      "customer",
+      "engineer",
+      "support",
+    ]);
     expect(invitableRolesFor("support")).toEqual([]);
     expect(invitableRolesFor("engineer")).toEqual([]);
     expect(invitableRolesFor("customer")).toEqual([]);
@@ -342,15 +384,21 @@ describe("role management availability", () => {
     expect(actionsFor(self, admin)).not.toContain("role");
   });
 
-  it("does not let a public or Google signup be promoted from the UI", () => {
+  it("never offers Manage role for a customer, including invited customers", () => {
     expect(isStaffManaged("self_signup")).toBe(false);
     expect(isStaffManaged("firebase_google")).toBe(false);
     expect(isStaffManaged("admin_invite")).toBe(true);
     expect(isStaffManaged("legacy")).toBe(true);
 
-    for (const origin of ["self_signup", "firebase_google"] as const) {
+    for (const origin of [
+      "self_signup",
+      "firebase_google",
+      "admin_invite",
+      "legacy",
+    ] as const) {
       const customer = user({ id: "c9", role: "customer", accountOrigin: origin });
       expect(canManageRoleFor(customer, admin)).toBe(false);
+      expect(roleChangeOptions(customer, admin)).toEqual([]);
       expect(actionsFor(customer, admin)).not.toContain("role");
     }
   });
@@ -361,16 +409,18 @@ describe("role management availability", () => {
     expect(roleChangeOptions(target, owner)).toEqual([]);
   });
 
-  it("sources options from assignableRolesFor and excludes the current role", () => {
+  it("offers only staff-to-staff role changes", () => {
     const engineer = user({ id: "e1", role: "engineer", ...staffInvited });
     const adminOptions = roleChangeOptions(engineer, admin);
-    expect(adminOptions).toEqual(["customer", "support", "owner", "admin"]);
+    expect(adminOptions).toEqual(["support", "owner", "admin"]);
     expect(adminOptions).not.toContain("engineer");
+    expect(adminOptions).not.toContain("customer");
 
     // Owner may never grant admin — the shared helper already says so.
     const ownerOptions = roleChangeOptions(engineer, owner);
-    expect(ownerOptions).toEqual(["customer", "support", "owner"]);
+    expect(ownerOptions).toEqual(["support", "owner"]);
     expect(ownerOptions).not.toContain("admin");
+    expect(ownerOptions).not.toContain("customer");
   });
 
   it("flags owner and admin as elevated and carries the agreed warning copy", () => {

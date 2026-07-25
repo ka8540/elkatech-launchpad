@@ -49,6 +49,13 @@ describe("activity routing", () => {
 });
 
 describe("App route declarations", () => {
+  it("uses the role-aware portal index so Admin opens Overview", () => {
+    const source = APP_SOURCE;
+    expect(source).toContain('import PortalIndexRedirect from "@/components/PortalIndexRedirect"');
+    expect(source).toContain("<Route index element={<PortalIndexRedirect />} />");
+    expect(source).not.toContain('<Route index element={<Navigate to="requests" replace />} />');
+  });
+
   it("declares the redirect and both activity routes, and no support page import", () => {
     const source = APP_SOURCE;
     expect(source).toContain('<Route path="support" element={<Navigate to="/app/activity" replace />} />');

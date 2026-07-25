@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ChevronDown, Lock, MoreHorizontal, Search, UserPlus, Users2 } from "lucide-react";
 import type {
@@ -12,9 +13,10 @@ import { ApiError, apiRequest } from "@/lib/api";
 import { PAGE_CONTAINER } from "@/lib/page-layout";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
-import CustomerMachinesDialog from "@/components/CustomerMachinesDialog";
+import { customerMachineProfileState } from "@/lib/customer-machine-navigation";
 import PageHeader from "@/components/PageHeader";
 import InviteStaffDialog from "@/components/users/InviteStaffDialog";
+import EditUserDetailsDialog from "@/components/users/EditUserDetailsDialog";
 import ManageRoleDialog from "@/components/users/ManageRoleDialog";
 import UserDetailsDrawer from "@/components/users/UserDetailsDrawer";
 import {
@@ -24,6 +26,7 @@ import {
   USER_TABS,
   actionsFor,
   canDecideApprovalFor,
+  canEditDetailsFor,
   canManageRoleFor,
   canReactivateFor,
   filterUsers,
@@ -204,6 +207,8 @@ function FilterSelect<T extends string>({
 /* ── Page ────────────────────────────────────────────────────────────────── */
 
 const UsersPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { data: sessionData } = useSession();
   const actorRole = (sessionData?.user?.role ?? "admin") as Role;
@@ -218,7 +223,7 @@ const UsersPage = () => {
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [detailsUser, setDetailsUser] = useState<AuthUser | null>(null);
-  const [machinesUser, setMachinesUser] = useState<AuthUser | null>(null);
+  const [editDetailsUser, setEditDetailsUser] = useState<AuthUser | null>(null);
   const [roleUser, setRoleUser] = useState<AuthUser | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState>(null);
 
@@ -228,6 +233,10 @@ const UsersPage = () => {
   });
   const selectedDetailsUser = detailsUser
     ? users.find((candidate) => candidate.id === detailsUser.id) ?? detailsUser
+    : null;
+  const selectedEditDetailsUser = editDetailsUser
+    ? users.find((candidate) => candidate.id === editDetailsUser.id) ??
+      editDetailsUser
     : null;
 
   const actor: ActorContext = useMemo(
@@ -307,7 +316,12 @@ const UsersPage = () => {
 
   function runAction(user: AuthUser, action: UserActionId) {
     if (action === "details") return setDetailsUser(user);
-    if (action === "machines") return setMachinesUser(user);
+    if (action === "machines") {
+      navigate(`/app/machines/${encodeURIComponent(user.id)}`, {
+        state: customerMachineProfileState(location.pathname, location.search),
+      });
+      return;
+    }
     // Role changes get their own two-step dialog, never a single confirm.
     if (action === "role") return setRoleUser(user);
     // Everything else changes access, so it goes through a confirmation.
@@ -387,11 +401,11 @@ const UsersPage = () => {
       <PageHeader
         icon={Users2}
         title="Users & Access"
-        description="Manage customer accounts, staff invitations, approvals, and access status."
+        description="Manage customer accounts, user invitations, approvals, and access status."
         action={
           <Button type="button" variant="cta" onClick={() => setInviteOpen(true)}>
             <UserPlus className="mr-1.5 h-4 w-4" />
-            Invite staff
+            Invite user
           </Button>
         }
       />
@@ -748,6 +762,41 @@ const UsersPage = () => {
           setDetailsUser(null);
           setRoleUser(target);
         }}
+        canEditDetails={
+          selectedDetailsUser
+            ? canEditDetailsFor(selectedDetailsUser, actor)
+            : false
+        }
+        onEditDetails={() => {
+          if (selectedDetailsUser) setEditDetailsUser(selectedDetailsUser);
+        }}
+      />
+
+      <EditUserDetailsDialog
+        user={selectedEditDetailsUser}
+        open={selectedEditDetailsUser !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditDetailsUser(null);
+        }}
+        onSaved={async (response) => {
+          queryClient.setQueryData<AuthUser[]>(["admin-users"], (current) =>
+            current?.map((candidate) =>
+              candidate.id === response.user.id ? response.user : candidate,
+            ),
+          );
+          await Promise.all([
+            invalidate(),
+            queryClient.invalidateQueries({
+              queryKey: ["user-details", response.user.id],
+            }),
+            queryClient.invalidateQueries({
+              queryKey: ["admin", "user", response.user.id, "profile"],
+            }),
+            queryClient.invalidateQueries({
+              queryKey: ["admin", "customer-picker"],
+            }),
+          ]);
+        }}
       />
 
       <ManageRoleDialog
@@ -758,14 +807,6 @@ const UsersPage = () => {
           if (!open) setRoleUser(null);
         }}
         onChanged={invalidate}
-      />
-
-      <CustomerMachinesDialog
-        user={machinesUser}
-        open={machinesUser !== null}
-        onOpenChange={(open) => {
-          if (!open) setMachinesUser(null);
-        }}
       />
 
       <AlertDialog
