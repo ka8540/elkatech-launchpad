@@ -37,6 +37,7 @@ import {
   fetchJson,
   getDb,
   getEnv,
+  type DbExecutor,
   internalHeaders,
   InternalFetchError,
   isAllowedAttachmentType,
@@ -120,8 +121,13 @@ async function addHistory(
   actor: UserContext,
   eventType: string,
   metadata: Record<string, unknown> = {},
+  // Executor override so the history row can be enlisted in the caller's
+  // transaction. Every domain write that records history must pass its `tx`,
+  // otherwise a failed history insert leaves the domain write committed.
+  // Defaults to the pooled client for standalone use.
+  tx: DbExecutor = sql,
 ) {
-  await sql`
+  await tx`
     insert into service_desk.request_history (id, request_id, actor_id, actor_role, event_type, metadata)
     values (
       ${randomUUID()},
@@ -471,48 +477,57 @@ app.post("/requests", async (request, reply) => {
     const requestNumber = buildRequestNumber();
     const now = new Date().toISOString();
 
-    await sql`
-      insert into service_desk.requests (
-        id,
-        request_number,
-        customer_id,
-        customer_email,
-        product_id,
-        product_snapshot,
-        customer_machine_id,
-        issue_type,
-        subject,
-        description,
-        contact_phone,
-        site_location,
-        serial_number,
-        priority,
-        status
-      )
-      values (
-        ${requestId},
-        ${requestNumber},
-        ${ownerId},
-        ${ownerEmail},
-        ${machine.product_id},
-        ${sql.json(machine.product_snapshot as any)},
-        ${machine.id},
-        ${issueType},
-        ${subject},
-        ${input.description},
-        ${contactPhone},
-        ${machine.site_location},
-        ${machine.internal_serial_number ?? null},
-        ${input.priority},
-        ${"new"}
-      )
-    `;
+    // The request row and its "created" history entry are one logical write.
+    await sql.begin(async (tx) => {
+      await tx`
+        insert into service_desk.requests (
+          id,
+          request_number,
+          customer_id,
+          customer_email,
+          product_id,
+          product_snapshot,
+          customer_machine_id,
+          issue_type,
+          subject,
+          description,
+          contact_phone,
+          site_location,
+          serial_number,
+          priority,
+          status
+        )
+        values (
+          ${requestId},
+          ${requestNumber},
+          ${ownerId},
+          ${ownerEmail},
+          ${machine.product_id},
+          ${sql.json(machine.product_snapshot as any)},
+          ${machine.id},
+          ${issueType},
+          ${subject},
+          ${input.description},
+          ${contactPhone},
+          ${machine.site_location},
+          ${machine.internal_serial_number ?? null},
+          ${input.priority},
+          ${"new"}
+        )
+      `;
 
-    await addHistory(requestId, actor, "request_created", {
-      requestNumber,
-      productId: machine.product_id,
-      customerMachineId: machine.id,
-      issueType,
+      await addHistory(
+        requestId,
+        actor,
+        "request_created",
+        {
+          requestNumber,
+          productId: machine.product_id,
+          customerMachineId: machine.id,
+          issueType,
+        },
+        tx,
+      );
     });
     await emitOutbox("request.created", requestId, {
       requestId,
@@ -552,40 +567,49 @@ app.post("/requests", async (request, reply) => {
     priceDisplay: product.priceDisplay,
   };
 
-  await sql`
-    insert into service_desk.requests (
-      id,
-      request_number,
-      customer_id,
-      customer_email,
-      product_id,
-      product_snapshot,
-      subject,
-      description,
-      contact_phone,
-      site_location,
-      serial_number,
-      priority,
-      status
-    )
-    values (
-      ${requestId},
-      ${requestNumber},
-      ${actor.id},
-      ${actor.email},
-      ${product.id},
-      ${sql.json(productSnapshot as any)},
-      ${input.subject},
-      ${input.description},
-      ${input.contactPhone},
-      ${input.siteLocation},
-      ${input.serialNumber ?? null},
-      ${input.priority},
-      ${"new"}
-    )
-  `;
+  // The request row and its "created" history entry are one logical write.
+  await sql.begin(async (tx) => {
+    await tx`
+      insert into service_desk.requests (
+        id,
+        request_number,
+        customer_id,
+        customer_email,
+        product_id,
+        product_snapshot,
+        subject,
+        description,
+        contact_phone,
+        site_location,
+        serial_number,
+        priority,
+        status
+      )
+      values (
+        ${requestId},
+        ${requestNumber},
+        ${actor.id},
+        ${actor.email},
+        ${product.id},
+        ${sql.json(productSnapshot as any)},
+        ${input.subject},
+        ${input.description},
+        ${input.contactPhone},
+        ${input.siteLocation},
+        ${input.serialNumber ?? null},
+        ${input.priority},
+        ${"new"}
+      )
+    `;
 
-  await addHistory(requestId, actor, "request_created", { requestNumber, productId: product.id });
+    await addHistory(
+      requestId,
+      actor,
+      "request_created",
+      { requestNumber, productId: product.id },
+      tx,
+    );
+  });
   await emitOutbox("request.created", requestId, {
     requestId,
     requestNumber,
@@ -912,23 +936,32 @@ app.patch("/requests/:requestId", async (request, reply) => {
     return mapRequestRow(current);
   }
 
-  const updatedRows = await sql<any[]>`
-    update service_desk.requests
-    set subject = ${nextDetails.subject},
-        description = ${nextDetails.description},
-        contact_phone = ${nextDetails.contactPhone},
-        site_location = ${nextDetails.siteLocation},
-        serial_number = ${nextDetails.serialNumber},
-        updated_at = now()
-    where id = ${params.requestId}
-    returning *
-  `;
+  // The detail update and its history entry are one logical write.
+  const updatedRow = await sql.begin(async (tx) => {
+    const rows = await tx<any[]>`
+      update service_desk.requests
+      set subject = ${nextDetails.subject},
+          description = ${nextDetails.description},
+          contact_phone = ${nextDetails.contactPhone},
+          site_location = ${nextDetails.siteLocation},
+          serial_number = ${nextDetails.serialNumber},
+          updated_at = now()
+      where id = ${params.requestId}
+      returning *
+    `;
 
-  await addHistory(params.requestId, actor, "request_updated", {
-    fields: changedFields,
+    await addHistory(
+      params.requestId,
+      actor,
+      "request_updated",
+      { fields: changedFields },
+      tx,
+    );
+
+    return rows[0];
   });
 
-  return mapRequestRow(updatedRows[0]);
+  return mapRequestRow(updatedRow);
 });
 
 app.post("/requests/:requestId/messages", async (request, reply) => {
@@ -968,33 +1001,41 @@ app.post("/requests/:requestId/messages", async (request, reply) => {
   }
 
   const messageId = randomUUID();
-  await sql`
-    insert into service_desk.request_messages (
-      id,
-      request_id,
-      author_id,
-      author_role,
-      visibility,
-      body
-    )
-    values (
-      ${messageId},
-      ${params.requestId},
-      ${actor.id},
-      ${actor.role},
-      ${input.visibility},
-      ${input.body}
-    )
-  `;
+  // Message row, the request's updated_at bump, and the history entry are one
+  // logical write — a partial commit would leave the timeline inconsistent.
+  await sql.begin(async (tx) => {
+    await tx`
+      insert into service_desk.request_messages (
+        id,
+        request_id,
+        author_id,
+        author_role,
+        visibility,
+        body
+      )
+      values (
+        ${messageId},
+        ${params.requestId},
+        ${actor.id},
+        ${actor.role},
+        ${input.visibility},
+        ${input.body}
+      )
+    `;
 
-  await sql`
-    update service_desk.requests
-    set updated_at = now()
-    where id = ${params.requestId}
-  `;
+    await tx`
+      update service_desk.requests
+      set updated_at = now()
+      where id = ${params.requestId}
+    `;
 
-  await addHistory(params.requestId, actor, "message_added", {
-    visibility: input.visibility,
+    await addHistory(
+      params.requestId,
+      actor,
+      "message_added",
+      { visibility: input.visibility },
+      tx,
+    );
   });
 
   if (actor.role === "customer") {
@@ -1071,15 +1112,18 @@ app.post("/requests/:requestId/claim", async (request, reply) => {
     return reply.code(403).send({ message: "Forbidden" });
   }
 
-  await sql`
-    update service_desk.requests
-    set assigned_engineer_id = ${actor.id},
-        status = ${"assigned"},
-        updated_at = now()
-    where id = ${params.requestId}
-  `;
+  // The claim and its history entry are one logical write.
+  await sql.begin(async (tx) => {
+    await tx`
+      update service_desk.requests
+      set assigned_engineer_id = ${actor.id},
+          status = ${"assigned"},
+          updated_at = now()
+      where id = ${params.requestId}
+    `;
 
-  await addHistory(params.requestId, actor, "request_claimed", {});
+    await addHistory(params.requestId, actor, "request_claimed", {}, tx);
+  });
   // Look up the customer so the claim email can address them by name.
   // Tolerant: if the lookup fails the email still goes out with just the
   // email address.
@@ -1143,21 +1187,32 @@ app.post("/requests/:requestId/assign", async (request, reply) => {
     return { ok: true };
   }
 
-  await sql`
-    update service_desk.requests
-    set assigned_engineer_id = ${engineer.id},
-        status = ${"assigned"},
-        updated_at = now()
-    where id = ${params.requestId}
-  `;
-
   // Distinguish first-time assignment from reassignment so the activity
   // timeline reads correctly ("Request Reassigned" vs "Request Assigned").
   const eventType = previousEngineerId ? "request_reassigned" : "request_assigned";
-  await addHistory(params.requestId, actor, eventType, {
-    engineerId: engineer.id,
-    engineerEmail: engineer.email,
-    previousEngineerId,
+  // The assignment and its history entry are one logical write. Before this
+  // was transactional, a rejected history insert (e.g. a support actor under
+  // the pre-005 role CHECK) left the request assigned while the endpoint 500d.
+  await sql.begin(async (tx) => {
+    await tx`
+      update service_desk.requests
+      set assigned_engineer_id = ${engineer.id},
+          status = ${"assigned"},
+          updated_at = now()
+      where id = ${params.requestId}
+    `;
+
+    await addHistory(
+      params.requestId,
+      actor,
+      eventType,
+      {
+        engineerId: engineer.id,
+        engineerEmail: engineer.email,
+        previousEngineerId,
+      },
+      tx,
+    );
   });
   await emitOutbox("request.assigned", params.requestId, {
     requestId: params.requestId,
@@ -1213,44 +1268,50 @@ app.post("/requests/:requestId/status", async (request, reply) => {
     return reply.code(403).send({ message: "Forbidden" });
   }
 
-  await sql`
-    update service_desk.requests
-    set status = ${nextStatus},
-        updated_at = now()
-    where id = ${params.requestId}
-  `;
-
   const noteBody = input.note?.trim();
   const noteVisibility = input.visibility ?? "customer_visible";
-  if (noteBody) {
-    await sql`
-      insert into service_desk.request_messages (
-        id,
-        request_id,
-        author_id,
-        author_role,
-        visibility,
-        body
-      )
-      values (
-        ${randomUUID()},
-        ${params.requestId},
-        ${actor.id},
-        ${actor.role},
-        ${noteVisibility},
-        ${noteBody}
-      )
-    `;
-  }
 
-  await addHistory(
-    params.requestId,
-    actor,
-    "status_changed",
-    noteBody
-      ? { from: current.status, to: nextStatus, noteVisibility }
-      : { from: current.status, to: nextStatus },
-  );
+  // Status update, the optional note, and the history entry are one logical
+  // write — the status must never move without its matching history row.
+  await sql.begin(async (tx) => {
+    await tx`
+      update service_desk.requests
+      set status = ${nextStatus},
+          updated_at = now()
+      where id = ${params.requestId}
+    `;
+
+    if (noteBody) {
+      await tx`
+        insert into service_desk.request_messages (
+          id,
+          request_id,
+          author_id,
+          author_role,
+          visibility,
+          body
+        )
+        values (
+          ${randomUUID()},
+          ${params.requestId},
+          ${actor.id},
+          ${actor.role},
+          ${noteVisibility},
+          ${noteBody}
+        )
+      `;
+    }
+
+    await addHistory(
+      params.requestId,
+      actor,
+      "status_changed",
+      noteBody
+        ? { from: current.status, to: nextStatus, noteVisibility }
+        : { from: current.status, to: nextStatus },
+      tx,
+    );
+  });
   await emitOutbox("request.status_changed", params.requestId, {
     requestId: params.requestId,
     requestNumber: current.request_number,
@@ -1318,20 +1379,26 @@ app.post("/requests/:requestId/cancel", async (request, reply) => {
     return reply.code(403).send({ message: "Forbidden" });
   }
 
-  await sql`
-    update service_desk.requests
-    set status = ${"closed"},
-        updated_at = now()
-    where id = ${params.requestId}
-  `;
-
   const reason = input.reason?.trim();
-  await addHistory(
-    params.requestId,
-    actor,
-    actor.role === "customer" ? "request_cancelled" : "request_archived",
-    reason ? { from: current.status, to: "closed", reason } : { from: current.status, to: "closed" },
-  );
+  // The close and its history entry are one logical write.
+  await sql.begin(async (tx) => {
+    await tx`
+      update service_desk.requests
+      set status = ${"closed"},
+          updated_at = now()
+      where id = ${params.requestId}
+    `;
+
+    await addHistory(
+      params.requestId,
+      actor,
+      actor.role === "customer" ? "request_cancelled" : "request_archived",
+      reason
+        ? { from: current.status, to: "closed", reason }
+        : { from: current.status, to: "closed" },
+      tx,
+    );
+  });
   await emitOutbox("request.status_changed", params.requestId, {
     requestId: params.requestId,
     requestNumber: current.request_number,
@@ -1623,22 +1690,26 @@ app.post("/requests/:requestId/attachments", async (request, reply) => {
   }
 
   const attachmentId = randomUUID();
-  await sql`
-    insert into service_desk.request_attachments (
-      id, request_id, uploaded_by, object_key, file_name, content_type, size_bytes, kind
-    )
-    values (
-      ${attachmentId},
-      ${params.requestId},
-      ${actor.id},
-      ${input.objectKey},
-      ${input.fileName},
-      ${input.contentType},
-      ${input.sizeBytes},
-      ${kind}
-    )
-  `;
-  await addHistory(params.requestId, actor, "attachment_added", { kind });
+  // The attachment row and its history entry are one logical write.
+  await sql.begin(async (tx) => {
+    await tx`
+      insert into service_desk.request_attachments (
+        id, request_id, uploaded_by, object_key, file_name, content_type, size_bytes, kind
+      )
+      values (
+        ${attachmentId},
+        ${params.requestId},
+        ${actor.id},
+        ${input.objectKey},
+        ${input.fileName},
+        ${input.contentType},
+        ${input.sizeBytes},
+        ${kind}
+      )
+    `;
+
+    await addHistory(params.requestId, actor, "attachment_added", { kind }, tx);
+  });
 
   let url = "";
   try {
@@ -1815,6 +1886,330 @@ app.get("/internal/customer-activity/:customerId", async (request, reply) => {
     stats,
     requests: requestRows.map(mapRequestRow),
     machines: machineRows.map(mapMachineRow),
+  };
+});
+
+// ─── Activity console projections (read-only) ───────────────────────────────
+// Person-centric views over data that already exists. No writes, no schema
+// additions. Cross-service identity (display names) is deliberately NOT
+// resolved here — the gateway already holds the user directory and fills names
+// in one batch, which keeps this service free of per-row auth lookups.
+
+const ACTIVE_STATUSES = ["assigned", "in_progress"] as const;
+const CLOSED_STATUSES = ["resolved", "closed"] as const;
+
+/** Opaque keyset cursor over a (timestamp, uuid) pair. Deterministic and
+ *  stable under concurrent inserts, unlike offset paging. */
+function encodeCursor(occurredAt: Date | string, id: string): string {
+  const iso = occurredAt instanceof Date ? occurredAt.toISOString() : occurredAt;
+  return Buffer.from(`${iso}|${id}`, "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: string): { at: string; id: string } | null {
+  try {
+    const raw = Buffer.from(cursor, "base64url").toString("utf8");
+    const separator = raw.lastIndexOf("|");
+    if (separator === -1) return null;
+    const at = raw.slice(0, separator);
+    const id = raw.slice(separator + 1);
+    if (!at || !id || Number.isNaN(Date.parse(at))) return null;
+    return { at, id };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Per-person workload and recorded-activity aggregates for the whole install.
+ * Three grouped queries, no per-person round trip.
+ */
+app.get("/internal/activity/aggregates", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const query = z
+    .object({ staleAfterDays: z.coerce.number().int().min(1).max(365).default(7) })
+    .parse(request.query);
+
+  // One pass over requests, counted twice per row: once against the assigned
+  // engineer and once against the owning customer.
+  const workload = await sql<any[]>`
+    select
+      t.person_id,
+      t.rel,
+      count(*)::int as total,
+      count(*) filter (where t.status = 'in_progress')::int as in_progress,
+      count(*) filter (where t.status = 'assigned')::int as pending,
+      count(*) filter (where t.status = 'waiting_for_customer')::int as waiting,
+      count(*) filter (where t.status in ${sql(CLOSED_STATUSES)})::int as completed,
+      count(*) filter (where t.status not in ${sql(CLOSED_STATUSES)})::int as open,
+      count(*) filter (
+        where t.status in ${sql(ACTIVE_STATUSES)}
+          and t.updated_at < now() - make_interval(days => ${query.staleAfterDays})
+      )::int as stale,
+      count(*) filter (
+        where t.assigned_engineer_id is null and t.status not in ${sql(CLOSED_STATUSES)}
+      )::int as unassigned
+    from (
+      select assigned_engineer_id as person_id, 'engineer' as rel,
+             status, updated_at, assigned_engineer_id
+        from service_desk.requests
+       where assigned_engineer_id is not null
+      union all
+      select customer_id, 'customer',
+             status, updated_at, assigned_engineer_id
+        from service_desk.requests
+      union all
+      -- Who actually filed the request, which for staff-on-behalf work is not
+      -- the customer. Taken from history so the attribution is recorded fact.
+      select h.actor_id, 'creator',
+             r.status, r.updated_at, r.assigned_engineer_id
+        from service_desk.request_history h
+        join service_desk.requests r on r.id = h.request_id
+       where h.event_type = 'request_created'
+    ) t
+    group by t.person_id, t.rel
+  `;
+
+  const recorded = await sql<any[]>`
+    select actor_id, count(*)::int as events, max(created_at) as last_activity
+    from service_desk.request_history
+    group by actor_id
+  `;
+
+  const machines = await sql<any[]>`
+    select customer_id, count(*)::int as machine_count
+    from service_desk.customer_machines
+    where status = 'active'
+    group by customer_id
+  `;
+
+  return {
+    workload: workload.map((row) => ({
+      personId: row.person_id,
+      rel: row.rel as "engineer" | "customer" | "creator",
+      total: row.total,
+      inProgress: row.in_progress,
+      pending: row.pending,
+      waiting: row.waiting,
+      completed: row.completed,
+      open: row.open,
+      stale: row.stale,
+      unassigned: row.unassigned,
+    })),
+    recorded: recorded.map((row) => ({
+      personId: row.actor_id,
+      events: row.events,
+      lastActivityAt: row.last_activity ? new Date(row.last_activity).toISOString() : null,
+    })),
+    machines: machines.map((row) => ({
+      personId: row.customer_id,
+      machineCount: row.machine_count,
+    })),
+  };
+});
+
+/** Detail metrics for one person: priority spread of their active work and a
+ *  breakdown of their recorded actions by event type. */
+app.get("/internal/activity/:userId/summary", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+
+  const priorities = await sql<any[]>`
+    select t.rel, t.priority, count(*)::int as count
+    from (
+      select 'engineer' as rel, priority
+        from service_desk.requests
+       where assigned_engineer_id = ${params.userId}
+         and status in ${sql(ACTIVE_STATUSES)}
+      union all
+      select 'customer', priority
+        from service_desk.requests
+       where customer_id = ${params.userId}
+         and status not in ${sql(CLOSED_STATUSES)}
+    ) t
+    group by t.rel, t.priority
+  `;
+
+  const eventCounts = await sql<any[]>`
+    select event_type, count(*)::int as count
+    from service_desk.request_history
+    where actor_id = ${params.userId}
+    group by event_type
+  `;
+
+  const machineCount = await sql<any[]>`
+    select count(*)::int as count
+    from service_desk.customer_machines
+    where customer_id = ${params.userId} and status = 'active'
+  `;
+
+  const byRel: Record<string, Record<string, number>> = { engineer: {}, customer: {} };
+  for (const row of priorities) byRel[row.rel][row.priority] = row.count;
+
+  return {
+    priorityDistribution: byRel,
+    eventCounts: Object.fromEntries(eventCounts.map((r) => [r.event_type, r.count])),
+    machineCount: machineCount[0]?.count ?? 0,
+  };
+});
+
+/**
+ * Recorded actions performed BY one person, newest first, keyset-paginated.
+ * `metadata` is free-form jsonb and is never returned raw — the gateway
+ * whitelists it. Message bodies and cancellation reasons never leave here.
+ */
+app.get("/internal/activity/:userId/history", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+  const query = z
+    .object({
+      limit: z.coerce.number().int().min(1).max(100).default(25),
+      cursor: z.string().max(200).optional(),
+      eventTypes: z.string().max(400).optional(),
+    })
+    .parse(request.query);
+
+  const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+  if (query.cursor && !cursor) {
+    return reply.code(400).send({ message: "Invalid cursor." });
+  }
+  const types = query.eventTypes
+    ? query.eventTypes.split(",").map((t) => t.trim()).filter(Boolean)
+    : null;
+
+  // limit + 1 tells us whether another page exists without a second count query.
+  const rows = await sql<any[]>`
+    select
+      h.id, h.event_type, h.actor_role, h.metadata, h.created_at,
+      r.id as request_id, r.request_number, r.subject, r.status, r.customer_id
+    from service_desk.request_history h
+    join service_desk.requests r on r.id = h.request_id
+    where h.actor_id = ${params.userId}
+      ${types && types.length > 0 ? sql`and h.event_type in ${sql(types)}` : sql``}
+      ${cursor ? sql`and (h.created_at, h.id) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : sql``}
+    order by h.created_at desc, h.id desc
+    limit ${query.limit + 1}
+  `;
+
+  const hasMore = rows.length > query.limit;
+  const page = hasMore ? rows.slice(0, query.limit) : rows;
+  const last = page[page.length - 1];
+
+  return {
+    events: page.map((row) => ({
+      id: row.id,
+      occurredAt: new Date(row.created_at).toISOString(),
+      eventType: row.event_type,
+      recordedRole: row.actor_role,
+      actorId: params.userId,
+      metadata: row.metadata ?? {},
+      request: {
+        id: row.request_id,
+        requestNumber: row.request_number,
+        subject: row.subject,
+        status: row.status,
+        customerId: row.customer_id,
+      },
+    })),
+    nextCursor: hasMore && last ? encodeCursor(last.created_at, last.id) : null,
+  };
+});
+
+/**
+ * The person's request workload. `rel` selects the relationship: an engineer's
+ * assigned queue, or a customer's own requests. Keyset-paginated on
+ * (updated_at, id). Internal machine serials are never selected.
+ */
+app.get("/internal/activity/:userId/tasks", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = z.object({ userId: z.string().uuid() }).parse(request.params);
+  const query = z
+    .object({
+      rel: z.enum(["engineer", "customer"]).default("engineer"),
+      bucket: z.enum(["active", "waiting", "completed", "all"]).default("active"),
+      limit: z.coerce.number().int().min(1).max(100).default(25),
+      cursor: z.string().max(200).optional(),
+      staleAfterDays: z.coerce.number().int().min(1).max(365).default(7),
+    })
+    .parse(request.query);
+
+  const cursor = query.cursor ? decodeCursor(query.cursor) : null;
+  if (query.cursor && !cursor) {
+    return reply.code(400).send({ message: "Invalid cursor." });
+  }
+
+  const ownership =
+    query.rel === "engineer"
+      ? sql`r.assigned_engineer_id = ${params.userId}`
+      : sql`r.customer_id = ${params.userId}`;
+
+  const bucketFilter =
+    query.bucket === "active"
+      ? sql`and r.status in ${sql(ACTIVE_STATUSES)}`
+      : query.bucket === "waiting"
+        ? sql`and r.status = 'waiting_for_customer'`
+        : query.bucket === "completed"
+          ? sql`and r.status in ${sql(CLOSED_STATUSES)}`
+          : sql``;
+
+  const rows = await sql<any[]>`
+    select
+      r.id, r.request_number, r.subject, r.issue_type, r.status, r.priority,
+      r.customer_id, r.customer_machine_id, r.assigned_engineer_id,
+      r.created_at, r.updated_at,
+      m.display_label,
+      a.assigned_at,
+      (r.status in ${sql(ACTIVE_STATUSES)}
+        and r.updated_at < now() - make_interval(days => ${query.staleAfterDays})) as stale
+    from service_desk.requests r
+    left join service_desk.customer_machines m on m.id = r.customer_machine_id
+    left join lateral (
+      select max(h.created_at) as assigned_at
+      from service_desk.request_history h
+      where h.request_id = r.id
+        and h.event_type in ('request_assigned', 'request_reassigned', 'request_claimed')
+    ) a on true
+    where ${ownership}
+      ${bucketFilter}
+      ${cursor ? sql`and (r.updated_at, r.id) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : sql``}
+    order by r.updated_at desc, r.id desc
+    limit ${query.limit + 1}
+  `;
+
+  const hasMore = rows.length > query.limit;
+  const page = hasMore ? rows.slice(0, query.limit) : rows;
+  const last = page[page.length - 1];
+  const now = Date.now();
+
+  return {
+    tasks: page.map((row) => {
+      const createdAt = new Date(row.created_at);
+      return {
+        id: row.id,
+        requestNumber: row.request_number,
+        subject: row.subject,
+        issueType: row.issue_type ?? null,
+        status: row.status,
+        priority: row.priority,
+        customerId: row.customer_id,
+        machineId: row.customer_machine_id ?? null,
+        machineLabel: row.display_label ?? null,
+        assignedEngineerId: row.assigned_engineer_id ?? null,
+        assignedAt: row.assigned_at ? new Date(row.assigned_at).toISOString() : null,
+        createdAt: createdAt.toISOString(),
+        lastActivityAt: new Date(row.updated_at).toISOString(),
+        ageDays: Math.max(0, Math.floor((now - createdAt.getTime()) / 86_400_000)),
+        stale: Boolean(row.stale),
+      };
+    }),
+    nextCursor: hasMore && last ? encodeCursor(last.updated_at, last.id) : null,
   };
 });
 

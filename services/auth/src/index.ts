@@ -781,6 +781,53 @@ app.get("/internal/users", async (request, reply) => {
   return rows.map(mapUser);
 });
 
+/**
+ * Directory projection for the activity console.
+ *
+ * Deliberately separate from `/internal/users` so the shared `AuthUser` shape
+ * stays untouched: this adds `companyName` (searchable) and `lastSeenAt`
+ * (from auth.sessions, maintained on every session resolve), neither of which
+ * belongs on the session payload. One query, no N+1 — the last-seen timestamp
+ * comes from a grouped sub-select rather than a per-user lookup.
+ *
+ * Read-only. Removed users are excluded, exactly as `/internal/users` does.
+ */
+app.get("/internal/users/directory", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const supportsRemovedAt = await hasRemovedAtColumn();
+
+  // `u.*` mirrors /internal/users so resolvedProfileCompleted sees the same
+  // columns it does; the response below is an explicit whitelist, so no extra
+  // column ever leaves this handler.
+  const rows = await sql<any[]>`
+    select u.*, s.last_seen_at
+    from auth.users u
+    left join (
+      select user_id, max(last_seen_at) as last_seen_at
+      from auth.sessions
+      group by user_id
+    ) s on s.user_id = u.id
+    ${supportsRemovedAt ? sql`where u.removed_at is null` : sql``}
+    order by u.created_at desc
+  `;
+
+  return rows.map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role,
+    approvalStatus: row.approval_status ?? "approved",
+    accountOrigin: row.account_origin ?? "self_signup",
+    companyName: row.company_name ?? null,
+    profileCompleted: resolvedProfileCompleted(row),
+    createdAt: new Date(row.created_at).toISOString(),
+    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
+  }));
+});
+
 app.get("/internal/users/:id", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });

@@ -27,6 +27,12 @@ import {
   updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
   verifyEmailInputSchema,
+  activityPeopleQuerySchema,
+  activityTaskBucketSchema,
+  ACTIVITY_PAGE_SIZE_DEFAULT,
+  ACTIVITY_PAGE_SIZE_MAX,
+  ACTIVITY_RECENT_DAYS,
+  ACTIVITY_STALE_AFTER_DAYS,
   assignableRolesFor,
   canApproveUsers,
   canAssignRequests,
@@ -38,6 +44,7 @@ import {
   canManageUsers,
   canSuspendUsers,
   canViewCustomerActivity,
+  canViewSupportDashboard,
   type Role,
 } from "@elkatech/contracts";
 import {
@@ -48,6 +55,16 @@ import {
   verifyFirebaseIdTokenForRequest,
 } from "@elkatech/config";
 import { evaluateApprovalGate } from "./approval";
+import {
+  canAccessActivityDirectory,
+  canAccessPersonPage,
+  derivePersonState,
+  emptyWorkload,
+  headlineCounts,
+  whitelistEventDetails,
+  type PersonWorkload,
+  type RelCounts,
+} from "./activity";
 
 const env = getEnv();
 const app = Fastify({ logger: true });
@@ -1399,6 +1416,352 @@ app.get("/api/staff/customers/:customerId/machines", async (request, reply) => {
     { headers: internalHeaders() },
   );
   return detail.machines.filter((m) => m.status === "active");
+});
+
+// ─── Activity console (person-centric operations views) ─────────────────────
+// Read-only. Admin/owner/support reach the whole directory; an engineer may
+// open ONLY their own person page and never the directory; customers never
+// reach any of it. Enforced here, not just in the UI.
+
+type DirectoryUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  approvalStatus: "pending_approval" | "approved" | "rejected" | "suspended";
+  accountOrigin: string;
+  companyName: string | null;
+  profileCompleted: boolean;
+  createdAt: string;
+  lastSeenAt: string | null;
+};
+
+function fetchUserDirectory() {
+  return fetchJson<DirectoryUser[]>(`${env.AUTH_SERVICE_URL}/internal/users/directory`, {
+    headers: internalHeaders(),
+  });
+}
+
+function fetchActivityAggregates() {
+  return fetchJson<{
+    workload: Array<{ personId: string; rel: "engineer" | "customer" | "creator" } & RelCounts>;
+    recorded: Array<{ personId: string; events: number; lastActivityAt: string | null }>;
+    machines: Array<{ personId: string; machineCount: number }>;
+  }>(
+    `${env.SERVICE_DESK_URL}/internal/activity/aggregates?staleAfterDays=${ACTIVITY_STALE_AFTER_DAYS}`,
+    { headers: internalHeaders() },
+  );
+}
+
+async function buildPeopleRows() {
+  // Exactly two upstream calls for the whole directory — no per-person lookup.
+  const [users, aggregates] = await Promise.all([fetchUserDirectory(), fetchActivityAggregates()]);
+
+  const byPerson = new Map<string, PersonWorkload>();
+  for (const row of aggregates.workload) {
+    const entry = byPerson.get(row.personId) ?? emptyWorkload();
+    entry[row.rel] = {
+      total: row.total,
+      inProgress: row.inProgress,
+      pending: row.pending,
+      waiting: row.waiting,
+      open: row.open,
+      completed: row.completed,
+      unassigned: row.unassigned,
+      stale: row.stale,
+    };
+    byPerson.set(row.personId, entry);
+  }
+  const recordedByPerson = new Map(aggregates.recorded.map((r) => [r.personId, r]));
+  const machinesByPerson = new Map(aggregates.machines.map((m) => [m.personId, m.machineCount]));
+
+  const people = users.map((user) => {
+    const work = byPerson.get(user.id) ?? emptyWorkload();
+    const recorded = recordedByPerson.get(user.id);
+    const { state, count } = derivePersonState(user, work);
+    const headline = headlineCounts(user.role, work);
+
+    return {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.email,
+      role: user.role,
+      approvalStatus: user.approvalStatus,
+      accountOrigin: user.accountOrigin,
+      companyName: user.companyName,
+      profileCompleted: user.profileCompleted,
+      createdAt: user.createdAt,
+      lastSeenAt: user.lastSeenAt,
+      lastRecordedActivityAt: recorded?.lastActivityAt ?? null,
+      state,
+      stateCount: count,
+      open: headline.open,
+      completed: headline.completed,
+      machineCount: machinesByPerson.get(user.id) ?? 0,
+      workload: {
+        asEngineer: work.engineer,
+        asCustomer: work.customer,
+        asCreator: work.creator,
+        recordedEvents: recorded?.events ?? 0,
+      },
+    };
+  });
+
+  return people;
+}
+
+app.get("/api/activity/people", async (request, reply) => {
+  // Directory is staff-coordination surface only. Engineers get their own
+  // page but never the roster; customers never reach any of it.
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canAccessActivityDirectory(session.user.role)) return forbidden(reply);
+
+  const parsedQuery = activityPeopleQuerySchema.safeParse(request.query ?? {});
+  if (!parsedQuery.success) {
+    return reply.code(400).send({ message: "Invalid query parameters." });
+  }
+  const query = parsedQuery.data;
+  const all = await buildPeopleRows();
+
+  const needle = query.search?.toLowerCase();
+  const recentCutoff = Date.now() - ACTIVITY_RECENT_DAYS * 86_400_000;
+
+  const filtered = all.filter((p) => {
+    if (query.role && p.role !== query.role) return false;
+    if (query.status && p.approvalStatus !== query.status) return false;
+    if (query.filter === "active_work" && p.state !== "working" && p.state !== "assignments_pending")
+      return false;
+    if (query.filter === "has_open" && p.open <= 0) return false;
+    if (query.filter === "recently_active") {
+      const stamps = [p.lastSeenAt, p.lastRecordedActivityAt]
+        .filter((v): v is string => Boolean(v))
+        .map((v) => Date.parse(v));
+      if (stamps.length === 0 || Math.max(...stamps) < recentCutoff) return false;
+    }
+    if (needle) {
+      const haystack =
+        `${p.displayName} ${p.email} ${p.role} ${p.companyName ?? ""}`.toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
+    return true;
+  });
+
+  // Deterministic ordering: people with live work first, then most recently
+  // active, then a stable id tie-break so paging never repeats or skips a row.
+  const activeRank = (state: string) =>
+    state === "working" ? 0 : state === "assignments_pending" ? 1 : state === "waiting_on_customer" ? 2 : 3;
+  filtered.sort((a, b) => {
+    const rank = activeRank(a.state) - activeRank(b.state);
+    if (rank !== 0) return rank;
+    const at = Date.parse(a.lastRecordedActivityAt ?? a.lastSeenAt ?? a.createdAt);
+    const bt = Date.parse(b.lastRecordedActivityAt ?? b.lastSeenAt ?? b.createdAt);
+    if (bt !== at) return bt - at;
+    return a.id.localeCompare(b.id);
+  });
+
+  const summary = {
+    totalPeople: all.length,
+    activeEngineers: all.filter((p) => p.role === "engineer" && p.approvalStatus === "approved")
+      .length,
+    activeSupport: all.filter((p) => p.role === "support" && p.approvalStatus === "approved").length,
+    withOpenWork: all.filter((p) => p.open > 0).length,
+    recentlyActive: all.filter((p) => {
+      const stamps = [p.lastSeenAt, p.lastRecordedActivityAt]
+        .filter((v): v is string => Boolean(v))
+        .map((v) => Date.parse(v));
+      return stamps.length > 0 && Math.max(...stamps) >= recentCutoff;
+    }).length,
+    inactiveAccounts: all.filter((p) => p.approvalStatus !== "approved").length,
+  };
+
+  return {
+    people: filtered.slice(query.offset, query.offset + query.limit),
+    total: filtered.length,
+    limit: query.limit,
+    offset: query.offset,
+    summary,
+  };
+});
+
+const activityUserParams = z.object({ userId: z.string().uuid() });
+
+/**
+ * Resolve the session and target person for a person-scoped route.
+ * Authenticates before parsing so an unauthenticated caller learns nothing
+ * from the shape of the id: 401 unauthenticated → 400 malformed id → 403 not
+ * permitted (directory access, or an engineer opening strictly their own page).
+ */
+async function resolvePersonRoute(request: any, reply: any) {
+  const session = await requireSession(request, reply, ["admin", "owner", "support", "engineer"]);
+  if (!session) return null;
+
+  const parsed = activityUserParams.safeParse(request.params);
+  if (!parsed.success) {
+    reply.code(400).send({ message: "Invalid user id." });
+    return null;
+  }
+
+  const { userId } = parsed.data;
+  if (!canAccessPersonPage(session.user.role, session.user.id, userId)) {
+    forbidden(reply);
+    return null;
+  }
+  return { session, userId };
+}
+
+app.get("/api/activity/people/:userId", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const [people, summary] = await Promise.all([
+    buildPeopleRows(),
+    fetchJson<{
+      priorityDistribution: Record<string, Record<string, number>>;
+      eventCounts: Record<string, number>;
+      machineCount: number;
+    }>(`${env.SERVICE_DESK_URL}/internal/activity/${userId}/summary`, {
+      headers: internalHeaders(),
+    }),
+  ]);
+
+  const person = people.find((p) => p.id === userId);
+  if (!person) return reply.code(404).send({ message: "Person not found." });
+
+  const rel = person.role === "customer" ? "customer" : "engineer";
+  return {
+    person,
+    machineCount: summary.machineCount,
+    priorityDistribution: summary.priorityDistribution[rel] ?? {},
+    eventCounts: summary.eventCounts,
+  };
+});
+
+app.get("/api/activity/people/:userId/history", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const parsedQuery = z
+    .object({
+      limit: z.coerce.number().int().min(1).max(ACTIVITY_PAGE_SIZE_MAX).default(ACTIVITY_PAGE_SIZE_DEFAULT),
+      cursor: z.string().max(200).optional(),
+      eventTypes: z.string().max(400).optional(),
+    })
+    .safeParse(request.query ?? {});
+  if (!parsedQuery.success) {
+    return reply.code(400).send({ message: "Invalid query parameters." });
+  }
+  const query = parsedQuery.data;
+
+  const params = new URLSearchParams({ limit: String(query.limit) });
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.eventTypes) params.set("eventTypes", query.eventTypes);
+
+  const [page, directory] = await Promise.all([
+    fetchJson<{ events: any[]; nextCursor: string | null }>(
+      `${env.SERVICE_DESK_URL}/internal/activity/${userId}/history?${params}`,
+      { headers: internalHeaders() },
+    ),
+    fetchUserDirectory(),
+  ]);
+
+  // One directory fetch resolves every referenced person on the page — no
+  // per-row auth lookup.
+  const nameById = new Map(directory.map((u) => [u.id, u.displayName]));
+
+  return {
+    events: page.events.map((event) => ({
+      id: event.id,
+      occurredAt: event.occurredAt,
+      eventType: event.eventType,
+      // Role recorded at the time of the action — never the actor's role today.
+      recordedRole: event.recordedRole,
+      actorId: event.actorId,
+      request: event.request,
+      details: whitelistEventDetails(event.metadata, (id) => nameById.get(id) ?? null),
+    })),
+    nextCursor: page.nextCursor,
+  };
+});
+
+app.get("/api/activity/people/:userId/tasks", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const parsedQuery = z
+    .object({
+      rel: z.enum(["engineer", "customer"]).default("engineer"),
+      bucket: activityTaskBucketSchema.default("active"),
+      limit: z.coerce.number().int().min(1).max(ACTIVITY_PAGE_SIZE_MAX).default(ACTIVITY_PAGE_SIZE_DEFAULT),
+      cursor: z.string().max(200).optional(),
+    })
+    .safeParse(request.query ?? {});
+  if (!parsedQuery.success) {
+    return reply.code(400).send({ message: "Invalid query parameters." });
+  }
+  const query = parsedQuery.data;
+
+  const params = new URLSearchParams({
+    rel: query.rel,
+    bucket: query.bucket,
+    limit: String(query.limit),
+    staleAfterDays: String(ACTIVITY_STALE_AFTER_DAYS),
+  });
+  if (query.cursor) params.set("cursor", query.cursor);
+
+  const [page, directory] = await Promise.all([
+    fetchJson<{ tasks: any[]; nextCursor: string | null }>(
+      `${env.SERVICE_DESK_URL}/internal/activity/${userId}/tasks?${params}`,
+      { headers: internalHeaders() },
+    ),
+    fetchUserDirectory(),
+  ]);
+
+  const nameById = new Map(directory.map((u) => [u.id, u.displayName]));
+
+  return {
+    tasks: page.tasks.map((task) => ({
+      ...task,
+      // Null name = the account was hard-deleted; the UI renders "Removed
+      // user" rather than silently attributing it to someone else.
+      customerName: nameById.get(task.customerId) ?? null,
+      assignedEngineerName: task.assignedEngineerId
+        ? nameById.get(task.assignedEngineerId) ?? null
+        : null,
+    })),
+    nextCursor: page.nextCursor,
+  };
+});
+
+/**
+ * Customer-safe machine list for a person page. Support can reach this
+ * surface, so the internal serial number and admin notes are stripped here —
+ * unlike /api/staff/customers/:id/machines, which returns the full admin view.
+ */
+app.get("/api/activity/people/:userId/machines", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const detail = await fetchJson<{ machines: any[] }>(
+    `${env.SERVICE_DESK_URL}/internal/customer-activity/${userId}`,
+    { headers: internalHeaders() },
+  );
+
+  return {
+    machines: (detail.machines ?? []).map((machine) => ({
+      id: machine.id,
+      displayLabel: machine.displayLabel,
+      productName: machine.productSnapshot?.name ?? machine.productId,
+      unitNumber: machine.unitNumber ?? null,
+      siteName: machine.siteName ?? null,
+      siteLocation: machine.siteLocation,
+      status: machine.status,
+    })),
+  };
 });
 
 app.get("/api/engineers", async (request, reply) => {

@@ -1155,3 +1155,238 @@ export const domainEventSchema = z.object({
   occurredAt: z.string(),
 });
 export type DomainEvent = z.infer<typeof domainEventSchema>;
+
+// ─── Activity console (person-centric operations views) ─────────────────────
+// Read-only projections over data that already exists: service_desk.requests,
+// service_desk.request_history and auth.users/sessions. There is NO dedicated
+// audit table, so account actions (role changes, invites, approvals,
+// suspensions) are deliberately absent — no actor+timestamp record exists for
+// them and deriving one from current state would be fabrication.
+
+/** Active work is flagged "stale" after this long with no update. There is no
+ *  SLA field in the schema, so this is an activity heuristic — never presented
+ *  as a contractual "overdue". */
+export const ACTIVITY_STALE_AFTER_DAYS = 7;
+/** A person counts as "recently active" within this window. */
+export const ACTIVITY_RECENT_DAYS = 7;
+
+export const ACTIVITY_PAGE_SIZE_DEFAULT = 25;
+export const ACTIVITY_PAGE_SIZE_MAX = 100;
+
+/**
+ * Human-meaningful summary of what a person is doing right now. The API emits
+ * the discriminator plus the counts; the UI renders the wording, so copy can
+ * change without an API change.
+ */
+export const activityPersonStateSchema = z.enum([
+  "suspended",
+  "pending_approval",
+  "rejected",
+  "working",
+  "waiting_on_customer",
+  "assignments_pending",
+  "open_requests",
+  "no_active_work",
+]);
+export type ActivityPersonState = z.infer<typeof activityPersonStateSchema>;
+
+const activityRelCountsSchema = z.object({
+  total: z.number().int(),
+  /** status = in_progress — actively being worked. */
+  inProgress: z.number().int(),
+  /** status = assigned — accepted but not started. */
+  pending: z.number().int(),
+  waiting: z.number().int(),
+  open: z.number().int(),
+  completed: z.number().int(),
+  unassigned: z.number().int(),
+  /** Active items untouched for ACTIVITY_STALE_AFTER_DAYS. Not an SLA breach. */
+  stale: z.number().int(),
+});
+export type ActivityRelCounts = z.infer<typeof activityRelCountsSchema>;
+
+export const activityWorkloadSchema = z.object({
+  /** Requests assigned to them (requests.assigned_engineer_id). */
+  asEngineer: activityRelCountsSchema,
+  /** Requests they own (requests.customer_id). */
+  asCustomer: activityRelCountsSchema,
+  /** Requests they filed, incl. staff filing on a customer's behalf — derived
+   *  from request_created history rows, so it attributes the real author. */
+  asCreator: activityRelCountsSchema,
+  /** Total rows in request_history authored by them. */
+  recordedEvents: z.number().int(),
+});
+export type ActivityWorkload = z.infer<typeof activityWorkloadSchema>;
+
+export const activityPersonRowSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  email: z.string(),
+  /** Current account role. Never conflate with a history row's recordedRole. */
+  role: roleSchema,
+  approvalStatus: approvalStatusSchema,
+  accountOrigin: accountOriginSchema,
+  companyName: z.string().nullable(),
+  profileCompleted: z.boolean(),
+  createdAt: z.string(),
+  /** From auth.sessions.last_seen_at; null when no live session row remains. */
+  lastSeenAt: z.string().nullable(),
+  lastRecordedActivityAt: z.string().nullable(),
+  state: activityPersonStateSchema,
+  /** Count that belongs with `state` — e.g. 3 for "Working on 3 requests".
+   *  Always paired with the state so a bare number is never rendered. */
+  stateCount: z.number().int(),
+  /** Role-resolved headline figures for the directory table. */
+  open: z.number().int(),
+  completed: z.number().int(),
+  machineCount: z.number().int(),
+  workload: activityWorkloadSchema,
+});
+export type ActivityPersonRow = z.infer<typeof activityPersonRowSchema>;
+
+export const activityDirectorySummarySchema = z.object({
+  totalPeople: z.number().int(),
+  activeEngineers: z.number().int(),
+  activeSupport: z.number().int(),
+  withOpenWork: z.number().int(),
+  recentlyActive: z.number().int(),
+  inactiveAccounts: z.number().int(),
+});
+
+export const activityPeopleResponseSchema = z.object({
+  people: z.array(activityPersonRowSchema),
+  total: z.number().int(),
+  limit: z.number().int(),
+  offset: z.number().int(),
+  summary: activityDirectorySummarySchema,
+});
+export type ActivityPeopleResponse = z.infer<typeof activityPeopleResponseSchema>;
+
+export const activityPeopleQuerySchema = z.object({
+  search: z.string().trim().max(120).optional(),
+  role: roleSchema.optional(),
+  status: approvalStatusSchema.optional(),
+  filter: z.enum(["active_work", "has_open", "recently_active"]).optional(),
+  limit: z.coerce.number().int().min(1).max(ACTIVITY_PAGE_SIZE_MAX).default(ACTIVITY_PAGE_SIZE_DEFAULT),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ActivityPeopleQuery = z.infer<typeof activityPeopleQuerySchema>;
+
+/** Event types the console knows how to phrase. Unknown values still render
+ *  (humanised generically) rather than being dropped. */
+export const activityEventTypeSchema = z.enum([
+  "request_created",
+  "request_updated",
+  "request_claimed",
+  "request_assigned",
+  "request_reassigned",
+  "status_changed",
+  "message_added",
+  "attachment_added",
+  "request_cancelled",
+  "request_archived",
+]);
+export type ActivityEventType = z.infer<typeof activityEventTypeSchema>;
+
+/**
+ * Whitelisted history metadata. `request_history.metadata` is free-form jsonb,
+ * so it is never returned raw. Message bodies, cancellation reasons,
+ * attachment URLs and machine serials are all excluded by construction.
+ */
+export const activityEventDetailsSchema = z.object({
+  from: requestStatusSchema.nullable(),
+  to: requestStatusSchema.nullable(),
+  engineerId: z.string().nullable(),
+  engineerName: z.string().nullable(),
+  previousEngineerId: z.string().nullable(),
+  previousEngineerName: z.string().nullable(),
+  visibility: messageVisibilitySchema.nullable(),
+  fields: z.array(z.string()).nullable(),
+  issueType: z.string().nullable(),
+  attachmentKind: attachmentKindSchema.nullable(),
+});
+
+export const activityEventSchema = z.object({
+  id: z.string(),
+  occurredAt: z.string(),
+  eventType: z.string(),
+  /** The role captured when the action happened — NOT the actor's role today. */
+  recordedRole: roleSchema,
+  actorId: z.string(),
+  request: z
+    .object({
+      id: z.string(),
+      requestNumber: z.string(),
+      subject: z.string(),
+      status: requestStatusSchema,
+      customerId: z.string(),
+    })
+    .nullable(),
+  details: activityEventDetailsSchema,
+});
+export type ActivityEvent = z.infer<typeof activityEventSchema>;
+
+export const activityEventPageSchema = z.object({
+  events: z.array(activityEventSchema),
+  nextCursor: z.string().nullable(),
+});
+export type ActivityEventPage = z.infer<typeof activityEventPageSchema>;
+
+export const activityTaskBucketSchema = z.enum(["active", "waiting", "completed", "all"]);
+export type ActivityTaskBucket = z.infer<typeof activityTaskBucketSchema>;
+
+export const activityTaskSchema = z.object({
+  id: z.string(),
+  requestNumber: z.string(),
+  subject: z.string(),
+  issueType: z.string().nullable(),
+  status: requestStatusSchema,
+  priority: requestPrioritySchema,
+  customerId: z.string(),
+  customerName: z.string().nullable(),
+  machineId: z.string().nullable(),
+  machineLabel: z.string().nullable(),
+  assignedEngineerId: z.string().nullable(),
+  /** Null when the engineer account was removed — UI renders "Removed user". */
+  assignedEngineerName: z.string().nullable(),
+  /** From the matching assign/claim history row; null when never recorded. */
+  assignedAt: z.string().nullable(),
+  createdAt: z.string(),
+  lastActivityAt: z.string(),
+  ageDays: z.number().int(),
+  /** Active work untouched for ACTIVITY_STALE_AFTER_DAYS. Not an SLA breach. */
+  stale: z.boolean(),
+});
+export type ActivityTask = z.infer<typeof activityTaskSchema>;
+
+export const activityTaskPageSchema = z.object({
+  tasks: z.array(activityTaskSchema),
+  nextCursor: z.string().nullable(),
+});
+export type ActivityTaskPage = z.infer<typeof activityTaskPageSchema>;
+
+/**
+ * Customer-safe machine view for the activity console. Deliberately excludes
+ * `internalSerialNumber` and admin notes — this surface is reachable by
+ * support, who must never see internal serials.
+ */
+export const activityMachineSchema = z.object({
+  id: z.string(),
+  displayLabel: z.string(),
+  productName: z.string(),
+  unitNumber: z.string().nullable(),
+  siteName: z.string().nullable(),
+  siteLocation: z.string(),
+  status: customerMachineStatusSchema,
+});
+export type ActivityMachine = z.infer<typeof activityMachineSchema>;
+
+export const activityPersonDetailSchema = z.object({
+  person: activityPersonRowSchema,
+  machineCount: z.number().int(),
+  /** Priority spread of the person's *active* work. Empty for roles with none. */
+  priorityDistribution: z.record(requestPrioritySchema, z.number().int()),
+  /** Counts per recorded event type — drives the Support/Owner section tabs. */
+  eventCounts: z.record(z.string(), z.number().int()),
+});
+export type ActivityPersonDetail = z.infer<typeof activityPersonDetailSchema>;
