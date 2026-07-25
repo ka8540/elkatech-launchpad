@@ -33,6 +33,7 @@ import type {
 } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PAGE_CONTAINER, PAGE_CONTAINER_READING } from "@/lib/page-layout";
 import { getRequestStatusLabel, REQUEST_STATUS_BADGE_CLASSES } from "@/lib/request-status";
 import { Button } from "@/components/ui/button";
 import {
@@ -826,7 +827,7 @@ const CustomerMachineProfilePage = () => {
 
   if (!customerId) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+      <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
         <Link to="/app/machines" className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
           <ArrowLeft className="h-4 w-4" />
           Back to Customer Machines
@@ -841,7 +842,7 @@ const CustomerMachineProfilePage = () => {
 
   if (profileQuery.isError) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+      <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
         <Link to="/app/machines" className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
           <ArrowLeft className="h-4 w-4" />
           Back to Customer Machines
@@ -855,7 +856,7 @@ const CustomerMachineProfilePage = () => {
   }
 
   return (
-    <div className="mx-auto max-w-7xl min-w-0 space-y-5 overflow-x-hidden">
+    <div className={cn(PAGE_CONTAINER, "overflow-x-hidden")}>
       {/* Back navigation, top-left — separate from the primary header actions. */}
       <Link
         to="/app/machines"

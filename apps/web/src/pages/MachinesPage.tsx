@@ -21,7 +21,9 @@ import {
 import { toast } from "sonner";
 import type { AuthUser, CatalogProduct, CustomerMachine } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
+import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -551,28 +553,21 @@ const MachinesPage = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl min-w-0 space-y-5 overflow-x-hidden">
-      {/* Header */}
-      <header className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-            <HardDrive className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="lp-display break-words text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">Customer Machines</h1>
-            <p className="mt-0.5 text-sm text-[var(--lp-ink-soft)]">
-              Link machines to customers and manage installed equipment.
-            </p>
-          </div>
-        </div>
-        <Button
-          onClick={openCreate}
-          className="h-10 shrink-0 rounded-full bg-[var(--lp-accent)] px-5 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
-        >
-          <Plus className="h-4 w-4" />
-          Add machine
-        </Button>
-      </header>
+    <div className={cn(PAGE_CONTAINER, "overflow-x-hidden")}>
+      <PageHeader
+        icon={HardDrive}
+        title="Customer Machines"
+        description="Link machines to customers and manage installed equipment."
+        action={
+          <Button
+            onClick={openCreate}
+            className="h-10 rounded-full bg-[var(--lp-accent)] px-5 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+          >
+            <Plus className="h-4 w-4" />
+            Add machine
+          </Button>
+        }
+      />
 
       {/* KPIs */}
       <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

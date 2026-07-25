@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { RequestStatusGroup, ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER } from "@/lib/page-layout";
 import {
   getRequestStatusGroup,
   getRequestStatusLabel,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/request-status";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
+import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -178,7 +180,7 @@ function StatCard({
 /* ─── Loading skeleton ─────────────────────────────────────────────────────── */
 function LoadingSkeleton() {
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className={PAGE_CONTAINER}>
       {/* Header skeleton */}
       <div className={cn("rounded-2xl p-5 sm:p-6", cardSurface)}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -437,44 +439,24 @@ const RequestsPage = () => {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className={PAGE_CONTAINER}>
       {/* ── Header card ───────────────────────────────────────────────────── */}
-      <header className={cn("relative overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
-          style={{
-            maskImage: "linear-gradient(to right, black, transparent 70%)",
-            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
-          }}
-        />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="mb-3 flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-                <ClipboardList className="h-4 w-4" />
-              </div>
-              <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-                Service Requests
-              </p>
-            </div>
-            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">
-              {activeFilter === "all"
-                ? isCustomer
-                  ? "Your Requests"
-                  : "Requests"
-                : `${filterMeta.label} Requests`}
-            </h1>
-            <p className="mt-1.5 max-w-xl text-sm leading-6 text-[var(--lp-ink-soft)]">
-              {filterMeta.description}
-            </p>
-          </div>
-
+      <PageHeader
+        icon={ClipboardList}
+        title={
+          activeFilter === "all"
+            ? isCustomer
+              ? "Your Requests"
+              : "Requests"
+            : `${filterMeta.label} Requests`
+        }
+        description={filterMeta.description}
+        action={
           <Button
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-10 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
+              "h-10 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >
@@ -487,8 +469,8 @@ const RequestsPage = () => {
               Create Service Request
             </Link>
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       {/* ── Approval gate banner (pending / rejected / suspended) ───────── */}
       {approvalStatus && (

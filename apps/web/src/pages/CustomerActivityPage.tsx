@@ -14,8 +14,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import PageHeader from "@/components/PageHeader";
 import { Input } from "@/components/ui/input";
 
 /* ── API shapes ──────────────────────────────────────────────────────────── */
@@ -329,14 +331,12 @@ const CustomerActivityPage = () => {
   const summary = data?.summary;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">Customer Activity</h1>
-        <p className="mt-1 text-sm text-[var(--lp-faint)]">
-          Track customer requests, machines, recent issues, and service history.
-        </p>
-      </div>
+    <div className={PAGE_CONTAINER}>
+      <PageHeader
+        icon={Users}
+        title="Customer Activity"
+        description="Track customer requests, machines, recent issues, and service history."
+      />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">

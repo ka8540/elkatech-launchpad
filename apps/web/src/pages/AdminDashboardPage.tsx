@@ -18,7 +18,9 @@ import {
 } from "lucide-react";
 import type { AuthUser, ServiceRequest, ServiceHeartbeat } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
+import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 
 type ApprovalSummary = {
@@ -191,59 +193,23 @@ const AdminDashboardPage = () => {
   const pendingCount = summaryQuery.data?.pendingApproval ?? 0;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      {/* Header */}
-      <header
-        className={cn(
-          "relative overflow-hidden rounded-3xl p-6 sm:p-8",
-          cardSurface,
-        )}
-      >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
-          style={{
-            maskImage: "linear-gradient(to right, black, transparent 70%)",
-            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
-          }}
-        />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="mb-4 flex items-center gap-3">
-              <div
-                className={cn(
-                  "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                  "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-                )}
-              >
-                <Gauge className="h-5 w-5" />
-              </div>
-              <p className="lp-mono text-xs font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-                Admin Dashboard
-              </p>
-            </div>
-            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">
-              Operations overview
-            </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-7 text-[var(--lp-ink-soft)]">
-              Account approvals, service request load, and live service health for the
-              ElkaTech platform.
-            </p>
-          </div>
-
-          <div className="flex w-fit shrink-0 items-center gap-2">
-            <Button
-              asChild
-              className="h-11 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]"
-            >
-              <Link to="/app/users">
-                <UserPlus className="mr-1.5 h-4 w-4" />
-                Manage users
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className={PAGE_CONTAINER}>
+      <PageHeader
+        icon={Gauge}
+        title="Operations Overview"
+        description="Account approvals, service request load, and live service health."
+        action={
+          <Button
+            asChild
+            className="h-10 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]"
+          >
+            <Link to="/app/users">
+              <UserPlus className="mr-1.5 h-4 w-4" />
+              Manage users
+            </Link>
+          </Button>
+        }
+      />
 
       {/* Pending banner if work to do */}
       {pendingCount > 0 && (

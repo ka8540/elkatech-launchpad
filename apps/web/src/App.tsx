@@ -31,7 +31,8 @@ import MachinesPage from "@/pages/MachinesPage";
 import CustomerMachineProfilePage from "@/pages/CustomerMachineProfilePage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
 import CustomerActivityPage from "@/pages/CustomerActivityPage";
-import SupportDashboardPage from "@/pages/SupportDashboardPage";
+import PeopleActivityPage from "@/pages/PeopleActivityPage";
+import PersonActivityPage from "@/pages/PersonActivityPage";
 import AccountPage from "@/pages/AccountPage";
 
 const queryClient = new QueryClient();
@@ -92,11 +93,23 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              {/* The old Support Dashboard is gone; keep its URL working. */}
+              <Route path="support" element={<Navigate to="/app/activity" replace />} />
               <Route
-                path="support"
+                path="activity"
                 element={
                   <ProtectedRoute roles={["support", "owner", "admin"]}>
-                    <SupportDashboardPage />
+                    <PeopleActivityPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Engineers may open only their own page; the gateway is
+                  authoritative and returns 403 for anyone else's. */}
+              <Route
+                path="activity/:userId"
+                element={
+                  <ProtectedRoute roles={["support", "owner", "admin", "engineer"]}>
+                    <PersonActivityPage />
                   </ProtectedRoute>
                 }
               />

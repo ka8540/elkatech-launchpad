@@ -1,0 +1,123 @@
+import { describe, expect, it } from "vitest";
+import type { Role } from "@elkatech/contracts";
+import { buildNavItems } from "./portal-nav";
+
+/**
+ * The sidebar is the only place a role's pages are advertised, so the matrix
+ * below is asserted directly. Each entry must line up with the permission
+ * helper the gateway enforces — a nav item the API would 403 is a bug.
+ */
+function labelsFor(role: Role | undefined): string[] {
+  return buildNavItems(role).map((item) => item.label);
+}
+
+function pathsFor(role: Role | undefined): string[] {
+  return buildNavItems(role).map((item) => item.to);
+}
+
+describe("portal sidebar navigation", () => {
+  it("gives the admin Overview first and drops the redundant entries", () => {
+    expect(labelsFor("admin")).toEqual([
+      "Overview",
+      "Requests",
+      "Queue",
+      "Activity",
+      "Customer Machines",
+      "Users",
+    ]);
+  });
+
+  it("points admin Overview at the existing /app/admin route", () => {
+    const overview = buildNavItems("admin")[0];
+    expect(overview.label).toBe("Overview");
+    expect(overview.to).toBe("/app/admin");
+  });
+
+  it("keeps Customer Activity for support and owner", () => {
+    expect(labelsFor("support")).toEqual([
+      "Requests",
+      "Queue",
+      "Activity",
+      "Customer Activity",
+    ]);
+    expect(labelsFor("owner")).toEqual([
+      "Requests",
+      "Queue",
+      "Activity",
+      "Customer Activity",
+      "Customer Machines",
+      "Users",
+    ]);
+  });
+
+  it("leaves engineer and customer navigation untouched", () => {
+    expect(labelsFor("engineer")).toEqual(["Requests", "Queue"]);
+    expect(labelsFor("customer")).toEqual(["Requests"]);
+  });
+
+  it("shows only Requests before the session resolves", () => {
+    expect(labelsFor(undefined)).toEqual(["Requests"]);
+  });
+
+  it("no longer advertises a standalone Create Request entry to any role", () => {
+    const roles: Array<Role | undefined> = [
+      "customer",
+      "engineer",
+      "support",
+      "owner",
+      "admin",
+      undefined,
+    ];
+    for (const role of roles) {
+      expect(labelsFor(role)).not.toContain("Create Request");
+      expect(pathsFor(role)).not.toContain("/app/requests/new");
+    }
+  });
+
+  it("hides Customer Activity from the admin sidebar only", () => {
+    expect(labelsFor("admin")).not.toContain("Customer Activity");
+    expect(pathsFor("admin")).not.toContain("/app/customer-activity");
+  });
+
+  it("points Activity at the people directory, not the retired support page", () => {
+    const activity = buildNavItems("support").find((i) => i.label === "Activity");
+    expect(activity?.to).toBe("/app/activity");
+    expect(pathsFor("support")).not.toContain("/app/support");
+    expect(labelsFor("support")).not.toContain("Support");
+    expect(labelsFor("support")).not.toContain("Operations");
+  });
+
+  it("keeps Activity highlighted on a person page", () => {
+    const activity = buildNavItems("admin").find((i) => i.label === "Activity");
+    expect(activity?.activeWhen?.("/app/activity")).toBe(true);
+    expect(activity?.activeWhen?.("/app/activity/abc-123")).toBe(true);
+    expect(activity?.activeWhen?.("/app/queue")).toBe(false);
+  });
+
+  it("never offers the directory to engineers or customers", () => {
+    expect(pathsFor("engineer")).not.toContain("/app/activity");
+    expect(pathsFor("customer")).not.toContain("/app/activity");
+  });
+});
+
+describe("Requests active-state handling", () => {
+  const isActive = (pathname: string) => {
+    const requests = buildNavItems("customer").find((i) => i.label === "Requests");
+    return requests?.activeWhen?.(pathname) ?? false;
+  };
+
+  it("marks Requests active on the create page now that it has no own entry", () => {
+    expect(isActive("/app/requests/new")).toBe(true);
+  });
+
+  it("stays active on the list and on a request detail page", () => {
+    expect(isActive("/app/requests")).toBe(true);
+    expect(isActive("/app/requests/2f1c3d64-0000-4000-8000-000000000000")).toBe(true);
+  });
+
+  it("is not active on unrelated portal routes", () => {
+    expect(isActive("/app/queue")).toBe(false);
+    expect(isActive("/app/admin")).toBe(false);
+    expect(isActive("/app/account")).toBe(false);
+  });
+});

@@ -34,6 +34,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useSession } from "@/hooks/use-session";
 import { ApiError, apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER } from "@/lib/page-layout";
 import {
   getRequestStatusLabel,
   REQUEST_STATUS_DESCRIPTIONS,
@@ -635,7 +636,7 @@ const RequestDetailPage = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className={PAGE_CONTAINER}>
       <Button
         asChild
         variant="outline"

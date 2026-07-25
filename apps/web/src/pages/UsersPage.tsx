@@ -1,31 +1,55 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search } from "lucide-react";
+import { ChevronDown, Lock, MoreHorizontal, Search, UserPlus, Users2 } from "lucide-react";
 import type {
   AccountOrigin,
   ApprovalStatus,
   AuthUser,
   Role,
 } from "@elkatech/contracts";
-import {
-  assignableRolesFor,
-  canDeleteUsers,
-  canManageTargetUser,
-} from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER } from "@/lib/page-layout";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
 import CustomerMachinesDialog from "@/components/CustomerMachinesDialog";
+import PageHeader from "@/components/PageHeader";
+import InviteStaffDialog from "@/components/users/InviteStaffDialog";
+import ManageRoleDialog from "@/components/users/ManageRoleDialog";
+import UserDetailsDrawer from "@/components/users/UserDetailsDrawer";
+import {
+  ORIGIN_LABELS,
+  ROLE_LABELS,
+  STATUS_LABELS,
+  USER_TABS,
+  actionsFor,
+  canManageRoleFor,
+  filterUsers,
+  formatJoined,
+  initialsFor,
+  isProtectedAccount,
+  originLabel,
+  profileLabel,
+  resolveSystemAdminId,
+  sortUsers,
+  summarise,
+  tabCounts,
+  type ActorContext,
+  type OriginFilter,
+  type RoleFilter,
+  type StatusFilter,
+  type UserActionId,
+  type UserTabId,
+} from "@/components/users/user-access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,573 +62,259 @@ import {
 } from "@/components/ui/alert-dialog";
 
 type ApprovalAction = "approve" | "reject" | "suspend" | "reactivate";
-type InviteRole = "customer" | "engineer" | "support" | "owner" | "admin";
 
-const INVITE_ROLE_LABEL: Record<Role, string> = {
-  customer: "Customer / User",
-  engineer: "Engineer",
-  support: "Support",
-  owner: "Owner",
-  admin: "Admin",
+const PAGE_SIZE = 20;
+
+const ROLE_OPTIONS: Array<{ value: RoleFilter; label: string }> = [
+  { value: "all", label: "All roles" },
+  ...(["customer", "engineer", "support", "owner", "admin"] as Role[]).map((role) => ({
+    value: role as RoleFilter,
+    label: ROLE_LABELS[role],
+  })),
+];
+
+const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "All statuses" },
+  ...(
+    ["approved", "pending_approval", "suspended", "rejected"] as ApprovalStatus[]
+  ).map((status) => ({ value: status as StatusFilter, label: STATUS_LABELS[status] })),
+];
+
+const ORIGIN_OPTIONS: Array<{ value: OriginFilter; label: string }> = [
+  { value: "all", label: "All account types" },
+  ...(
+    ["self_signup", "firebase_google", "admin_invite", "legacy"] as AccountOrigin[]
+  ).map((origin) => ({ value: origin as OriginFilter, label: ORIGIN_LABELS[origin] })),
+];
+
+const ACTION_LABELS: Record<UserActionId, string> = {
+  details: "View details",
+  machines: "View machines",
+  role: "Manage role",
+  approve: "Approve",
+  reject: "Reject",
+  suspend: "Suspend",
+  reactivate: "Reactivate",
+  remove: "Remove user",
 };
 
-type RoleFilter = "all" | Role;
-type StatusFilter = "all" | ApprovalStatus;
-type OriginFilter = "all" | "self_signup" | "staff_managed";
+type ConfirmState = {
+  user: AuthUser;
+  action: Exclude<UserActionId, "details" | "machines" | "role">;
+} | null;
 
-type ConfirmState =
-  | null
-  | {
-      kind: "approval";
-      user: AuthUser;
-      action: ApprovalAction;
-      title: string;
-      description: string;
-      confirmLabel: string;
-      destructive?: boolean;
-    }
-  | {
-      kind: "role";
-      user: AuthUser;
-      role: Role;
-      title: string;
-      description: string;
-      confirmLabel: string;
-      destructive?: boolean;
-    }
-  | {
-      kind: "remove";
-      user: AuthUser;
-      title: string;
-      description: string;
-      confirmLabel: string;
-    };
+/* ── Small building blocks ───────────────────────────────────────────────── */
 
-const PAGE_SIZE = 25;
-
-function approvalBadgeClass(status: ApprovalStatus): string {
-  switch (status) {
-    case "approved":
-      return "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300";
-    case "pending_approval":
-      return "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300";
-    case "rejected":
-      return "border-rose-400/35 bg-rose-400/10 text-rose-600 dark:text-rose-300";
-    case "suspended":
-      return "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]";
-  }
+function Metric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="lp-mono text-[10px] uppercase tracking-[0.14em] text-[var(--lp-faint)]">
+        {label}
+      </dt>
+      <dd className="lp-display text-base font-bold text-[var(--lp-ink)]">{value}</dd>
+    </div>
+  );
 }
 
-function approvalLabel(status: ApprovalStatus): string {
-  switch (status) {
-    case "approved":
-      return "Approved";
-    case "pending_approval":
-      return "Pending";
-    case "rejected":
-      return "Rejected";
-    case "suspended":
-      return "Suspended";
-  }
+function Badge({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "accent" | "violet" | "sky" | "emerald" | "amber" | "rose" | "neutral";
+}) {
+  const tones: Record<typeof tone, string> = {
+    accent: "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
+    violet: "border-violet-400/35 bg-violet-400/10 text-violet-700 dark:text-violet-300",
+    sky: "border-sky-400/35 bg-sky-400/10 text-sky-700 dark:text-sky-300",
+    emerald: "border-emerald-400/35 bg-emerald-400/10 text-emerald-700 dark:text-emerald-300",
+    amber: "border-amber-400/35 bg-amber-400/10 text-amber-700 dark:text-amber-300",
+    rose: "border-rose-400/35 bg-rose-400/10 text-rose-700 dark:text-rose-300",
+    neutral: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+        tones[tone],
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
-function roleBadgeClass(role: Role): string {
-  switch (role) {
-    case "admin":
-      return "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]";
-    case "engineer":
-      return "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]";
-    case "customer":
-      return "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]";
-  }
+const ROLE_TONE: Record<Role, "accent" | "violet" | "sky" | "emerald" | "neutral"> = {
+  admin: "accent",
+  owner: "violet",
+  support: "sky",
+  engineer: "emerald",
+  customer: "neutral",
+};
+
+const STATUS_TONE: Record<ApprovalStatus, "emerald" | "amber" | "rose" | "neutral"> = {
+  approved: "emerald",
+  pending_approval: "amber",
+  rejected: "rose",
+  suspended: "neutral",
+};
+
+function FilterSelect<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="relative w-full sm:w-[172px]">
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        className="lp-field h-10 w-full cursor-pointer appearance-none rounded-md border pl-3 pr-9 text-sm"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)]"
+      />
+    </div>
+  );
 }
 
-function roleLabel(role: Role): string {
-  return role === "customer" ? "Customer" : role.charAt(0).toUpperCase() + role.slice(1);
-}
-
-function originLabel(origin: AccountOrigin): string {
-  switch (origin) {
-    case "admin_invite":
-      return "Staff invited";
-    case "firebase_google":
-      return "Google signup";
-    case "legacy":
-      return "Legacy";
-    case "self_signup":
-    default:
-      return "Self signup";
-  }
-}
-
-function isStaffManaged(origin: AccountOrigin): boolean {
-  return origin === "admin_invite" || origin === "legacy";
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-US", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return "—";
-  }
-}
+/* ── Page ────────────────────────────────────────────────────────────────── */
 
 const UsersPage = () => {
   const queryClient = useQueryClient();
   const { data: sessionData } = useSession();
-  const currentUserId = sessionData?.user?.id ?? null;
-  // The signed-in actor's role drives which management controls render. The
-  // backend enforces the same rules, so a hidden control always maps to a 403.
   const actorRole = (sessionData?.user?.role ?? "admin") as Role;
-  const actorCanDelete = canDeleteUsers(actorRole);
-  const actorCanGrantAdmin = assignableRolesFor(actorRole).includes("admin");
+  const actorId = sessionData?.user?.id ?? "";
 
-  const [form, setForm] = useState({
-    displayName: "",
-    email: "",
-    role: "engineer" as InviteRole,
-  });
-  const [inviteUrl, setInviteUrl] = useState("");
-  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
-  const [machinesUser, setMachinesUser] = useState<AuthUser | null>(null);
-
+  const [tab, setTab] = useState<UserTabId>("all");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [originFilter, setOriginFilter] = useState<OriginFilter>("all");
   const [page, setPage] = useState(0);
 
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [detailsUser, setDetailsUser] = useState<AuthUser | null>(null);
+  const [machinesUser, setMachinesUser] = useState<AuthUser | null>(null);
+  const [roleUser, setRoleUser] = useState<AuthUser | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmState>(null);
+
   const { data: users = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => apiRequest<AuthUser[]>("/api/admin/users"),
   });
 
-  const systemAdminEmail = useMemo(() => {
-    const admins = users.filter((u) => u.role === "admin");
-    if (admins.length === 0) return null;
-    return admins.reduce((oldest, u) =>
-      new Date(u.createdAt).getTime() < new Date(oldest.createdAt).getTime() ? u : oldest,
-    ).email;
-  }, [users]);
-
-  const adminCount = useMemo(
-    () => users.filter((u) => u.role === "admin").length,
-    [users],
+  const actor: ActorContext = useMemo(
+    () => ({ role: actorRole, id: actorId, systemAdminId: resolveSystemAdminId(users) }),
+    [actorRole, actorId, users],
   );
 
-  const filteredUsers = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return users.filter((u) => {
-      if (roleFilter !== "all" && u.role !== roleFilter) return false;
-      if (statusFilter !== "all" && u.approvalStatus !== statusFilter) return false;
-      if (originFilter !== "all") {
-        const staff = isStaffManaged(u.accountOrigin);
-        if (originFilter === "staff_managed" && !staff) return false;
-        if (originFilter === "self_signup" && staff) return false;
-      }
-      if (needle.length > 0) {
-        const haystack = `${u.displayName} ${u.email}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
-      return true;
-    });
-  }, [users, search, roleFilter, statusFilter, originFilter]);
+  const counts = useMemo(() => tabCounts(users), [users]);
+  const summary = useMemo(() => summarise(users), [users]);
 
-  const sortedUsers = useMemo(() => {
-    const order: Record<ApprovalStatus, number> = {
-      pending_approval: 0,
-      approved: 1,
-      suspended: 2,
-      rejected: 3,
-    };
-    return [...filteredUsers].sort((a, b) => {
-      const diff = (order[a.approvalStatus] ?? 9) - (order[b.approvalStatus] ?? 9);
-      if (diff !== 0) return diff;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
-  }, [filteredUsers]);
+  const rows = useMemo(
+    () =>
+      sortUsers(
+        filterUsers(users, {
+          tab,
+          search,
+          role: roleFilter,
+          status: statusFilter,
+          origin: originFilter,
+        }),
+      ),
+    [users, tab, search, roleFilter, statusFilter, originFilter],
+  );
 
-  const pageCount = Math.max(1, Math.ceil(sortedUsers.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
-  const pageItems = sortedUsers.slice(
-    currentPage * PAGE_SIZE,
-    currentPage * PAGE_SIZE + PAGE_SIZE,
-  );
+  const pageRows = rows.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const hasFilters =
+    search.trim().length > 0 ||
+    roleFilter !== "all" ||
+    statusFilter !== "all" ||
+    originFilter !== "all" ||
+    tab !== "all";
 
-  async function invalidateUserQueries() {
+  async function invalidate() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["admin-users"] }),
-      queryClient.invalidateQueries({ queryKey: ["admin", "users"] }),
       queryClient.invalidateQueries({ queryKey: ["admin", "users", "summary"] }),
     ]);
   }
 
-  const inviteMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<{ inviteUrl: string }>("/api/admin/users/invite", {
-        method: "POST",
-        body: JSON.stringify(form),
-      }),
-    onSuccess: async (payload) => {
-      setInviteUrl(payload.inviteUrl);
-      toast.success("Invitation created.");
-      await invalidateUserQueries();
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
   const approvalMutation = useMutation({
     mutationFn: ({ userId, action }: { userId: string; action: ApprovalAction }) =>
-      apiRequest<{ user: AuthUser }>(`/api/admin/users/${userId}/${action}`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      }),
-    onSuccess: invalidateUserQueries,
-    onError: (error: unknown) => {
-      const message = error instanceof ApiError ? error.message : "Unable to update user.";
-      toast.error(message);
-    },
-  });
-
-  const roleMutation = useMutation({
-    mutationFn: ({ userId, role }: { userId: string; role: Role }) =>
-      apiRequest<{ user: AuthUser }>(`/api/admin/users/${userId}/role`, {
-        method: "POST",
-        body: JSON.stringify({ role }),
-      }),
-    onSuccess: invalidateUserQueries,
-    onError: (error: unknown) => {
-      const message = error instanceof ApiError ? error.message : "Unable to change role.";
-      toast.error(message);
-    },
+      apiRequest(`/api/admin/users/${userId}/${action}`, { method: "POST", body: "{}" }),
+    onSuccess: invalidate,
+    onError: (error: unknown) =>
+      toast.error(error instanceof ApiError ? error.message : "Unable to update this account."),
   });
 
   const removeMutation = useMutation({
     mutationFn: ({ userId }: { userId: string }) =>
-      apiRequest<{ user: AuthUser | null }>(`/api/admin/users/${userId}`, {
-        method: "DELETE",
-      }),
-    // Only runs after the backend confirms the deletion (2xx). Drop the user
-    // from the cached list immediately so they disappear without a flicker,
-    // then refetch so the list reflects the permanent server-side deletion.
+      apiRequest(`/api/admin/users/${userId}`, { method: "DELETE" }),
     onSuccess: async (_data, variables) => {
       queryClient.setQueryData<AuthUser[]>(["admin-users"], (old) =>
         old ? old.filter((u) => u.id !== variables.userId) : old,
       );
-      await invalidateUserQueries();
+      await invalidate();
     },
     onError: (error: unknown) => {
       const raw = error instanceof ApiError ? error.message : "";
-      const looksTechnical = /FST_ERR|Bad Request|application\/json/i.test(raw);
-      const message = raw && !looksTechnical ? raw : "Could not remove user. Please try again.";
-      toast.error(message);
+      const technical = /FST_ERR|Bad Request|application\/json/i.test(raw);
+      toast.error(raw && !technical ? raw : "Could not remove this user. Please try again.");
     },
   });
 
-  function runApprovalConfirm(user: AuthUser, action: ApprovalAction, successLabel: string) {
-    approvalMutation.mutate(
-      { userId: user.id, action },
-      { onSuccess: () => toast.success(`${user.displayName}: ${successLabel}`) },
-    );
+  function runAction(user: AuthUser, action: UserActionId) {
+    if (action === "details") return setDetailsUser(user);
+    if (action === "machines") return setMachinesUser(user);
+    // Role changes get their own two-step dialog, never a single confirm.
+    if (action === "role") return setRoleUser(user);
+    // Everything else changes access, so it goes through a confirmation.
+    setConfirm({ user, action });
   }
 
-  function runRoleConfirm(user: AuthUser, role: Role, successLabel: string) {
-    roleMutation.mutate(
-      { userId: user.id, role },
-      { onSuccess: () => toast.success(`${user.displayName}: ${successLabel}`) },
-    );
-  }
-
-  function runRemoveConfirm(user: AuthUser) {
-    removeMutation.mutate(
-      { userId: user.id },
-      { onSuccess: () => toast.success(`${user.displayName}: removed`) },
-    );
-  }
-
-  function renderActions(user: AuthUser) {
-    const isSelf = user.id === currentUserId;
-    const isSystemAdmin = systemAdminEmail !== null && user.email === systemAdminEmail;
-    const isOnlyAdmin = user.role === "admin" && adminCount <= 1;
-    const isAdmin = user.role === "admin";
-    const staffManaged = isStaffManaged(user.accountOrigin);
-    const buttons: React.ReactNode[] = [];
-    const pending =
-      approvalMutation.isPending || roleMutation.isPending || removeMutation.isPending;
-
-    // ── Machine management (customers own machines) ──────────────────────
-    if (user.role === "customer") {
-      buttons.push(
-        <Button
-          key="machines"
-          size="sm"
-          variant="outline"
-          className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
-          onClick={() => setMachinesUser(user)}
-        >
-          Machines
-        </Button>,
+  function confirmAction() {
+    if (!confirm) return;
+    const { user, action } = confirm;
+    if (action === "remove") {
+      removeMutation.mutate(
+        { userId: user.id },
+        { onSuccess: () => toast.success(`${user.displayName} removed.`) },
       );
-    }
-
-    // ── Approval-state actions (only for non-admins) ─────────────────────
-    if (!isAdmin) {
-      if (user.approvalStatus === "pending_approval") {
-        buttons.push(
-          <Button
-            key="approve"
-            size="sm"
-            className="bg-emerald-600 text-white hover:bg-emerald-700"
-            disabled={pending}
-            onClick={() => runApprovalConfirm(user, "approve", "approved")}
-          >
-            Approve
-          </Button>,
-        );
-        buttons.push(
-          <Button
-            key="reject"
-            size="sm"
-            variant="outline"
-            className="border-rose-400/40 text-rose-600 hover:bg-rose-400/10 dark:text-rose-300"
-            disabled={pending}
-            onClick={() =>
-              setConfirmState({
-                kind: "approval",
-                user,
-                action: "reject",
-                title: `Reject ${user.displayName}?`,
-                description:
-                  "They won't be able to create service requests. You can reactivate them later.",
-                confirmLabel: "Reject user",
-                destructive: true,
-              })
-            }
-          >
-            Reject
-          </Button>,
-        );
-      }
-
-      if (user.approvalStatus === "approved" && !isSelf) {
-        buttons.push(
-          <Button
-            key="suspend"
-            size="sm"
-            variant="outline"
-            className="border-rose-400/40 text-rose-600 hover:bg-rose-400/10 dark:text-rose-300"
-            disabled={pending}
-            onClick={() =>
-              setConfirmState({
-                kind: "approval",
-                user,
-                action: "suspend",
-                title: `Suspend ${user.displayName}?`,
-                description:
-                  "They will not be able to sign in or create service requests until reactivated.",
-                confirmLabel: "Suspend user",
-                destructive: true,
-              })
-            }
-          >
-            Suspend
-          </Button>,
-        );
-      }
-
-      if (user.approvalStatus === "suspended" || user.approvalStatus === "rejected") {
-        buttons.push(
-          <Button
-            key="reactivate"
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => runApprovalConfirm(user, "reactivate", "reactivated")}
-          >
-            Reactivate
-          </Button>,
-        );
-      }
-    }
-
-    // ── Role-change actions (staff-managed only) ─────────────────────────
-    // Owner may change roles but never on an admin account, and never grant
-    // admin — canManageTargetUser / actorCanGrantAdmin enforce that here, and
-    // the gateway re-checks both server-side.
-    const canChangeRole =
-      !isSelf && !isSystemAdmin && staffManaged && canManageTargetUser(actorRole, user.role);
-
-    const makeAdminButton = (key: string) =>
-      actorCanGrantAdmin ? (
-        <Button
-          key={key}
-          size="sm"
-          variant="outline"
-          className="border-[var(--lp-accent)]/40 text-[var(--lp-accent)] hover:bg-[var(--lp-accent)]/10"
-          disabled={pending}
-          onClick={() =>
-            setConfirmState({
-              kind: "role",
-              user,
-              role: "admin",
-              title: `Promote ${user.displayName} to admin?`,
-              description:
-                "Admins can approve users, change roles, and access the full admin dashboard.",
-              confirmLabel: "Promote to admin",
-            })
-          }
-        >
-          Make admin
-        </Button>
-      ) : null;
-
-    const makeSupportButton = (
-      <Button
-        key="make-support"
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() => runRoleConfirm(user, "support", "changed to support")}
-      >
-        Make support
-      </Button>
-    );
-
-    if (canChangeRole) {
-      if (user.role === "customer") {
-        buttons.push(
-          <Button
-            key="promote-engineer"
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => runRoleConfirm(user, "engineer", "promoted to engineer")}
-          >
-            Make engineer
-          </Button>,
-        );
-        buttons.push(makeSupportButton);
-        buttons.push(makeAdminButton("promote-admin"));
-      } else if (user.role === "engineer") {
-        buttons.push(
-          <Button
-            key="demote-customer"
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => runRoleConfirm(user, "customer", "changed to customer")}
-          >
-            Make customer
-          </Button>,
-        );
-        buttons.push(makeSupportButton);
-        buttons.push(makeAdminButton("promote-admin"));
-      } else if (user.role === "support") {
-        buttons.push(
-          <Button
-            key="support-to-engineer"
-            size="sm"
-            variant="outline"
-            disabled={pending}
-            onClick={() => runRoleConfirm(user, "engineer", "changed to engineer")}
-          >
-            Make engineer
-          </Button>,
-        );
-        buttons.push(makeAdminButton("promote-admin"));
-      } else if (user.role === "admin" && !isOnlyAdmin) {
-        buttons.push(
-          <Button
-            key="remove-admin"
-            size="sm"
-            variant="outline"
-            className="border-amber-400/40 text-amber-700 hover:bg-amber-400/10 dark:text-amber-300"
-            disabled={pending}
-            onClick={() =>
-              setConfirmState({
-                kind: "role",
-                user,
-                role: "engineer",
-                title: `Remove admin privileges from ${user.displayName}?`,
-                description:
-                  "They'll be demoted to engineer and lose access to admin tools. You can promote them again later.",
-                confirmLabel: "Remove admin",
-                destructive: true,
-              })
-            }
-          >
-            Remove admin
-          </Button>,
-        );
-      }
-    }
-
-    // ── Remove user (permanent hard delete) ──────────────────────────────
-    // Admin-only. Owner never sees this control and the gateway returns 403
-    // ("Only admins can permanently delete user data.") if one calls the API
-    // directly. Never offered for self / system admin / any admin account.
-    if (actorCanDelete && !isSelf && !isSystemAdmin && !isAdmin) {
-      buttons.push(
-        <Button
-          key="remove"
-          size="sm"
-          variant="outline"
-          className="border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-400/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
-          disabled={pending}
-          onClick={() =>
-            setConfirmState({
-              kind: "remove",
-              user,
-              title: `Remove ${user.displayName} permanently?`,
-              description:
-                "This permanently deletes their portal account, active sessions, and all related service request data. This cannot be undone.",
-              confirmLabel: "Remove user",
-            })
-          }
-        >
-          Remove user
-        </Button>,
-      );
-    }
-
-    if (buttons.length === 0) {
-      return (
-        <span className="text-xs italic text-[var(--lp-faint)]">
-          No actions available
-        </span>
-      );
-    }
-    return <div className="flex flex-wrap gap-2 sm:justify-end">{buttons}</div>;
-  }
-
-  function onConfirm() {
-    if (!confirmState) return;
-    if (confirmState.kind === "approval") {
-      const labelMap: Record<ApprovalAction, string> = {
+    } else {
+      const past: Record<ApprovalAction, string> = {
         approve: "approved",
         reject: "rejected",
         suspend: "suspended",
         reactivate: "reactivated",
       };
-      runApprovalConfirm(confirmState.user, confirmState.action, labelMap[confirmState.action]);
-    } else if (confirmState.kind === "role") {
-      const labelMap: Record<Role, string> = {
-        admin: "promoted to admin",
-        engineer: "set as engineer",
-        customer: "set as customer",
-      };
-      runRoleConfirm(confirmState.user, confirmState.role, labelMap[confirmState.role]);
-    } else {
-      runRemoveConfirm(confirmState.user);
+      approvalMutation.mutate(
+        { userId: user.id, action },
+        { onSuccess: () => toast.success(`${user.displayName} ${past[action]}.`) },
+      );
     }
-    setConfirmState(null);
+    setConfirm(null);
   }
 
   function resetFilters() {
+    setTab("all");
     setSearch("");
     setRoleFilter("all");
     setStatusFilter("all");
@@ -612,307 +322,348 @@ const UsersPage = () => {
     setPage(0);
   }
 
+  const confirmCopy: Record<string, { title: string; description: string; label: string }> = {
+    approve: {
+      title: `Approve ${confirm?.user.displayName ?? ""}?`,
+      description: "They will be able to sign in and create service requests.",
+      label: "Approve",
+    },
+    reject: {
+      title: `Reject ${confirm?.user.displayName ?? ""}?`,
+      description: "They will not be able to create service requests. You can reactivate them later.",
+      label: "Reject",
+    },
+    suspend: {
+      title: `Suspend ${confirm?.user.displayName ?? ""}?`,
+      description: "They lose access until reactivated. Their data is kept.",
+      label: "Suspend",
+    },
+    reactivate: {
+      title: `Reactivate ${confirm?.user.displayName ?? ""}?`,
+      description: "Access is restored immediately.",
+      label: "Reactivate",
+    },
+    remove: {
+      title: `Remove ${confirm?.user.displayName ?? ""} permanently?`,
+      description:
+        "This permanently deletes the account, active sessions, and all related service request data. This cannot be undone.",
+      label: "Remove user",
+    },
+  };
+
+  const destructive = confirm?.action === "remove" || confirm?.action === "reject" || confirm?.action === "suspend";
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
-      {/* ── Invite team member ───────────────────────────────────────── */}
-      <div className="lp-card rounded-3xl border p-6">
-        <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-          Invite team member
-        </p>
-        <h2 className="mt-2 lp-display text-2xl font-bold text-[var(--lp-ink)]">
-          Manage staff access
-        </h2>
-        <p className="mt-2 text-sm text-[var(--lp-ink-soft)]">
-          Users invited here are staff-managed accounts. Staff-managed accounts can later be
-          assigned Engineer or Admin privileges.
-        </p>
-
-        <form
-          className="mt-6 space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            inviteMutation.mutate();
-          }}
-        >
-          <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">Display name</label>
-            <Input
-              required
-              value={form.displayName}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, displayName: event.target.value }))
-              }
-              className="bg-background"
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">Email</label>
-            <Input
-              required
-              type="email"
-              value={form.email}
-              onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
-              className="bg-background"
-            />
-          </div>
-          <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">Role</label>
-            <Select
-              value={form.role}
-              onValueChange={(value) =>
-                setForm((current) => ({ ...current, role: value as InviteRole }))
-              }
-            >
-              <SelectTrigger className="bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {assignableRolesFor(actorRole).map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {INVITE_ROLE_LABEL[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Customers create service requests. Engineers triage the queue. Support assists
-              customers and assigns requests. Owners run operations. Admins manage the platform.
-            </p>
-          </div>
-          <Button
-            type="submit"
-            className="h-11 w-full rounded-md bg-[var(--lp-accent)] font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]"
-            disabled={inviteMutation.isPending}
-          >
-            {inviteMutation.isPending ? "Inviting..." : "Create invite"}
+    // Full available width — no narrow max-width, so the table uses whatever
+    // space the sidebar leaves in either state.
+    <div className={PAGE_CONTAINER}>
+      {/* Header */}
+      <PageHeader
+        icon={Users2}
+        title="Users & Access"
+        description="Manage customer accounts, staff invitations, approvals, and access status."
+        action={
+          <Button type="button" variant="cta" onClick={() => setInviteOpen(true)}>
+            <UserPlus className="mr-1.5 h-4 w-4" />
+            Invite staff
           </Button>
-        </form>
+        }
+      />
 
-        {inviteUrl && (
-          <div className="mt-6 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-4">
-            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--lp-faint)]">
-              Invite link
-            </p>
-            <p className="mt-2 break-all text-sm text-[var(--lp-ink)]">{inviteUrl}</p>
-          </div>
-        )}
-      </div>
+      {/* Compact metrics — one line on desktop, wraps below */}
+      <dl className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 px-4 py-3">
+        <Metric label="Total users" value={summary.total} />
+        <Metric label="Customers" value={summary.customers} />
+        <Metric label="Active staff" value={summary.activeStaff} />
+        <Metric label="Pending approval" value={summary.pending} />
+        <Metric label="Suspended" value={summary.suspended} />
+      </dl>
 
-      {/* ── Users list ───────────────────────────────────────────────── */}
-      <div className="lp-card rounded-3xl border p-6">
-        <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-              Users
-            </p>
-            <h2 className="mt-2 lp-display text-2xl font-bold text-[var(--lp-ink)]">
-              Platform accounts
-            </h2>
-            <p className="mt-2 text-sm text-[var(--lp-ink-soft)]">
-              {users.length} total · {adminCount} admin{adminCount === 1 ? "" : "s"} · only
-              staff-invited accounts can be promoted.
-            </p>
-          </div>
+      {/* One account-management surface: tabs → toolbar → table → pagination */}
+      <section className="overflow-hidden rounded-xl border border-[var(--lp-line)] lp-card">
+        <div
+          role="tablist"
+          aria-label="Filter accounts"
+          className="flex flex-wrap gap-1 border-b border-[var(--lp-line)] px-3 pt-3"
+        >
+          {USER_TABS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.id}
+              onClick={() => {
+                setTab(item.id);
+                setPage(0);
+              }}
+              className={cn(
+                "-mb-px rounded-t-md border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45",
+                tab === item.id
+                  ? "border-[var(--lp-accent)] text-[var(--lp-ink)]"
+                  : "border-transparent text-[var(--lp-faint)] hover:text-[var(--lp-ink)]",
+              )}
+            >
+              {item.label}
+              <span className="ml-1.5 tabular-nums text-[var(--lp-faint)]">{counts[item.id]}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Filters */}
-        <div className="mt-5 grid gap-2 md:grid-cols-[1.5fr_repeat(3,_1fr)]">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex flex-col gap-2 border-b border-[var(--lp-line)] p-3 lg:flex-row lg:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)]"
+            />
             <Input
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
                 setPage(0);
               }}
-              placeholder="Search name or email"
-              className="bg-background pl-9"
+              placeholder="Search by name or email…"
+              aria-label="Search users"
+              className="lp-field pl-9"
             />
           </div>
-          <Select
-            value={roleFilter}
-            onValueChange={(value) => {
-              setRoleFilter(value as RoleFilter);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="bg-background">
-              <SelectValue placeholder="Role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All roles</SelectItem>
-              <SelectItem value="customer">Customer</SelectItem>
-              <SelectItem value="engineer">Engineer</SelectItem>
-              <SelectItem value="admin">Admin</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value as StatusFilter);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="bg-background">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="pending_approval">Pending</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="suspended">Suspended</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={originFilter}
-            onValueChange={(value) => {
-              setOriginFilter(value as OriginFilter);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="bg-background">
-              <SelectValue placeholder="Origin" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All origins</SelectItem>
-              <SelectItem value="self_signup">Self signup</SelectItem>
-              <SelectItem value="staff_managed">Staff invited</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+            <FilterSelect
+              label="Filter by role"
+              value={roleFilter}
+              options={ROLE_OPTIONS}
+              onChange={(value) => {
+                setRoleFilter(value);
+                setPage(0);
+              }}
+            />
+            <FilterSelect
+              label="Filter by status"
+              value={statusFilter}
+              options={STATUS_OPTIONS}
+              onChange={(value) => {
+                setStatusFilter(value);
+                setPage(0);
+              }}
+            />
+            <FilterSelect
+              label="Filter by account type"
+              value={originFilter}
+              options={ORIGIN_OPTIONS}
+              onChange={(value) => {
+                setOriginFilter(value);
+                setPage(0);
+              }}
+            />
+          </div>
         </div>
 
-        {/* List / states */}
-        <div className="mt-5 space-y-2">
-          {isLoading && (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-[88px] animate-pulse rounded-2xl bg-[var(--lp-panel-2)]"
-                />
-              ))}
-            </div>
-          )}
+        {/* Desktop table */}
+        <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[840px] table-fixed text-sm">
+            <colgroup>
+              <col className="w-[26%]" />
+              <col className="w-[11%]" />
+              <col className="w-[15%]" />
+              <col className="w-[13%]" />
+              <col className="w-[12%]" />
+              <col className="w-[15%]" />
+              <col className="w-[8%]" />
+            </colgroup>
+            <thead>
+              <tr className="border-b border-[var(--lp-line)]">
+                {["User", "Role", "Account type", "Status", "Profile", "Joined", ""].map(
+                  (heading, index) => (
+                    <th
+                      key={heading || index}
+                      scope="col"
+                      className={cn(
+                        "px-3 py-2.5 text-left align-bottom lp-mono text-[10px] font-medium uppercase leading-[1.3] tracking-[0.14em] text-[var(--lp-faint)]",
+                        index === 6 && "text-right",
+                      )}
+                    >
+                      {heading || <span className="sr-only">Actions</span>}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading &&
+                Array.from({ length: 5 }).map((_, index) => (
+                  <tr key={index} className="border-b border-[var(--lp-line)] last:border-0">
+                    <td colSpan={7} className="px-3 py-3">
+                      <div
+                        aria-hidden="true"
+                        className="h-6 w-full animate-pulse rounded bg-[var(--lp-panel-2)]"
+                      />
+                    </td>
+                  </tr>
+                ))}
 
-          {isError && !isLoading && (
-            <div className="rounded-2xl border border-rose-400/35 bg-rose-400/10 p-4 text-sm text-rose-700 dark:text-rose-200">
-              <p className="font-medium">Could not load users.</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => refetch()}
-              >
-                Retry
-              </Button>
-            </div>
-          )}
+              {isError && !isLoading && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-10 text-center text-sm">
+                    <p className="font-medium text-rose-600 dark:text-rose-300">
+                      Could not load users.
+                    </p>
+                    <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+                      Retry
+                    </Button>
+                  </td>
+                </tr>
+              )}
 
-          {!isLoading && !isError && pageItems.length === 0 && (
-            <div className="rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-8 text-center">
-              <p className="font-medium text-[var(--lp-ink)]">No users match your filters.</p>
-              <p className="mt-1 text-sm text-[var(--lp-ink-soft)]">
-                Try clearing the search or filters to see everyone again.
-              </p>
-              <Button variant="outline" size="sm" className="mt-4" onClick={resetFilters}>
-                Reset filters
-              </Button>
-            </div>
-          )}
-
-          {!isLoading && !isError &&
-            pageItems.map((user) => {
-              const isSelf = user.id === currentUserId;
-              const isSystemAdmin =
-                systemAdminEmail !== null && user.email === systemAdminEmail;
-              return (
-                <div
-                  key={user.id}
-                  className={cn(
-                    "rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/70 p-4",
-                    user.role === "admin" &&
-                      "border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/[0.06]",
-                  )}
-                >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-semibold text-[var(--lp-ink)]">
-                          {user.displayName}
+              {!isLoading && !isError && pageRows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-12 text-center text-sm">
+                    {hasFilters ? (
+                      <>
+                        <p className="font-medium text-[var(--lp-ink)]">
+                          No accounts match these filters.
                         </p>
-                        {isSelf && (
-                          <span className="rounded-full border border-[var(--lp-accent)]/35 bg-[var(--lp-accent)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--lp-accent)]">
-                            You
-                          </span>
-                        )}
-                        {isSystemAdmin && (
-                          <span className="rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--lp-ink-soft)]">
-                            System admin
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 truncate text-sm text-[var(--lp-ink-soft)]">
-                        {user.email}
-                      </p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <span
-                          className={cn(
-                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
-                            roleBadgeClass(user.role),
-                          )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-3"
+                          onClick={resetFilters}
                         >
-                          {roleLabel(user.role)}
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
-                            approvalBadgeClass(user.approvalStatus),
-                          )}
-                        >
-                          {approvalLabel(user.approvalStatus)}
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
-                            isStaffManaged(user.accountOrigin)
-                              ? "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]"
-                              : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-                          )}
-                        >
-                          {originLabel(user.accountOrigin)}
-                        </span>
-                        {user.role === "customer" && (
+                          Clear filters
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="font-medium text-[var(--lp-ink)]">No accounts yet.</p>
+                    )}
+                  </td>
+                </tr>
+              )}
+
+              {!isLoading &&
+                !isError &&
+                pageRows.map((user) => {
+                  const protectedAccount = isProtectedAccount(user, actor);
+                  const actions = actionsFor(user, actor);
+                  const isSelf = user.id === actorId;
+                  return (
+                    <tr
+                      key={user.id}
+                      className="border-b border-[var(--lp-line)] transition-colors last:border-0 hover:bg-[var(--lp-panel-2)]/50"
+                    >
+                      <td className="px-3 py-2.5">
+                        <div className="flex min-w-0 items-center gap-2.5">
                           <span
-                            className={cn(
-                              "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
-                              user.profileCompleted
-                                ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300"
-                                : "border-amber-400/35 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-                            )}
+                            aria-hidden="true"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[11px] font-semibold text-[var(--lp-ink-soft)]"
                           >
-                            {user.profileCompleted ? "Profile ✓" : "Profile missing"}
+                            {initialsFor(user.displayName)}
                           </span>
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-medium text-[var(--lp-ink)]">
+                                {user.displayName}
+                              </span>
+                              {isSelf && <Badge tone="accent">You</Badge>}
+                            </div>
+                            <p className="truncate text-xs text-[var(--lp-faint)]">{user.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Badge tone={ROLE_TONE[user.role]}>{ROLE_LABELS[user.role]}</Badge>
+                      </td>
+                      <td className="truncate px-3 py-2.5 text-[13px] text-[var(--lp-ink-soft)]">
+                        {originLabel(user, protectedAccount)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {protectedAccount ? (
+                          <span className="inline-flex items-center gap-1.5 text-[13px] text-[var(--lp-ink-soft)]">
+                            <Lock aria-hidden="true" className="h-3.5 w-3.5" />
+                            Protected account
+                          </span>
+                        ) : (
+                          <Badge tone={STATUS_TONE[user.approvalStatus]}>
+                            {STATUS_LABELS[user.approvalStatus]}
+                          </Badge>
                         )}
-                        <span className="text-[11px] text-[var(--lp-faint)]">
-                          Joined {formatDate(user.createdAt)}
-                        </span>
-                      </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-[13px] text-[var(--lp-ink-soft)]">
+                        {profileLabel(user)}
+                      </td>
+                      <td className="px-3 py-2.5 text-[13px] text-[var(--lp-faint)]">
+                        {formatJoined(user.createdAt)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {actions.length > 0 && (
+                          <RowActions
+                            user={user}
+                            actions={actions}
+                            onSelect={(action) => runAction(user, action)}
+                          />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile list — compact stacked rows, not oversized cards */}
+        <ul className="divide-y divide-[var(--lp-line)] md:hidden">
+          {isLoading &&
+            Array.from({ length: 4 }).map((_, index) => (
+              <li key={index} className="p-3">
+                <div
+                  aria-hidden="true"
+                  className="h-12 w-full animate-pulse rounded bg-[var(--lp-panel-2)]"
+                />
+              </li>
+            ))}
+
+          {!isLoading && !isError && pageRows.length === 0 && (
+            <li className="p-8 text-center text-sm text-[var(--lp-faint)]">
+              {hasFilters ? "No accounts match these filters." : "No accounts yet."}
+            </li>
+          )}
+
+          {!isLoading &&
+            !isError &&
+            pageRows.map((user) => {
+              const protectedAccount = isProtectedAccount(user, actor);
+              const actions = actionsFor(user, actor);
+              return (
+                <li key={user.id} className="flex items-start justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-[var(--lp-ink)]">{user.displayName}</p>
+                    <p className="truncate text-xs text-[var(--lp-faint)]">{user.email}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <Badge tone={ROLE_TONE[user.role]}>{ROLE_LABELS[user.role]}</Badge>
+                      {protectedAccount ? (
+                        <Badge tone="neutral">Protected</Badge>
+                      ) : (
+                        <Badge tone={STATUS_TONE[user.approvalStatus]}>
+                          {STATUS_LABELS[user.approvalStatus]}
+                        </Badge>
+                      )}
                     </div>
-                    <div className="shrink-0">{renderActions(user)}</div>
                   </div>
-                </div>
+                  {actions.length > 0 && (
+                    <RowActions
+                      user={user}
+                      actions={actions}
+                      onSelect={(action) => runAction(user, action)}
+                    />
+                  )}
+                </li>
               );
             })}
-        </div>
+        </ul>
 
-        {/* Pagination */}
-        {!isLoading && !isError && sortedUsers.length > PAGE_SIZE && (
-          <div className="mt-5 flex items-center justify-between text-sm">
+        {!isLoading && !isError && rows.length > PAGE_SIZE && (
+          <div className="flex flex-col items-center justify-between gap-2 border-t border-[var(--lp-line)] p-3 text-sm sm:flex-row">
             <p className="text-[var(--lp-ink-soft)]">
               Showing {currentPage * PAGE_SIZE + 1}–
-              {Math.min((currentPage + 1) * PAGE_SIZE, sortedUsers.length)} of{" "}
-              {sortedUsers.length}
+              {Math.min((currentPage + 1) * PAGE_SIZE, rows.length)} of {rows.length}
             </p>
             <div className="flex items-center gap-2">
               <Button
@@ -937,39 +688,35 @@ const UsersPage = () => {
             </div>
           </div>
         )}
-      </div>
+      </section>
 
-      {/* ── Confirmation dialog ─────────────────────────────────────── */}
-      <AlertDialog
-        open={confirmState !== null}
+      <InviteStaffDialog open={inviteOpen} onOpenChange={setInviteOpen} onInvited={invalidate} />
+
+      <UserDetailsDrawer
+        user={detailsUser}
+        open={detailsUser !== null}
         onOpenChange={(open) => {
-          if (!open) setConfirmState(null);
+          if (!open) setDetailsUser(null);
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirmState?.title}</AlertDialogTitle>
-            <AlertDialogDescription>{confirmState?.description}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={onConfirm}
-              className={cn(
-                confirmState && "destructive" in confirmState && confirmState.destructive
-                  ? "bg-rose-600 text-white hover:bg-rose-700"
-                  : confirmState?.kind === "remove"
-                    ? "bg-rose-600 text-white hover:bg-rose-700"
-                    : "bg-[var(--lp-accent)] text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]",
-              )}
-            >
-              {confirmState?.confirmLabel ?? "Confirm"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        canManageRole={detailsUser ? canManageRoleFor(detailsUser, actor) : false}
+        onManageRole={() => {
+          // Reuse the same dialog rather than duplicating the workflow.
+          const target = detailsUser;
+          setDetailsUser(null);
+          setRoleUser(target);
+        }}
+      />
 
-      {/* ── Customer machines & profile ─────────────────────────────── */}
+      <ManageRoleDialog
+        user={roleUser}
+        actor={actor}
+        open={roleUser !== null}
+        onOpenChange={(open) => {
+          if (!open) setRoleUser(null);
+        }}
+        onChanged={invalidate}
+      />
+
       <CustomerMachinesDialog
         user={machinesUser}
         open={machinesUser !== null}
@@ -977,8 +724,106 @@ const UsersPage = () => {
           if (!open) setMachinesUser(null);
         }}
       />
+
+      <AlertDialog
+        open={confirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirm ? confirmCopy[confirm.action].title : ""}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm ? confirmCopy[confirm.action].description : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmAction}
+              className={cn(
+                destructive
+                  ? "bg-rose-600 text-white hover:bg-rose-700"
+                  : "bg-[var(--lp-accent)] text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]",
+              )}
+            >
+              {confirm ? confirmCopy[confirm.action].label : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
+
+/** One overflow menu per row — never a wall of inline buttons. */
+function RowActions({
+  user,
+  actions,
+  onSelect,
+}: {
+  user: AuthUser;
+  actions: UserActionId[];
+  onSelect: (action: UserActionId) => void;
+}) {
+  // Agreed order: details → machines → manage role │ suspend/reactivate → remove
+  const SAFE_ORDER: UserActionId[] = ["details", "machines", "role", "approve", "reactivate"];
+  const RISKY_ORDER: UserActionId[] = ["suspend", "reject", "remove"];
+  const safe = SAFE_ORDER.filter((action) => actions.includes(action));
+  const risky = RISKY_ORDER.filter((action) => actions.includes(action));
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Actions for ${user.displayName}`}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--lp-line)] text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      {/* Hairline border, matte panel, restrained depth — the same language as
+          the table cards. The shadcn defaults rendered loose with a blue focus
+          wash that fought the copper accent. */}
+      <DropdownMenuContent
+        align="end"
+        sideOffset={6}
+        collisionPadding={12}
+        className="w-[184px] rounded-lg border-[var(--lp-line-strong)] bg-[var(--lp-panel)] p-1 text-[var(--lp-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_28px_-14px_rgba(0,0,0,0.28)]"
+      >
+        {safe.map((action) => (
+          <DropdownMenuItem
+            key={action}
+            onSelect={() => onSelect(action)}
+            className="cursor-pointer rounded-md px-2.5 py-[7px] text-[13px] font-medium leading-5 text-[var(--lp-ink-soft)] transition-colors focus:bg-[var(--lp-panel-2)] focus:text-[var(--lp-ink)]"
+          >
+            {ACTION_LABELS[action]}
+          </DropdownMenuItem>
+        ))}
+        {safe.length > 0 && risky.length > 0 && (
+          <DropdownMenuSeparator className="-mx-1 my-1 h-px bg-[var(--lp-line)]" />
+        )}
+        {risky.map((action) => (
+          <DropdownMenuItem
+            key={action}
+            onSelect={() => onSelect(action)}
+            className={cn(
+              "cursor-pointer rounded-md px-2.5 py-[7px] text-[13px] font-medium leading-5 transition-colors",
+              action === "remove"
+                ? "text-rose-600 focus:bg-rose-500/[0.08] focus:text-rose-600 dark:text-rose-300 dark:focus:text-rose-200"
+                : "text-amber-700 focus:bg-amber-500/[0.08] focus:text-amber-700 dark:text-amber-300 dark:focus:text-amber-200",
+            )}
+          >
+            {ACTION_LABELS[action]}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export default UsersPage;
