@@ -51,9 +51,20 @@ export function Td({
   return <td className={cn("px-3 py-2.5 align-middle", className)}>{children}</td>;
 }
 
-export function Tr({ children }: { children: React.ReactNode }) {
+export function Tr({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <tr className="border-b border-[var(--lp-line)] transition-colors last:border-0 hover:bg-[var(--lp-panel-2)]/50">
+    <tr
+      className={cn(
+        "border-b border-[var(--lp-line)] transition-colors last:border-0 hover:bg-[var(--lp-panel-2)]/50",
+        className,
+      )}
+    >
       {children}
     </tr>
   );

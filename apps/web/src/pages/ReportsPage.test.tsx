@@ -278,3 +278,54 @@ describe("Issue Reports — navigation", () => {
     );
   });
 });
+
+describe("Issue Reports — pagination", () => {
+  it("shows five reports per page with icon-only controls and a stable final page", async () => {
+    const firstPage = Array.from({ length: 5 }, (_, index) =>
+      row({
+        id: `r-${index + 1}`,
+        reportNumber: `RPT-2026-00012${index + 4}`,
+        title: `Report ${index + 1}`,
+      }),
+    );
+    const finalReport = row({
+      id: "r-6",
+      reportNumber: "RPT-2026-000129",
+      title: "Final report",
+    });
+
+    apiRequest.mockImplementation((url: string) => {
+      const value = String(url);
+      if (value.startsWith("/api/reports")) {
+        return Promise.resolve({
+          ...PAYLOAD,
+          reports: value.includes("offset=5") ? [finalReport] : firstPage,
+          total: 6,
+          limit: 5,
+          offset: value.includes("offset=5") ? 5 : 0,
+        });
+      }
+      if (value === "/api/engineers") return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    const { container } = renderPage();
+    await screen.findByText("Report 1");
+
+    const previous = screen.getByRole("button", { name: "Previous reports page" });
+    const next = screen.getByRole("button", { name: "Next reports page" });
+    expect(previous).toHaveTextContent("");
+    expect(next).toHaveTextContent("");
+    expect(previous).toBeDisabled();
+    expect(apiRequest.mock.calls.some(([url]) => String(url).includes("limit=5"))).toBe(true);
+
+    fireEvent.click(next);
+    await screen.findByText("Final report");
+
+    expect(screen.queryByText("Report 1")).toBeNull();
+    expect(previous).toBeEnabled();
+    expect(next).toBeDisabled();
+    expect(container.querySelectorAll("table tbody tr")).toHaveLength(5);
+    expect(container.querySelectorAll('table tbody tr[aria-hidden="true"]')).toHaveLength(4);
+  });
+});

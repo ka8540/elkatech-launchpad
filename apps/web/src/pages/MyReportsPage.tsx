@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MessageSquareWarning, Plus } from "lucide-react";
 import type { MyIssueReportRow } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
-import { PAGE_CONTAINER } from "@/lib/page-layout";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +40,7 @@ export default function MyReportsPage() {
         title="My Reports"
         description="Problems you have reported, and what our team has done about them."
         action={
-          <Button asChild variant="cta" size="sm">
+          <Button asChild className={PAGE_PRIMARY_ACTION}>
             <Link to="/app/reports/new">
               <Plus className="mr-1.5 h-4 w-4" />
               Report a problem

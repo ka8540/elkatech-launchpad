@@ -21,7 +21,7 @@ import {
 import { toast } from "sonner";
 import type { CatalogProduct, CustomerMachine } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
-import { PAGE_CONTAINER } from "@/lib/page-layout";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
 import { customerMachineProfileState } from "@/lib/customer-machine-navigation";
 import PageHeader from "@/components/PageHeader";
@@ -101,52 +101,47 @@ function FilterSelect({
   );
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 const pagerButtonClass =
-  "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/55 hover:text-[var(--lp-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/55 hover:text-[var(--lp-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-40";
 
-/** Compact range pager: ‹ 1–10 › — no labels, prev disabled on first page,
- *  next disabled on last page. */
+/** Icon-only pager shared with the other portal data tables. */
 function Pagination({
   page,
   totalPages,
-  rangeStart,
-  rangeEnd,
   onPrev,
   onNext,
 }: {
   page: number;
   totalPages: number;
-  rangeStart: number;
-  rangeEnd: number;
   onPrev: () => void;
   onNext: () => void;
 }) {
   return (
-    <div className="flex items-center justify-center gap-2 sm:justify-end">
+    <nav
+      aria-label="Customer machines pagination"
+      className="flex items-center justify-center gap-2 sm:justify-end"
+    >
       <button
         type="button"
         onClick={onPrev}
         disabled={page <= 1}
-        aria-label="Previous page"
+        aria-label="Previous customer machines page"
         className={pagerButtonClass}
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft aria-hidden="true" className="h-4 w-4" />
       </button>
-      <span className="lp-mono min-w-[58px] text-center text-xs font-medium tabular-nums text-[var(--lp-ink-soft)]">
-        {rangeStart}–{rangeEnd}
-      </span>
       <button
         type="button"
         onClick={onNext}
         disabled={page >= totalPages}
-        aria-label="Next page"
+        aria-label="Next customer machines page"
         className={pagerButtonClass}
       >
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight aria-hidden="true" className="h-4 w-4" />
       </button>
-    </div>
+    </nav>
   );
 }
 
@@ -390,14 +385,14 @@ const MachinesPage = () => {
 
   const groups = useMemo(() => groupByCustomer(filteredMachines), [filteredMachines]);
 
-  // Pagination over the filtered + grouped rows (10 per page).
+  // Pagination over the filtered + grouped customer rows (five per page).
   const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
   const pagedGroups = useMemo(
     () => groups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
     [groups, page],
   );
-  const rangeStart = groups.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, groups.length);
+  const emptyPageSlots =
+    totalPages > 1 && pagedGroups.length > 0 ? Math.max(0, PAGE_SIZE - pagedGroups.length) : 0;
 
   // Reset to the first page whenever the filtered set changes (search/filters).
   useEffect(() => {
@@ -548,7 +543,7 @@ const MachinesPage = () => {
         action={
           <Button
             onClick={openCreate}
-            className="h-10 rounded-full bg-[var(--lp-accent)] px-5 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
+            className={PAGE_PRIMARY_ACTION}
           >
             <Plus className="h-4 w-4" />
             Add machine
@@ -643,17 +638,18 @@ const MachinesPage = () => {
                 </td>
               </tr>
             ) : (
-              pagedGroups.map((group) => {
-                const moreLabel = machineMoreLabel(group);
-                return (
-                  <tr
-                    key={group.customerId}
-                    role="link"
-                    tabIndex={0}
-                    onClick={() => openCustomer(group.customerId)}
-                    onKeyDown={(event) => onRowKeyDown(event, group.customerId)}
-                    className="cursor-pointer border-b border-[var(--lp-line)] align-top transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
-                  >
+              <>
+                {pagedGroups.map((group) => {
+                  const moreLabel = machineMoreLabel(group);
+                  return (
+                    <tr
+                      key={group.customerId}
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => openCustomer(group.customerId)}
+                      onKeyDown={(event) => onRowKeyDown(event, group.customerId)}
+                      className="h-[88px] cursor-pointer border-b border-[var(--lp-line)] align-top transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
+                    >
                     <td className="px-4 py-3">
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-2">
@@ -696,9 +692,19 @@ const MachinesPage = () => {
                     </td>
                     <td className="px-4 py-3 text-xs text-[var(--lp-faint)]">{formatDate(group.lastUpdated)}</td>
                     <td className="px-4 py-3">{renderActions(group)}</td>
+                    </tr>
+                  );
+                })}
+                {Array.from({ length: emptyPageSlots }, (_, index) => (
+                  <tr
+                    key={`customer-machine-empty-row-${index}`}
+                    aria-hidden="true"
+                    className="h-[88px] border-b border-[var(--lp-line)] last:border-0"
+                  >
+                    <td colSpan={6} />
                   </tr>
-                );
-              })
+                ))}
+              </>
             )}
           </tbody>
         </table>
@@ -781,8 +787,6 @@ const MachinesPage = () => {
         <Pagination
           page={page}
           totalPages={totalPages}
-          rangeStart={rangeStart}
-          rangeEnd={rangeEnd}
           onPrev={() => setPage((p) => Math.max(1, p - 1))}
           onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
         />

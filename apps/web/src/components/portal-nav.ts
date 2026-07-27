@@ -49,7 +49,7 @@ export function buildNavItems(role: Role | undefined): NavItem[] {
   const isStaff =
     role === "engineer" || role === "support" || role === "owner" || role === "admin";
 
-  return [
+  const items: NavItem[] = [
     // The admin's operational landing page leads their list.
     ...(role && canAccessAdminPanel(role)
       ? [{ to: "/app/admin", icon: Gauge, label: "Overview" }]
@@ -108,4 +108,23 @@ export function buildNavItems(role: Role | undefined): NavItem[] {
       ? [{ to: "/app/users", icon: Users, label: "Users" }]
       : []),
   ];
+
+  if (role !== "admin") return items;
+
+  // Admin work is deliberately ordered by priority: account management first,
+  // followed by monitoring and reporting, then the operational work queues.
+  const adminOrder = [
+    "/app/admin",
+    "/app/users",
+    "/app/activity",
+    "/app/reports",
+    "/app/machines",
+    "/app/requests",
+    "/app/queue",
+  ];
+
+  return adminOrder.flatMap((path) => {
+    const item = items.find((candidate) => candidate.to === path);
+    return item ? [item] : [];
+  });
 }

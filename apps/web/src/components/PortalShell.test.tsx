@@ -74,12 +74,12 @@ describe("PortalShell — desktop sidebar", () => {
     renderShell("admin");
     expect(linkLabels(0)).toEqual([
       "Overview",
+      "Users",
+      "Activity",
+      "Issue Reports",
+      "Customer Machines",
       "Requests",
       "Queue",
-      "Issue Reports",
-      "Activity",
-      "Customer Machines",
-      "Users",
     ]);
   });
 
@@ -103,6 +103,16 @@ describe("PortalShell — desktop sidebar", () => {
   it("leaves the customer nav untouched", () => {
     renderShell("customer");
     expect(linkLabels(0)).toEqual(["Requests", "My Reports"]);
+  });
+
+  it("keeps the divider below My Account separated from the button", () => {
+    renderShell("admin");
+    const account = screen.getAllByRole("link", { name: "My Account" })[0];
+    const accountGroup = account.parentElement;
+    const divider = accountGroup?.nextElementSibling;
+
+    expect(accountGroup).toHaveClass("pt-3", "pb-3");
+    expect(divider).toHaveClass("border-t", "border-[var(--lp-line)]");
   });
 });
 
@@ -144,12 +154,12 @@ describe("PortalShell — collapsed sidebar", () => {
     expect(overview).toHaveAttribute("title", "Overview");
     expect(links.map((l) => l.getAttribute("title"))).toEqual([
       "Overview",
+      "Users",
+      "Activity",
+      "Issue Reports",
+      "Customer Machines",
       "Requests",
       "Queue",
-      "Issue Reports",
-      "Activity",
-      "Customer Machines",
-      "Users",
     ]);
   });
 
@@ -157,12 +167,12 @@ describe("PortalShell — collapsed sidebar", () => {
     renderShell("admin");
     expect(linkLabels(1)).toEqual([
       "Overview",
+      "Users",
+      "Activity",
+      "Issue Reports",
+      "Customer Machines",
       "Requests",
       "Queue",
-      "Issue Reports",
-      "Activity",
-      "Customer Machines",
-      "Users",
     ]);
   });
 });

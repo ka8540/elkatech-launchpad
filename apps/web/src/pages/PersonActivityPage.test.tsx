@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Role } from "@elkatech/contracts";
@@ -137,16 +137,19 @@ function routeApi(role: Role, overrides: Record<string, unknown> = {}) {
   });
 }
 
-function renderPage(userId = "p-1") {
+function renderPage(userId = "p-1", previousPath?: string) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
     queryCache: new QueryCache({ onError: () => {} }),
   });
+  const detailPath = `/app/activity/${userId}`;
+  const initialEntries = previousPath ? [previousPath, detailPath] : [detailPath];
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/app/activity/${userId}`]}>
+      <MemoryRouter initialEntries={initialEntries} initialIndex={initialEntries.length - 1}>
         <Routes>
           <Route path="/app/activity/:userId" element={<PersonActivityPage />} />
+          <Route path="/app/users" element={<div>users page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -175,26 +178,37 @@ describe("Person page — identity header", () => {
     }
   });
 
-  it("renders breadcrumbs as Activity / Role / Person", async () => {
+  it("uses the standalone Customer Machine Profile-style Back control", async () => {
     routeApi("engineer");
     renderPage();
     await screen.findByRole("heading", { name: "Love Ahir" });
-    const crumbs = screen.getByLabelText("Breadcrumb");
-    expect(within(crumbs).getByRole("link", { name: "Activity" })).toHaveAttribute(
-      "href",
-      "/app/activity",
-    );
-    expect(within(crumbs).getByText("Engineer")).toBeInTheDocument();
-    expect(within(crumbs).getByText("Love Ahir")).toBeInTheDocument();
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back).toHaveClass("h-9", "rounded-full", "px-4", "text-sm");
+    expect(back.nextElementSibling?.tagName).toBe("HEADER");
+    expect(screen.queryByLabelText("Breadcrumb")).toBeNull();
   });
 
-  it("links back to the directory", async () => {
+  it("returns to the page the user came from", async () => {
     routeApi("support");
+    renderPage("p-1", "/app/users");
+    const back = await screen.findByRole("button", { name: "Back" });
+    expect(screen.queryByText("Back to Activity")).toBeNull();
+    fireEvent.click(back);
+    expect(await screen.findByText("users page")).toBeInTheDocument();
+  });
+
+  it("omits approval status for the protected Admin identity", async () => {
+    routeApi("admin", {
+      person: {
+        approvalStatus: null,
+        state: "no_active_work",
+      },
+    });
     renderPage();
-    expect(await screen.findByRole("link", { name: "Back to Activity" })).toHaveAttribute(
-      "href",
-      "/app/activity",
-    );
+    await screen.findByRole("heading", { name: "Love Ahir" });
+    expect(screen.queryByText("Account")).toBeNull();
+    expect(screen.queryByText("Suspended")).toBeNull();
+    expect(screen.queryByText("Approved")).toBeNull();
   });
 });
 
@@ -278,10 +292,86 @@ describe("Person page — engineer workload", () => {
     expect(
       apiRequest.mock.calls.some(([u]) => String(u).includes("rel=engineer&bucket=active")),
     ).toBe(true);
+    expect(apiRequest.mock.calls.some(([u]) => String(u).includes("limit=5"))).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Waiting" }));
     await screen.findByRole("link", { name: "SRV-03445846-300" });
     expect(apiRequest.mock.calls.some(([u]) => String(u).includes("bucket=waiting"))).toBe(true);
+  });
+
+  it("uses icon-only five-row pagination and keeps the final page height", async () => {
+    const firstPage = Array.from({ length: 5 }, (_, index) => ({
+      ...TASK,
+      id: `req-${index + 1}`,
+      requestNumber: `SRV-FIRST-${index + 1}`,
+    }));
+    const lastTask = {
+      ...TASK,
+      id: "req-6",
+      requestNumber: "SRV-FINAL-6",
+    };
+
+    apiRequest.mockImplementation((url: string) => {
+      if (url.includes("/tasks")) {
+        return Promise.resolve(
+          url.includes("cursor=next-page")
+            ? { tasks: [lastTask], nextCursor: null }
+            : { tasks: firstPage, nextCursor: "next-page" },
+        );
+      }
+      return Promise.resolve(detail("engineer"));
+    });
+
+    const { container } = renderPage();
+    await screen.findByRole("heading", { name: "Love Ahir" });
+    await openTab("Current Tasks");
+    await screen.findByRole("link", { name: "SRV-FIRST-1" });
+
+    const previous = screen.getByRole("button", { name: "Previous tasks page" });
+    const next = screen.getByRole("button", { name: "Next tasks page" });
+    expect(previous).toHaveTextContent("");
+    expect(next).toHaveTextContent("");
+    expect(previous).toBeDisabled();
+    expect(apiRequest.mock.calls.some(([url]) => String(url).includes("limit=5"))).toBe(true);
+
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: "SRV-FINAL-6" });
+
+    expect(screen.queryByRole("link", { name: "SRV-FIRST-1" })).toBeNull();
+    expect(previous).toBeEnabled();
+    expect(next).toBeDisabled();
+    const taskRows = container.querySelectorAll("table tbody tr");
+    expect(taskRows).toHaveLength(5);
+    expect(container.querySelectorAll('table tbody tr[aria-hidden="true"]')).toHaveLength(4);
+  });
+
+  it("searches every request bucket through the paginated API", async () => {
+    routeApi("engineer");
+    renderPage();
+    await screen.findByRole("heading", { name: "Love Ahir" });
+    await openTab("Current Tasks");
+    await screen.findByRole("link", { name: "SRV-03445846-300" });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search requests" }), {
+      target: { value: "ink issue" },
+    });
+
+    await waitFor(() =>
+      expect(
+        apiRequest.mock.calls.some(([url]) =>
+          String(url).includes("bucket=active&limit=5&search=ink+issue"),
+        ),
+      ).toBe(true),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Completed" }));
+    await waitFor(() =>
+      expect(
+        apiRequest.mock.calls.some(([url]) =>
+          String(url).includes("bucket=completed&limit=5&search=ink+issue"),
+        ),
+      ).toBe(true),
+    );
   });
 });
 
@@ -311,6 +401,40 @@ describe("Person page — customer sections", () => {
       "/app/activity/e-1",
     );
     expect(apiRequest.mock.calls.some(([u]) => String(u).includes("rel=customer"))).toBe(true);
+  });
+
+  it("searches machines and paginates them five at a time with icon-only controls", async () => {
+    const machines = Array.from({ length: 6 }, (_, index) => ({
+      ...MACHINE,
+      id: `m-${index + 1}`,
+      displayLabel: index === 5 ? "Final Cutter" : `Printer ${index + 1}`,
+      productName: index === 5 ? "Precision Cutter" : `Printer Product ${index + 1}`,
+    }));
+    apiRequest.mockImplementation((url: string) => {
+      if (url.includes("/machines")) return Promise.resolve({ machines });
+      return Promise.resolve(detail("customer"));
+    });
+
+    const { container } = renderPage();
+    await screen.findByRole("heading", { name: "Love Ahir" });
+    await openTab("Machines");
+    await screen.findByText("Printer 1");
+
+    expect(screen.queryByText("Final Cutter")).toBeNull();
+    const previous = screen.getByRole("button", { name: "Previous machines page" });
+    const next = screen.getByRole("button", { name: "Next machines page" });
+    expect(previous).toHaveTextContent("");
+    expect(next).toHaveTextContent("");
+    fireEvent.click(next);
+    expect(await screen.findByText("Final Cutter")).toBeInTheDocument();
+    expect(container.querySelectorAll('table tbody tr[aria-hidden="true"]')).toHaveLength(4);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search machines" }), {
+      target: { value: "printer 2" },
+    });
+    expect(await screen.findByText("Printer 2")).toBeInTheDocument();
+    expect(screen.queryByText("Final Cutter")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Next machines page" })).toBeNull();
   });
 });
 
@@ -392,6 +516,66 @@ describe("Person page — activity history", () => {
     for (const key of ["previousEngineerId", "objectKey", "metadata", "internalSerial"]) {
       expect(html).not.toContain(key);
     }
+  });
+
+  it("searches and paginates every history-based tab five rows at a time", async () => {
+    const firstPage = Array.from({ length: 5 }, (_, index) => ({
+      ...HISTORY_EVENT,
+      id: `evt-${index + 1}`,
+      request: {
+        ...HISTORY_EVENT.request,
+        id: `req-history-${index + 1}`,
+        requestNumber: `SRV-HISTORY-${index + 1}`,
+      },
+    }));
+    const finalEvent = {
+      ...HISTORY_EVENT,
+      id: "evt-6",
+      request: {
+        ...HISTORY_EVENT.request,
+        id: "req-history-6",
+        requestNumber: "SRV-HISTORY-6",
+      },
+    };
+
+    apiRequest.mockImplementation((url: string) => {
+      if (url.includes("/history")) {
+        return Promise.resolve(
+          url.includes("cursor=history-next")
+            ? { events: [finalEvent], nextCursor: null }
+            : { events: firstPage, nextCursor: "history-next" },
+        );
+      }
+      return Promise.resolve(detail("support"));
+    });
+
+    const { container } = renderPage();
+    await screen.findByRole("heading", { name: "Love Ahir" });
+    await openTab("Assignments");
+    await screen.findByRole("link", { name: "SRV-HISTORY-1" });
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search activity history" }), {
+      target: { value: "assigned" },
+    });
+    await waitFor(() =>
+      expect(
+        apiRequest.mock.calls.some(([url]) =>
+          String(url).includes("eventTypes=request_assigned") &&
+          String(url).includes("limit=5") &&
+          String(url).includes("search=assigned"),
+        ),
+      ).toBe(true),
+    );
+
+    const previous = await screen.findByRole("button", {
+      name: "Previous activity history page",
+    });
+    const next = screen.getByRole("button", { name: "Next activity history page" });
+    expect(previous).toHaveTextContent("");
+    expect(next).toHaveTextContent("");
+    fireEvent.click(next);
+    await screen.findByRole("link", { name: "SRV-HISTORY-6" });
+    expect(container.querySelectorAll('table tbody tr[aria-hidden="true"]')).toHaveLength(4);
   });
 });
 

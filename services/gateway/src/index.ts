@@ -740,7 +740,10 @@ app.get("/api/requests/:requestId", async (request, reply) => {
   if (!session) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
+  const queryString = request.url.includes("?")
+    ? request.url.slice(request.url.indexOf("?"))
+    : "";
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}${queryString}`, {
     headers: userHeaders(session.user),
   });
 });
@@ -1554,7 +1557,11 @@ async function buildPeopleRows() {
   const people = users.map((user) => {
     const work = byPerson.get(user.id) ?? emptyWorkload();
     const recorded = recordedByPerson.get(user.id);
-    const { state, count } = derivePersonState(user, work);
+    const approvalStatus = user.role === "admin" ? null : user.approvalStatus;
+    const { state, count } = derivePersonState(
+      { role: user.role, approvalStatus },
+      work,
+    );
     const headline = headlineCounts(user.role, work);
 
     return {
@@ -1562,7 +1569,7 @@ async function buildPeopleRows() {
       displayName: user.displayName,
       email: user.email,
       role: user.role,
-      approvalStatus: user.approvalStatus,
+      approvalStatus,
       accountOrigin: user.accountOrigin,
       companyName: user.companyName,
       profileCompleted: user.profileCompleted,
@@ -1648,7 +1655,9 @@ app.get("/api/activity/people", async (request, reply) => {
         .map((v) => Date.parse(v));
       return stamps.length > 0 && Math.max(...stamps) >= recentCutoff;
     }).length,
-    inactiveAccounts: all.filter((p) => p.approvalStatus !== "approved").length,
+    inactiveAccounts: all.filter(
+      (p) => p.approvalStatus !== null && p.approvalStatus !== "approved",
+    ).length,
   };
 
   return {
@@ -1724,6 +1733,7 @@ app.get("/api/activity/people/:userId/history", async (request: any, reply: any)
       limit: z.coerce.number().int().min(1).max(ACTIVITY_PAGE_SIZE_MAX).default(ACTIVITY_PAGE_SIZE_DEFAULT),
       cursor: z.string().max(200).optional(),
       eventTypes: z.string().max(400).optional(),
+      search: z.string().trim().max(120).optional(),
     })
     .safeParse(request.query ?? {});
   if (!parsedQuery.success) {
@@ -1734,6 +1744,7 @@ app.get("/api/activity/people/:userId/history", async (request: any, reply: any)
   const params = new URLSearchParams({ limit: String(query.limit) });
   if (query.cursor) params.set("cursor", query.cursor);
   if (query.eventTypes) params.set("eventTypes", query.eventTypes);
+  if (query.search) params.set("search", query.search);
 
   const [page, directory] = await Promise.all([
     fetchJson<{ events: any[]; nextCursor: string | null }>(
@@ -1773,6 +1784,7 @@ app.get("/api/activity/people/:userId/tasks", async (request: any, reply: any) =
       bucket: activityTaskBucketSchema.default("active"),
       limit: z.coerce.number().int().min(1).max(ACTIVITY_PAGE_SIZE_MAX).default(ACTIVITY_PAGE_SIZE_DEFAULT),
       cursor: z.string().max(200).optional(),
+      search: z.string().trim().max(120).optional(),
     })
     .safeParse(request.query ?? {});
   if (!parsedQuery.success) {
@@ -1787,6 +1799,7 @@ app.get("/api/activity/people/:userId/tasks", async (request: any, reply: any) =
     staleAfterDays: String(ACTIVITY_STALE_AFTER_DAYS),
   });
   if (query.cursor) params.set("cursor", query.cursor);
+  if (query.search) params.set("search", query.search);
 
   const [page, directory] = await Promise.all([
     fetchJson<{ tasks: any[]; nextCursor: string | null }>(

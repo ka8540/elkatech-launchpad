@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Activity } from "lucide-react";
+import { PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import PageHeader from "./PageHeader";
 
 const PAGES_DIR = path.join(__dirname, "../pages");
@@ -18,6 +19,15 @@ const TITLED_PAGES = [
   "MachinesPage.tsx",
   "UsersPage.tsx",
   "AccountPage.tsx",
+];
+
+const ACTION_PAGES = [
+  "AdminDashboardPage.tsx",
+  "UsersPage.tsx",
+  "ReportsPage.tsx",
+  "MyReportsPage.tsx",
+  "MachinesPage.tsx",
+  "RequestsPage.tsx",
 ];
 
 describe("PageHeader", () => {
@@ -73,4 +83,19 @@ describe("every titled portal page uses the shared header", () => {
       });
     expect(suspects).toEqual([]);
   });
+});
+
+describe("page-header primary actions", () => {
+  it("uses the rounded pill treatment", () => {
+    expect(PAGE_PRIMARY_ACTION).toContain("rounded-full");
+    expect(PAGE_PRIMARY_ACTION).toContain("h-10");
+    expect(PAGE_PRIMARY_ACTION).toContain("px-5");
+  });
+
+  for (const file of ACTION_PAGES) {
+    it(`${file} uses the shared primary action style`, () => {
+      const source = readFileSync(path.join(PAGES_DIR, file), "utf8");
+      expect(source).toContain("PAGE_PRIMARY_ACTION");
+    });
+  }
 });

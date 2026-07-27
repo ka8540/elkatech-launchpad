@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import type { ActivityMachine, ActivityPersonDetail, Role } from "@elkatech/contracts";
 import { canAssignRequests, canManageOperational } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
@@ -23,6 +23,8 @@ import {
 } from "@/lib/activity";
 import ActivityHistoryTable from "@/components/activity/ActivityHistoryTable";
 import TaskTable from "@/components/activity/TaskTable";
+import TableSearch from "@/components/activity/TableSearch";
+import { Button } from "@/components/ui/button";
 import {
   ApprovalBadge,
   RoleBadge,
@@ -34,91 +36,167 @@ import {
   Tr,
 } from "@/components/activity/entities";
 
-function Breadcrumbs({ role, name }: { role: Role; name: string }) {
-  return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-[var(--lp-faint)]">
-      <Link
-        to="/app/activity"
-        className="rounded-sm hover:text-[var(--lp-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45"
-      >
-        Activity
-      </Link>
-      <ChevronRight className="h-3 w-3" aria-hidden="true" />
-      <span>{roleLabel(role)}</span>
-      <ChevronRight className="h-3 w-3" aria-hidden="true" />
-      <span className="text-[var(--lp-ink-soft)]">{name}</span>
-    </nav>
-  );
-}
+const MACHINE_PAGE_SIZE = 5;
 
 function MachinesTable({ userId }: { userId: string }) {
+  const [search, setSearch] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["activity-machines", userId],
     queryFn: () =>
       apiRequest<{ machines: ActivityMachine[] }>(`/api/activity/people/${userId}/machines`),
   });
-  const machines = data?.machines ?? [];
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const filteredMachines = useMemo(
+    () => {
+      const machines = data?.machines ?? [];
+      return normalizedSearch
+        ? machines.filter((machine) =>
+            [
+              machine.displayLabel,
+              machine.productName,
+              machine.unitNumber,
+              machine.siteName,
+              machine.siteLocation,
+              machine.status,
+            ].some((value) => value?.toLocaleLowerCase().includes(normalizedSearch)),
+          )
+        : machines;
+    },
+    [data?.machines, normalizedSearch],
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredMachines.length / MACHINE_PAGE_SIZE));
+  const visiblePageIndex = Math.min(pageIndex, pageCount - 1);
+  const visibleMachines = filteredMachines.slice(
+    visiblePageIndex * MACHINE_PAGE_SIZE,
+    (visiblePageIndex + 1) * MACHINE_PAGE_SIZE,
+  );
+  const showPagination = filteredMachines.length > MACHINE_PAGE_SIZE;
+  const emptySlots =
+    showPagination && visibleMachines.length > 0
+      ? Math.max(0, MACHINE_PAGE_SIZE - visibleMachines.length)
+      : 0;
 
   return (
-    <TableShell>
-      <table className="w-full min-w-[680px] table-fixed text-sm">
-        <colgroup>
-          <col className="w-[24%]" />
-          <col className="w-[26%]" />
-          <col className="w-[11%]" />
-          <col className="w-[27%]" />
-          <col className="w-[12%]" />
-        </colgroup>
-        <thead>
-          <tr className="border-b border-[var(--lp-line)]">
-            <Th>Machine</Th>
-            <Th>Product</Th>
-            <Th>Unit</Th>
-            <Th>Site</Th>
-            <Th>Status</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {isLoading && <SkeletonRows colSpan={5} rows={3} />}
-          {isError && !isLoading && (
-            <TableMessage colSpan={5} tone="error">
-              Could not load machines.
-            </TableMessage>
-          )}
-          {!isLoading && !isError && machines.length === 0 && (
-            <TableMessage colSpan={5}>No machines are linked to this account.</TableMessage>
-          )}
-          {machines.map((machine) => (
-            <Tr key={machine.id}>
-              <Td className="truncate font-medium text-[var(--lp-ink)]">{machine.displayLabel}</Td>
-              <Td className="truncate text-[var(--lp-ink-soft)]">{machine.productName}</Td>
-              <Td className="truncate text-[var(--lp-ink-soft)]">{machine.unitNumber ?? "—"}</Td>
-              <Td className="truncate text-[var(--lp-ink-soft)]">
-                {machine.siteName ? `${machine.siteName} · ` : ""}
-                {machine.siteLocation}
-              </Td>
-              <Td>
-                <span
-                  className={cn(
-                    "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                    machine.status === "active"
-                      ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-700 dark:text-emerald-300"
-                      : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
-                  )}
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <TableSearch
+          value={search}
+          onChange={(value) => {
+            setSearch(value);
+            setPageIndex(0);
+          }}
+          label="Search machines"
+          placeholder="Search machines…"
+        />
+      </div>
+
+      <TableShell>
+        <table className="w-full min-w-[680px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[24%]" />
+            <col className="w-[26%]" />
+            <col className="w-[11%]" />
+            <col className="w-[27%]" />
+            <col className="w-[12%]" />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-[var(--lp-line)]">
+              <Th>Machine</Th>
+              <Th>Product</Th>
+              <Th>Unit</Th>
+              <Th>Site</Th>
+              <Th>Status</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && <SkeletonRows colSpan={5} rows={3} />}
+            {isError && !isLoading && (
+              <TableMessage colSpan={5} tone="error">
+                Could not load machines.
+              </TableMessage>
+            )}
+            {!isLoading && !isError && visibleMachines.length === 0 && (
+              <TableMessage colSpan={5}>
+                {normalizedSearch
+                  ? "No machines match this search."
+                  : "No machines are linked to this account."}
+              </TableMessage>
+            )}
+            {visibleMachines.map((machine) => (
+              <Tr key={machine.id} className="h-[72px]">
+                <Td className="truncate font-medium text-[var(--lp-ink)]">
+                  {machine.displayLabel}
+                </Td>
+                <Td className="truncate text-[var(--lp-ink-soft)]">{machine.productName}</Td>
+                <Td className="truncate text-[var(--lp-ink-soft)]">{machine.unitNumber ?? "—"}</Td>
+                <Td className="truncate text-[var(--lp-ink-soft)]">
+                  {machine.siteName ? `${machine.siteName} · ` : ""}
+                  {machine.siteLocation}
+                </Td>
+                <Td>
+                  <span
+                    className={cn(
+                      "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                      machine.status === "active"
+                        ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-faint)]",
+                    )}
+                  >
+                    {machine.status}
+                  </span>
+                </Td>
+              </Tr>
+            ))}
+
+            {!isLoading &&
+              !isError &&
+              Array.from({ length: emptySlots }, (_, index) => (
+                <tr
+                  key={`machine-empty-row-${index}`}
+                  aria-hidden="true"
+                  className="h-[72px] border-b border-[var(--lp-line)] last:border-0"
                 >
-                  {machine.status}
-                </span>
-              </Td>
-            </Tr>
-          ))}
-        </tbody>
-      </table>
-    </TableShell>
+                  <td colSpan={5} />
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </TableShell>
+
+      {showPagination && (
+        <nav aria-label="Machines pagination" className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Previous machines page"
+            disabled={visiblePageIndex === 0}
+            onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Next machines page"
+            disabled={visiblePageIndex >= pageCount - 1}
+            onClick={() => setPageIndex((current) => Math.min(pageCount - 1, current + 1))}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+          </Button>
+        </nav>
+      )}
+    </div>
   );
 }
 
 const PersonActivityPage = () => {
   const { userId = "" } = useParams();
+  const navigate = useNavigate();
   const { data: sessionData } = useSession();
   const actorRole = (sessionData?.user?.role ?? "customer") as Role;
 
@@ -178,39 +256,49 @@ const PersonActivityPage = () => {
   const canViewMachines = canManageOperational(actorRole);
   const metrics = personMetrics(person);
   const priorityEntries = Object.entries(data!.priorityDistribution ?? {});
+  const currentWorkState =
+    person.role === "admin" &&
+    (person.state === "suspended" ||
+      person.state === "pending_approval" ||
+      person.state === "rejected")
+      ? "no_active_work"
+      : person.state;
 
   return (
     <div className={PAGE_CONTAINER}>
-      <Breadcrumbs role={person.role} name={personName(person.displayName)} />
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        className="inline-flex h-9 w-fit items-center gap-2 rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-4 text-sm font-medium text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40"
+      >
+        <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+        Back
+      </button>
 
       {/* Identity header */}
       <header className="rounded-xl border border-[var(--lp-line)] lp-card p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="lp-display text-xl font-bold text-[var(--lp-ink)]">
                 {personName(person.displayName)}
               </h1>
               <RoleBadge role={person.role} />
-              <ApprovalBadge status={person.approvalStatus} />
+              {person.approvalStatus && <ApprovalBadge status={person.approvalStatus} />}
             </div>
             <p className="mt-1 text-sm text-[var(--lp-ink-soft)]">{person.email}</p>
             {person.companyName && (
               <p className="text-sm text-[var(--lp-faint)]">{person.companyName}</p>
             )}
           </div>
-          <Link
-            to="/app/activity"
-            className="w-fit shrink-0 rounded-md border border-[var(--lp-line-strong)] px-3 py-1.5 text-xs font-medium text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/50 hover:text-[var(--lp-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45"
-          >
-            Back to Activity
-          </Link>
         </div>
 
         <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-[var(--lp-line)] pt-3">
           {[
             { label: "Current role", value: roleLabel(person.role) },
-            { label: "Account", value: APPROVAL_LABELS[person.approvalStatus] },
+            ...(person.approvalStatus
+              ? [{ label: "Account", value: APPROVAL_LABELS[person.approvalStatus] }]
+              : []),
             { label: "Origin", value: ORIGIN_LABELS[person.accountOrigin] ?? person.accountOrigin },
             { label: "Joined", value: formatDate(person.createdAt) },
             { label: "Last seen", value: formatRelative(person.lastSeenAt) },
@@ -222,7 +310,7 @@ const PersonActivityPage = () => {
             },
             {
               label: "Current work",
-              value: describeCurrentWork(person.state, person.stateCount ?? 0),
+              value: describeCurrentWork(currentWorkState, person.stateCount ?? 0),
             },
           ].map((item) => (
             <div key={item.label}>

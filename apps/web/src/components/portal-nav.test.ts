@@ -19,12 +19,12 @@ describe("portal sidebar navigation", () => {
   it("gives the admin Overview first and drops the redundant entries", () => {
     expect(labelsFor("admin")).toEqual([
       "Overview",
+      "Users",
+      "Activity",
+      "Issue Reports",
+      "Customer Machines",
       "Requests",
       "Queue",
-      "Issue Reports",
-      "Activity",
-      "Customer Machines",
-      "Users",
     ]);
   });
 

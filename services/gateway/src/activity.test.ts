@@ -67,6 +67,21 @@ describe("derivePersonState", () => {
     ).toEqual({ state: "rejected", count: 0 });
   });
 
+  it("never treats the protected Admin identity as approval-managed", () => {
+    const noWork = emptyWorkload();
+    for (const approvalStatus of [
+      "suspended",
+      "pending_approval",
+      "rejected",
+      null,
+    ] as const) {
+      expect(derivePersonState({ role: "admin", approvalStatus }, noWork)).toEqual({
+        state: "no_active_work",
+        count: 0,
+      });
+    }
+  });
+
   it("reports in-progress work as `working` with its count", () => {
     expect(derivePersonState(approvedEngineer, work({ engineer: rel({ inProgress: 3 }) }))).toEqual({
       state: "working",

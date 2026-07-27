@@ -57,12 +57,16 @@ function person(overrides: Partial<ActivityPersonRow> = {}): ActivityPersonRow {
   } as ActivityPersonRow;
 }
 
-function response(people: ActivityPersonRow[], total = people.length): ActivityPeopleResponse {
+function response(
+  people: ActivityPersonRow[],
+  total = people.length,
+  offset = 0,
+): ActivityPeopleResponse {
   return {
     people,
     total,
-    limit: 25,
-    offset: 0,
+    limit: 10,
+    offset,
     summary: {
       totalPeople: total,
       activeEngineers: 1,
@@ -158,6 +162,25 @@ describe("People Activity directory", () => {
     expect(within(row as HTMLElement).getAllByText("Suspended")).toHaveLength(2);
   });
 
+  it("shows no account status for the protected Admin identity", async () => {
+    apiRequest.mockResolvedValue(
+      response([
+        person({
+          role: "admin",
+          approvalStatus: null,
+          state: "no_active_work",
+          displayName: "Kush Admin",
+        }),
+      ]),
+    );
+    const { container } = renderPage();
+    await screen.findByText("Kush Admin");
+    const row = container.querySelector("tbody tr");
+    expect(within(row as HTMLElement).getByLabelText("Account status not applicable")).toBeInTheDocument();
+    expect(within(row as HTMLElement).queryByText("Suspended")).toBeNull();
+    expect(within(row as HTMLElement).queryByText("Approved")).toBeNull();
+  });
+
   // NOTE: the directory's error state (message + Retry) is implemented but is
   // not unit-tested here. React Query v5 eagerly creates a query promise that
   // nothing consumes when a fetch rejects, which vitest reports as an
@@ -212,16 +235,58 @@ describe("People Activity directory", () => {
     );
   });
 
-  it("paginates with a bounded offset", async () => {
-    apiRequest.mockResolvedValue(response([person()], 60));
+  it("requests ten people per page and uses icon-only pagination", async () => {
+    apiRequest.mockResolvedValue(response([person()], 21));
     renderPage();
     await screen.findByText("Love Ahir");
-    expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(apiRequest.mock.calls.some(([u]) => String(u).includes("limit=10"))).toBe(true);
+    expect(apiRequest.mock.calls.some(([u]) => String(u).includes("offset=0"))).toBe(true);
+    expect(screen.queryByText(/Showing \d/)).toBeNull();
+    expect(screen.queryByText(/Page \d/)).toBeNull();
+    expect(screen.queryByText("Previous")).toBeNull();
+    expect(screen.queryByText("Next")).toBeNull();
+
+    const previous = screen.getByRole("button", { name: "Previous people page" });
+    const next = screen.getByRole("button", { name: "Next people page" });
+    expect(previous).toHaveTextContent("");
+    expect(next).toHaveTextContent("");
+    expect(previous).toBeDisabled();
+
+    fireEvent.click(next);
     await waitFor(() =>
-      expect(apiRequest.mock.calls.some(([u]) => String(u).includes("offset=25"))).toBe(true),
+      expect(apiRequest.mock.calls.some(([u]) => String(u).includes("offset=10"))).toBe(true),
     );
+  });
+
+  it("keeps ten table slots on a partial final page", async () => {
+    const firstPage = Array.from({ length: 10 }, (_, index) =>
+      person({
+        id: `person-${index + 1}`,
+        displayName: `Person ${index + 1}`,
+        email: `person${index + 1}@elkatech.local`,
+      }),
+    );
+    const lastPerson = person({
+      id: "person-11",
+      displayName: "Person 11",
+      email: "person11@elkatech.local",
+    });
+
+    apiRequest.mockImplementation((url?: string) =>
+      Promise.resolve(
+        String(url).includes("offset=10") ? response([lastPerson], 11, 10) : response(firstPage, 11),
+      ),
+    );
+    const { container } = renderPage();
+    await screen.findByText("Person 1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next people page" }));
+    await screen.findByText("Person 11");
+
+    const rows = container.querySelectorAll("tbody tr");
+    expect(rows).toHaveLength(10);
+    expect(container.querySelectorAll('tbody tr[aria-hidden="true"]')).toHaveLength(9);
   });
 
   it("links every row to that person's page", async () => {

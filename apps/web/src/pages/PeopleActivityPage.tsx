@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Activity, ChevronDown, Search } from "lucide-react";
+import { Activity, ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import type {
   ActivityPeopleResponse,
   ActivityPersonRow,
   ApprovalStatus,
   Role,
 } from "@elkatech/contracts";
-import { ACTIVITY_PAGE_SIZE_DEFAULT } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
 import { PAGE_CONTAINER } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
@@ -19,6 +18,7 @@ import {
   personName,
 } from "@/lib/activity";
 import PageHeader from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ApprovalBadge,
@@ -59,6 +59,7 @@ const WORK_FILTERS: Array<{ value: WorkFilter; label: string }> = [
 ];
 
 const COLUMN_COUNT = 9;
+const PEOPLE_PAGE_SIZE = 10;
 
 /* Proportional widths on a fixed layout: headers stay locked to the cells
  * beneath them (which `table-auto` failed to do), while the table still fits
@@ -120,7 +121,14 @@ function FilterSelect<T extends string>({
 }
 
 function CurrentWorkCell({ person }: { person: ActivityPersonRow }) {
-  const tone = currentWorkTone(person.state);
+  const state =
+    person.role === "admin" &&
+    (person.state === "suspended" ||
+      person.state === "pending_approval" ||
+      person.state === "rejected")
+      ? "no_active_work"
+      : person.state;
+  const tone = currentWorkTone(state);
   return (
     <span
       className={cn(
@@ -131,7 +139,7 @@ function CurrentWorkCell({ person }: { person: ActivityPersonRow }) {
         tone === "idle" && "text-[var(--lp-faint)]",
       )}
     >
-      {describeCurrentWork(person.state, person.stateCount ?? 0)}
+      {describeCurrentWork(state, person.stateCount ?? 0)}
     </span>
   );
 }
@@ -160,12 +168,12 @@ const PeopleActivityPage = () => {
     if (roleFilter !== "all") params.set("role", roleFilter);
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (workFilter !== "all") params.set("filter", workFilter);
-    params.set("limit", String(ACTIVITY_PAGE_SIZE_DEFAULT));
-    params.set("offset", String(page * ACTIVITY_PAGE_SIZE_DEFAULT));
+    params.set("limit", String(PEOPLE_PAGE_SIZE));
+    params.set("offset", String(page * PEOPLE_PAGE_SIZE));
     return params.toString();
   }, [search, roleFilter, statusFilter, workFilter, page]);
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["activity-people", queryString],
     queryFn: () => apiRequest<ActivityPeopleResponse>(`/api/activity/people?${queryString}`),
     placeholderData: keepPreviousData,
@@ -173,9 +181,15 @@ const PeopleActivityPage = () => {
 
   const people = data?.people ?? [];
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE_DEFAULT));
+  const pageCount = Math.max(1, Math.ceil(total / PEOPLE_PAGE_SIZE));
+  const emptyPersonSlots =
+    pageCount > 1 && people.length > 0 ? Math.max(0, PEOPLE_PAGE_SIZE - people.length) : 0;
   const hasFilters =
     search.length > 0 || roleFilter !== "all" || statusFilter !== "all" || workFilter !== "all";
+
+  useEffect(() => {
+    if (page >= pageCount) setPage(pageCount - 1);
+  }, [page, pageCount]);
 
   function resetFilters() {
     setSearchInput("");
@@ -323,7 +337,7 @@ const PeopleActivityPage = () => {
                 <tr
                   key={person.id}
                   onClick={() => navigate(`/app/activity/${person.id}`)}
-                  className="cursor-pointer border-b border-[var(--lp-line)] transition-colors last:border-0 hover:bg-[var(--lp-panel-2)]/50"
+                  className="h-[72px] cursor-pointer border-b border-[var(--lp-line)] transition-colors last:border-0 hover:bg-[var(--lp-panel-2)]/50"
                 >
                   <Td>
                     <div className="min-w-0">
@@ -346,7 +360,16 @@ const PeopleActivityPage = () => {
                     <RoleBadge role={person.role} />
                   </Td>
                   <Td>
-                    <ApprovalBadge status={person.approvalStatus} />
+                    {person.approvalStatus ? (
+                      <ApprovalBadge status={person.approvalStatus} />
+                    ) : (
+                      <span
+                        aria-label="Account status not applicable"
+                        className="text-[var(--lp-faint)]"
+                      >
+                        —
+                      </span>
+                    )}
                   </Td>
                   <Td>
                     <CurrentWorkCell person={person} />
@@ -376,39 +399,47 @@ const PeopleActivityPage = () => {
                   </Td>
                 </tr>
               ))}
+
+            {!isLoading &&
+              !isError &&
+              Array.from({ length: emptyPersonSlots }, (_, index) => (
+                <tr
+                  key={`person-empty-row-${index}`}
+                  aria-hidden="true"
+                  className="h-[72px] border-b border-[var(--lp-line)] last:border-0"
+                >
+                  <td colSpan={COLUMN_COUNT} />
+                </tr>
+              ))}
           </tbody>
         </table>
       </TableShell>
 
-      {!isLoading && !isError && total > 0 && (
-        <div className="flex flex-col items-center justify-between gap-2 text-sm sm:flex-row">
-          <p className="text-[var(--lp-ink-soft)]">
-            Showing {page * ACTIVITY_PAGE_SIZE_DEFAULT + 1}–
-            {Math.min((page + 1) * ACTIVITY_PAGE_SIZE_DEFAULT, total)} of {total}
-            {isFetching && <span className="ml-2 text-[var(--lp-faint)]">updating…</span>}
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.max(0, current - 1))}
-              disabled={page === 0}
-              className="rounded-md border border-[var(--lp-line-strong)] px-3 py-1.5 text-xs font-medium text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/50 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="text-xs text-[var(--lp-faint)]">
-              Page {page + 1} of {pageCount}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
-              disabled={page >= pageCount - 1}
-              className="rounded-md border border-[var(--lp-line-strong)] px-3 py-1.5 text-xs font-medium text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/50 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+      {!isLoading && !isError && pageCount > 1 && (
+        <nav aria-label="People pagination" className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Previous people page"
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            disabled={page === 0}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Next people page"
+            onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+            disabled={page >= pageCount - 1}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+          </Button>
+        </nav>
       )}
     </div>
   );

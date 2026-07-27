@@ -380,7 +380,7 @@ const PortalShell = () => {
       </nav>
 
       {/* ── Bottom section ─────────────────────────────────────────────────── */}
-      <div className="space-y-0 border-t border-[var(--lp-line)] pb-4 pt-3">
+      <div className="border-t border-[var(--lp-line)] pb-4 pt-3">
 
         {/* ── Group A: Theme selector ───────────────────────────────────── */}
         <div className="px-3 pb-3">
@@ -432,7 +432,7 @@ const PortalShell = () => {
         <div className="mx-3 border-t border-[var(--lp-line)]" />
 
         {/* ── Group C: My Account ────────────────────────────────────────── */}
-        <div className="px-3 pt-3">
+        <div className="px-3 pb-3 pt-3">
           {collapsed && !isMobile ? (
             <div className="flex justify-center">
               <Link
@@ -468,7 +468,7 @@ const PortalShell = () => {
         </div>
 
         {/* Divider Account→Logout */}
-        <div className="mx-3 mt-3 border-t border-[var(--lp-line)]" />
+        <div className="mx-3 border-t border-[var(--lp-line)]" />
 
         {/* ── Group D: Logout ────────────────────────────────────────────── */}
         <div className="px-3 pt-3">

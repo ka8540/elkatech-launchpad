@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { RequestStatusGroup, ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
-import { PAGE_CONTAINER } from "@/lib/page-layout";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import {
   getRequestStatusGroup,
   getRequestStatusLabel,
@@ -21,8 +21,9 @@ import {
   ArrowRight,
   Archive,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
-  ExternalLink,
   Inbox,
   LifeBuoy,
   Package2,
@@ -36,6 +37,8 @@ type DashboardFilter = Extract<
   RequestStatusGroup,
   "all" | "open" | "in_progress" | "resolved" | "archived"
 >;
+
+const REQUESTS_PAGE_SIZE = 10;
 
 const dashboardFilters: Array<{
   value: DashboardFilter;
@@ -284,7 +287,7 @@ function RequestCard({ request }: { request: ServiceRequest }) {
     <Link
       to={`/app/requests/${request.id}`}
       className={cn(
-        "group block overflow-hidden rounded-2xl p-5 transition-colors duration-150",
+        "group block min-h-[132px] overflow-hidden rounded-2xl p-5 transition-colors duration-150",
         cardSurface,
         "hover:border-[var(--lp-accent)]/45",
       )}
@@ -363,6 +366,7 @@ const RequestsPage = () => {
   const { data: session } = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const activeFilter = normalizeDashboardFilter(searchParams.get("status"));
   const filterMeta =
     dashboardFilters.find((filter) => filter.value === activeFilter) ??
@@ -392,8 +396,11 @@ const RequestsPage = () => {
       : null;
 
   /* ── Derive stats ─── */
-  const activeRequests = activeData ?? [];
-  const sourceRequests = activeFilter === "archived" ? archivedData ?? [] : activeRequests;
+  const activeRequests = useMemo(() => activeData ?? [], [activeData]);
+  const sourceRequests = useMemo(
+    () => (activeFilter === "archived" ? archivedData ?? [] : activeRequests),
+    [activeFilter, activeRequests, archivedData],
+  );
   const requests = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     return sourceRequests.filter((request) => {
@@ -414,6 +421,30 @@ const RequestsPage = () => {
         .some((value) => value.toLowerCase().includes(normalizedSearch));
     });
   }, [activeFilter, searchQuery, sourceRequests]);
+  const pageCount = Math.max(1, Math.ceil(requests.length / REQUESTS_PAGE_SIZE));
+  const visiblePageIndex = Math.min(pageIndex, pageCount - 1);
+  const pagedRequests = useMemo(
+    () =>
+      requests.slice(
+        visiblePageIndex * REQUESTS_PAGE_SIZE,
+        (visiblePageIndex + 1) * REQUESTS_PAGE_SIZE,
+      ),
+    [requests, visiblePageIndex],
+  );
+  const showPagination = requests.length > REQUESTS_PAGE_SIZE;
+  const emptyPageSlots =
+    showPagination && pagedRequests.length > 0
+      ? Math.max(0, REQUESTS_PAGE_SIZE - pagedRequests.length)
+      : 0;
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [activeFilter, searchQuery]);
+
+  useEffect(() => {
+    if (pageIndex >= pageCount) setPageIndex(pageCount - 1);
+  }, [pageCount, pageIndex]);
+
   const summaryRequests = activeRequests;
   const totalCount = summaryRequests.length;
 
@@ -456,7 +487,7 @@ const RequestsPage = () => {
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-10 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
+              PAGE_PRIMARY_ACTION,
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >
@@ -614,34 +645,53 @@ const RequestsPage = () => {
                   {requests.length} request{requests.length !== 1 ? "s" : ""} shown
                 </p>
               </div>
-              {requests.map((request) => (
+              {pagedRequests.map((request) => (
                 <RequestCard key={request.id} request={request} />
               ))}
+              {Array.from({ length: emptyPageSlots }, (_, index) => (
+                <div
+                  key={`request-empty-card-${index}`}
+                  aria-hidden="true"
+                  className="invisible min-h-[132px] rounded-2xl border"
+                />
+              ))}
+
+              {showPagination && (
+                <nav
+                  aria-label="Requests pagination"
+                  className="flex items-center justify-end gap-2"
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Previous requests page"
+                    disabled={visiblePageIndex === 0}
+                    onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                    className="h-8 w-8 rounded-full"
+                  >
+                    <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Next requests page"
+                    disabled={visiblePageIndex + 1 >= pageCount}
+                    onClick={() =>
+                      setPageIndex((current) => Math.min(pageCount - 1, current + 1))
+                    }
+                    className="h-8 w-8 rounded-full"
+                  >
+                    <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                </nav>
+              )}
             </div>
           )}
         </>
       )}
 
-      {/* ── Help panel ────────────────────────────────────────────────────── */}
-      {requests.length > 0 && (
-        <div className={cn("rounded-2xl px-5 py-4 border", cardSurface)}>
-          <div className="flex items-start gap-3">
-            <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
-            <div className="min-w-0 text-sm leading-6 text-[var(--lp-ink-soft)]">
-              <span className="font-medium text-[var(--lp-ink)]">Need to report a new issue?</span>{" "}
-              You can also start a request directly from a{" "}
-              <Link
-                to="/"
-                className="inline-flex items-center gap-1 text-[var(--lp-accent)] underline-offset-2 hover:underline"
-              >
-                product page
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-              .
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

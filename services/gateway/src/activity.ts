@@ -77,12 +77,16 @@ export type PersonStateResult = { state: ActivityPersonState; count: number };
  * no bare number is ever shown without context.
  */
 export function derivePersonState(
-  user: { role: Role; approvalStatus: ApprovalStatus },
+  user: { role: Role; approvalStatus: ApprovalStatus | null },
   work: PersonWorkload,
 ): PersonStateResult {
-  if (user.approvalStatus === "suspended") return { state: "suspended", count: 0 };
-  if (user.approvalStatus === "pending_approval") return { state: "pending_approval", count: 0 };
-  if (user.approvalStatus === "rejected") return { state: "rejected", count: 0 };
+  // Admin is a protected platform identity, not an approval-managed account.
+  // Ignore stale legacy statuses so it can never read as suspended/pending.
+  if (user.role !== "admin") {
+    if (user.approvalStatus === "suspended") return { state: "suspended", count: 0 };
+    if (user.approvalStatus === "pending_approval") return { state: "pending_approval", count: 0 };
+    if (user.approvalStatus === "rejected") return { state: "rejected", count: 0 };
+  }
 
   if (work.engineer.inProgress > 0) return { state: "working", count: work.engineer.inProgress };
   if (work.engineer.pending > 0)

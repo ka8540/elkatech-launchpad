@@ -17,4 +17,15 @@ describe("MachinesPage customer data scaling", () => {
       "state: customerMachineProfileState(location.pathname, location.search)",
     );
   });
+
+  it("uses five-row icon-only pagination and preserves partial desktop pages", () => {
+    expect(source).toContain("const PAGE_SIZE = 5");
+    expect(source).toContain('aria-label="Customer machines pagination"');
+    expect(source).toContain('aria-label="Previous customer machines page"');
+    expect(source).toContain('aria-label="Next customer machines page"');
+    expect(source).toContain('key={`customer-machine-empty-row-${index}`}');
+    expect(source).toContain('aria-hidden="true"');
+    expect(source).not.toContain("rangeStart");
+    expect(source).not.toContain("rangeEnd");
+  });
 });

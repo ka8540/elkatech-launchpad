@@ -10,7 +10,7 @@ const PORTAL_PAGES = [
   "AdminDashboardPage.tsx",
   "RequestsPage.tsx",
   "RequestNewPage.tsx",
-  "RequestDetailPage.tsx",
+  "RequestWorkspacePage.tsx",
   "QueuePage.tsx",
   "PeopleActivityPage.tsx",
   "PersonActivityPage.tsx",

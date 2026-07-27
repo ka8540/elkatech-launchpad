@@ -706,6 +706,14 @@ app.get("/requests/:requestId", async (request, reply) => {
   const actor = getUserContext(request.headers);
   const paramsSchema = z.object({ requestId: z.string().uuid() });
   const params = paramsSchema.parse(request.params);
+  const page = z
+    .object({
+      messagesLimit: z.coerce.number().int().min(1).max(50).default(50),
+      messagesOffset: z.coerce.number().int().min(0).max(100_000).default(0),
+      historyLimit: z.coerce.number().int().min(1).max(50).default(50),
+      historyOffset: z.coerce.number().int().min(0).max(100_000).default(0),
+    })
+    .parse(request.query);
 
   const rows = await sql<any[]>`
     select *
@@ -729,31 +737,41 @@ app.get("/requests/:requestId", async (request, reply) => {
     return reply.code(403).send({ message: "Forbidden" });
   }
 
-  const messageRows =
+  const rawMessageRows =
     actor.role === "customer"
       ? await sql<any[]>`
           select *
           from service_desk.request_messages
           where request_id = ${params.requestId}
             and visibility = 'customer_visible'
-          order by created_at asc
+          order by created_at desc, id desc
+          limit ${page.messagesLimit + 1}
+          offset ${page.messagesOffset}
         `
       : await sql<any[]>`
           select *
           from service_desk.request_messages
           where request_id = ${params.requestId}
-          order by created_at asc
+          order by created_at desc, id desc
+          limit ${page.messagesLimit + 1}
+          offset ${page.messagesOffset}
         `;
+  const messagesHasMore = rawMessageRows.length > page.messagesLimit;
+  const messageRows = rawMessageRows.slice(0, page.messagesLimit).reverse();
 
-  const historyRows =
+  const rawHistoryRows =
     actor.role === "customer"
       ? []
       : await sql<any[]>`
           select *
           from service_desk.request_history
           where request_id = ${params.requestId}
-          order by created_at asc
+          order by created_at desc, id desc
+          limit ${page.historyLimit + 1}
+          offset ${page.historyOffset}
         `;
+  const historyHasMore = rawHistoryRows.length > page.historyLimit;
+  const historyRows = rawHistoryRows.slice(0, page.historyLimit).reverse();
 
   // Resolve display info for participants the UI needs to render — the
   // assignee plus every message author. Done in parallel and silently
@@ -787,10 +805,22 @@ app.get("/requests/:requestId", async (request, reply) => {
 
   // Attachments (photo/video evidence). Each gets a fresh short-lived read URL.
   const attachmentRows = await sql<any[]>`
-    select *
-    from service_desk.request_attachments
-    where request_id = ${params.requestId}
-    order by created_at asc
+    select
+      attachment.*,
+      (
+        select message.id
+        from service_desk.request_messages message
+        where message.request_id = attachment.request_id
+          and message.author_id = attachment.uploaded_by
+          and message.visibility = 'customer_visible'
+          and message.created_at <= attachment.created_at
+          and attachment.created_at <= message.created_at + interval '15 minutes'
+        order by message.created_at desc, message.id desc
+        limit 1
+      ) as message_id
+    from service_desk.request_attachments attachment
+    where attachment.request_id = ${params.requestId}
+    order by attachment.created_at asc
   `;
   const attachments = await Promise.all(
     attachmentRows.map(async (a) => {
@@ -804,6 +834,7 @@ app.get("/requests/:requestId", async (request, reply) => {
       return requestAttachmentSchema.parse({
         id: a.id,
         requestId: a.request_id,
+        messageId: a.message_id,
         uploadedBy: a.uploaded_by,
         fileName: a.file_name,
         contentType: a.content_type,
@@ -879,6 +910,18 @@ app.get("/requests/:requestId", async (request, reply) => {
       metadata: row.metadata,
       createdAt: new Date(row.created_at).toISOString(),
     })),
+    pagination: {
+      messages: {
+        offset: page.messagesOffset,
+        limit: page.messagesLimit,
+        hasMore: messagesHasMore,
+      },
+      history: {
+        offset: page.historyOffset,
+        limit: page.historyLimit,
+        hasMore: historyHasMore,
+      },
+    },
   };
 });
 
@@ -1616,13 +1659,18 @@ app.post("/requests/:requestId/attachments/presign", async (request, reply) => {
   if (!ensureInternal(request.headers)) {
     return reply.code(401).send({ message: "Unauthorized" });
   }
-  if (!isR2Configured()) {
-    return reply.code(501).send({ message: "Attachments are not configured." });
-  }
   const actor = getUserContext(request.headers);
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = presignAttachmentInputSchema.parse(request.body);
 
+  if (input.visibility === "internal_note") {
+    return reply
+      .code(400)
+      .send({ message: "Attachments are not allowed on internal notes." });
+  }
+  if (!isR2Configured()) {
+    return reply.code(501).send({ message: "Attachments are not configured." });
+  }
   if (!isAllowedAttachmentType(input.contentType)) {
     return reply.code(400).send({ message: "Unsupported file type." });
   }
@@ -1658,13 +1706,18 @@ app.post("/requests/:requestId/attachments", async (request, reply) => {
   if (!ensureInternal(request.headers)) {
     return reply.code(401).send({ message: "Unauthorized" });
   }
-  if (!isR2Configured()) {
-    return reply.code(501).send({ message: "Attachments are not configured." });
-  }
   const actor = getUserContext(request.headers);
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
   const input = confirmAttachmentInputSchema.parse(request.body);
 
+  if (input.visibility === "internal_note") {
+    return reply
+      .code(400)
+      .send({ message: "Attachments are not allowed on internal notes." });
+  }
+  if (!isR2Configured()) {
+    return reply.code(501).send({ message: "Attachments are not configured." });
+  }
   const kind = attachmentKindFor(input.contentType);
   if (!isAllowedAttachmentType(input.contentType) || !kind) {
     return reply.code(400).send({ message: "Unsupported file type." });
@@ -1688,6 +1741,22 @@ app.post("/requests/:requestId/attachments", async (request, reply) => {
     })
   ) {
     return reply.code(403).send({ message: "Forbidden" });
+  }
+  if (input.messageId) {
+    const messageRows = await sql<any[]>`
+      select id
+      from service_desk.request_messages
+      where id = ${input.messageId}
+        and request_id = ${params.requestId}
+        and author_id = ${actor.id}
+        and visibility = 'customer_visible'
+      limit 1
+    `;
+    if (!messageRows[0]) {
+      return reply
+        .code(400)
+        .send({ message: "Attachment message is invalid." });
+    }
   }
 
   const attachmentId = randomUUID();
@@ -1722,6 +1791,7 @@ app.post("/requests/:requestId/attachments", async (request, reply) => {
     requestAttachmentSchema.parse({
       id: attachmentId,
       requestId: params.requestId,
+      messageId: input.messageId ?? null,
       uploadedBy: actor.id,
       fileName: input.fileName,
       contentType: input.contentType,
@@ -1753,10 +1823,22 @@ app.get("/requests/:requestId/attachments", async (request, reply) => {
   }
 
   const rows = await sql<any[]>`
-    select *
-    from service_desk.request_attachments
-    where request_id = ${params.requestId}
-    order by created_at asc
+    select
+      attachment.*,
+      (
+        select message.id
+        from service_desk.request_messages message
+        where message.request_id = attachment.request_id
+          and message.author_id = attachment.uploaded_by
+          and message.visibility = 'customer_visible'
+          and message.created_at <= attachment.created_at
+          and attachment.created_at <= message.created_at + interval '15 minutes'
+        order by message.created_at desc, message.id desc
+        limit 1
+      ) as message_id
+    from service_desk.request_attachments attachment
+    where attachment.request_id = ${params.requestId}
+    order by attachment.created_at asc
   `;
   return Promise.all(
     rows.map(async (a) => {
@@ -1769,6 +1851,7 @@ app.get("/requests/:requestId/attachments", async (request, reply) => {
       return requestAttachmentSchema.parse({
         id: a.id,
         requestId: a.request_id,
+        messageId: a.message_id,
         uploadedBy: a.uploaded_by,
         fileName: a.file_name,
         contentType: a.content_type,
@@ -2072,6 +2155,7 @@ app.get("/internal/activity/:userId/history", async (request, reply) => {
       limit: z.coerce.number().int().min(1).max(100).default(25),
       cursor: z.string().max(200).optional(),
       eventTypes: z.string().max(400).optional(),
+      search: z.string().trim().max(120).optional(),
     })
     .parse(request.query);
 
@@ -2082,6 +2166,7 @@ app.get("/internal/activity/:userId/history", async (request, reply) => {
   const types = query.eventTypes
     ? query.eventTypes.split(",").map((t) => t.trim()).filter(Boolean)
     : null;
+  const searchPattern = query.search ? `%${query.search}%` : null;
 
   // limit + 1 tells us whether another page exists without a second count query.
   const rows = await sql<any[]>`
@@ -2092,6 +2177,17 @@ app.get("/internal/activity/:userId/history", async (request, reply) => {
     join service_desk.requests r on r.id = h.request_id
     where h.actor_id = ${params.userId}
       ${types && types.length > 0 ? sql`and h.event_type in ${sql(types)}` : sql``}
+      ${
+        searchPattern
+          ? sql`and (
+              r.request_number ilike ${searchPattern}
+              or r.subject ilike ${searchPattern}
+              or h.event_type::text ilike ${searchPattern}
+              or h.actor_role::text ilike ${searchPattern}
+              or r.status::text ilike ${searchPattern}
+            )`
+          : sql``
+      }
       ${cursor ? sql`and (h.created_at, h.id) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : sql``}
     order by h.created_at desc, h.id desc
     limit ${query.limit + 1}
@@ -2138,6 +2234,7 @@ app.get("/internal/activity/:userId/tasks", async (request, reply) => {
       limit: z.coerce.number().int().min(1).max(100).default(25),
       cursor: z.string().max(200).optional(),
       staleAfterDays: z.coerce.number().int().min(1).max(365).default(7),
+      search: z.string().trim().max(120).optional(),
     })
     .parse(request.query);
 
@@ -2159,6 +2256,7 @@ app.get("/internal/activity/:userId/tasks", async (request, reply) => {
         : query.bucket === "completed"
           ? sql`and r.status in ${sql(CLOSED_STATUSES)}`
           : sql``;
+  const searchPattern = query.search ? `%${query.search}%` : null;
 
   const rows = await sql<any[]>`
     select
@@ -2179,6 +2277,18 @@ app.get("/internal/activity/:userId/tasks", async (request, reply) => {
     ) a on true
     where ${ownership}
       ${bucketFilter}
+      ${
+        searchPattern
+          ? sql`and (
+              r.request_number ilike ${searchPattern}
+              or r.subject ilike ${searchPattern}
+              or coalesce(r.issue_type::text, '') ilike ${searchPattern}
+              or coalesce(m.display_label, '') ilike ${searchPattern}
+              or r.priority::text ilike ${searchPattern}
+              or r.status::text ilike ${searchPattern}
+            )`
+          : sql``
+      }
       ${cursor ? sql`and (r.updated_at, r.id) < (${cursor.at}::timestamptz, ${cursor.id}::uuid)` : sql``}
     order by r.updated_at desc, r.id desc
     limit ${query.limit + 1}

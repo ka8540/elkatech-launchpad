@@ -10,7 +10,7 @@ import type {
   Role,
 } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
-import { PAGE_CONTAINER } from "@/lib/page-layout";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
 import { customerMachineProfileState } from "@/lib/customer-machine-navigation";
@@ -403,7 +403,11 @@ const UsersPage = () => {
         title="Users & Access"
         description="Manage customer accounts, user invitations, approvals, and access status."
         action={
-          <Button type="button" variant="cta" onClick={() => setInviteOpen(true)}>
+          <Button
+            type="button"
+            className={PAGE_PRIMARY_ACTION}
+            onClick={() => setInviteOpen(true)}
+          >
             <UserPlus className="mr-1.5 h-4 w-4" />
             Invite user
           </Button>

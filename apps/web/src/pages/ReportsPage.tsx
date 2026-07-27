@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Bug, Plus } from "lucide-react";
+import { Bug, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { IssueReportListResponse } from "@elkatech/contracts";
-import { REPORTS_PAGE_SIZE_DEFAULT } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
-import { PAGE_CONTAINER } from "@/lib/page-layout";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +27,7 @@ import {
 } from "@/components/reports/report-access";
 
 const COLUMN_COUNT = 9;
+const REPORTS_TABLE_PAGE_SIZE = 5;
 
 /* Proportional widths on a fixed layout so headers stay locked to their cells
  * at any sidebar state — same approach as the activity directory. */
@@ -68,8 +68,8 @@ export default function ReportsPage() {
   const query = useMemo(
     () =>
       buildReportQuery(filters, {
-        limit: REPORTS_PAGE_SIZE_DEFAULT,
-        offset: page * REPORTS_PAGE_SIZE_DEFAULT,
+        limit: REPORTS_TABLE_PAGE_SIZE,
+        offset: page * REPORTS_TABLE_PAGE_SIZE,
       }),
     [filters, page],
   );
@@ -89,7 +89,12 @@ export default function ReportsPage() {
   const reports = data?.reports ?? [];
   const summary = data?.summary ?? { new: 0, working: 0, resolved: 0, blocking: 0 };
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / REPORTS_PAGE_SIZE_DEFAULT));
+  const pageCount = Math.max(1, Math.ceil(total / REPORTS_TABLE_PAGE_SIZE));
+  const showPagination = pageCount > 1;
+  const emptySlots =
+    showPagination && reports.length > 0
+      ? Math.max(0, REPORTS_TABLE_PAGE_SIZE - reports.length)
+      : 0;
 
   function updateFilters(next: Filters) {
     setFilters(next);
@@ -103,7 +108,7 @@ export default function ReportsPage() {
         title="Issue Reports"
         description="Problems reported from the portal. Reports are anonymous — reporters are identified only by reference."
         action={
-          <Button asChild variant="cta" size="sm">
+          <Button asChild className={PAGE_PRIMARY_ACTION}>
             <Link to="/app/reports/new">
               <Plus className="mr-1.5 h-4 w-4" />
               New report
@@ -166,7 +171,7 @@ export default function ReportsPage() {
             {!isLoading &&
               !isError &&
               reports.map((report) => (
-                <Tr key={report.id}>
+                <Tr key={report.id} className="h-[72px]">
                   <Td>
                     <Link
                       to={`/app/reports/${report.id}`}
@@ -216,36 +221,47 @@ export default function ReportsPage() {
                   </Td>
                 </Tr>
               ))}
+
+            {!isLoading &&
+              !isError &&
+              Array.from({ length: emptySlots }, (_, index) => (
+                <tr
+                  key={`report-empty-row-${index}`}
+                  aria-hidden="true"
+                  className="h-[72px] border-b border-[var(--lp-line)] last:border-0"
+                >
+                  <td colSpan={COLUMN_COUNT} />
+                </tr>
+              ))}
           </tbody>
         </table>
       </TableShell>
 
-      {pageCount > 1 && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-[var(--lp-faint)]">
-            Page {page + 1} of {pageCount} · {total} report{total === 1 ? "" : "s"}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={page === 0}
-              onClick={() => setPage((current) => Math.max(0, current - 1))}
-            >
-              Previous
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={page + 1 >= pageCount}
-              onClick={() => setPage((current) => current + 1)}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+      {showPagination && (
+        <nav aria-label="Issue reports pagination" className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Previous reports page"
+            disabled={page === 0}
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Next reports page"
+            disabled={page + 1 >= pageCount}
+            onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronRight aria-hidden="true" className="h-4 w-4" />
+          </Button>
+        </nav>
       )}
     </div>
   );

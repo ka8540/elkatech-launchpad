@@ -5,7 +5,6 @@ import {
   Activity,
   ArrowRight,
   CheckCircle2,
-  ClipboardList,
   Clock,
   Gauge,
   RefreshCw,
@@ -18,7 +17,7 @@ import {
 } from "lucide-react";
 import type { AuthUser, ServiceRequest, ServiceHeartbeat } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
-import { PAGE_CONTAINER } from "@/lib/page-layout";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -201,7 +200,7 @@ const AdminDashboardPage = () => {
         action={
           <Button
             asChild
-            className="h-10 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]"
+            className={PAGE_PRIMARY_ACTION}
           >
             <Link to="/app/users">
               <UserPlus className="mr-1.5 h-4 w-4" />
@@ -501,26 +500,6 @@ const AdminDashboardPage = () => {
         </section>
       </div>
 
-      {/* Footer help */}
-      <div className={cn("rounded-2xl px-5 py-4", cardSurface)}>
-        <div className="flex items-start gap-3">
-          <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
-          <p className="text-sm leading-6 text-[var(--lp-ink-soft)]">
-            <span className="font-medium text-[var(--lp-ink)]">
-              Approve a customer:
-            </span>{" "}
-            new signups land in <em>pending_approval</em> and cannot create service
-            requests until you approve them on the{" "}
-            <Link
-              to="/app/users"
-              className="text-[var(--lp-accent)] underline-offset-2 hover:underline"
-            >
-              Users page
-            </Link>
-            .
-          </p>
-        </div>
-      </div>
     </div>
   );
 };

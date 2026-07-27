@@ -608,6 +608,9 @@ export type AttachmentKind = z.infer<typeof attachmentKindSchema>;
 export const requestAttachmentSchema = z.object({
   id: z.string(),
   requestId: z.string(),
+  // Present when the attachment was uploaded with a customer-visible
+  // conversation update. Older request-level attachments may not have one.
+  messageId: z.string().optional().nullable(),
   uploadedBy: z.string(),
   fileName: z.string(),
   contentType: z.string(),
@@ -625,6 +628,7 @@ export const presignAttachmentInputSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   contentType: z.string().trim().min(1).max(120),
   sizeBytes: z.number().int().positive(),
+  visibility: messageVisibilitySchema.default("customer_visible"),
 });
 export type PresignAttachmentInput = z.infer<typeof presignAttachmentInputSchema>;
 
@@ -643,6 +647,8 @@ export const confirmAttachmentInputSchema = z.object({
   fileName: z.string().trim().min(1).max(255),
   contentType: z.string().trim().min(1).max(120),
   sizeBytes: z.number().int().positive(),
+  visibility: messageVisibilitySchema.default("customer_visible"),
+  messageId: z.string().uuid().optional(),
 });
 export type ConfirmAttachmentInput = z.infer<typeof confirmAttachmentInputSchema>;
 
@@ -1336,7 +1342,8 @@ export const activityPersonRowSchema = z.object({
   email: z.string(),
   /** Current account role. Never conflate with a history row's recordedRole. */
   role: roleSchema,
-  approvalStatus: approvalStatusSchema,
+  /** Protected Admin identities do not participate in the approval lifecycle. */
+  approvalStatus: approvalStatusSchema.nullable(),
   accountOrigin: accountOriginSchema,
   companyName: z.string().nullable(),
   profileCompleted: z.boolean(),

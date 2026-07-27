@@ -17,3 +17,7 @@ export const PAGE_CONTAINER = "w-full min-w-0 space-y-5";
  * every other page.
  */
 export const PAGE_CONTAINER_READING = "w-full min-w-0 max-w-3xl space-y-5";
+
+/** Primary action shown at the right side of a portal page header. */
+export const PAGE_PRIMARY_ACTION =
+  "h-10 rounded-full bg-[var(--lp-accent)] px-5 text-sm font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]";
