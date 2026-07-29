@@ -184,7 +184,6 @@ describe("PortalShell — mobile drawer", () => {
     expect(linkLabels(1)).toEqual([
       "Requests",
       "Queue",
-      "Activity",
       "Customer Activity",
       "Customer Machines",
       "Users",

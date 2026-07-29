@@ -73,6 +73,15 @@ export function canViewCustomerActivity(role: Role): boolean {
 export function canViewSupportDashboard(role: Role): boolean {
   return role === "admin" || role === "owner" || role === "support";
 }
+/**
+ * The People Activity roster — who on staff is working on what. Deliberately
+ * NARROWER than `canViewSupportDashboard`: Owner is an account-management role
+ * and keeps Customer Activity (`canViewCustomerActivity`), but has no reason to
+ * monitor what every individual staff member is doing.
+ */
+export function canAccessPeopleActivity(role: Role): boolean {
+  return role === "admin" || role === "support";
+}
 /** Access the system Admin panel (health, dangerous system controls). */
 export function canAccessAdminPanel(role: Role): boolean {
   return role === "admin";

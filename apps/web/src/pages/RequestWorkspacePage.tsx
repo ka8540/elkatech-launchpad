@@ -21,6 +21,7 @@ import type {
 import {
   canAssignRequests,
   canManageOperational,
+  canAccessPeopleActivity,
   canViewCustomerActivity,
   ISSUE_TYPE_LABELS,
   type IssueType,
@@ -991,11 +992,13 @@ const RequestWorkspacePage = () => {
     Boolean(user) && canViewCustomerActivity(user.role);
   const canOpenMachineProfile =
     Boolean(user) && canManageOperational(user.role);
+  // Links into the per-staff activity page, so it follows People Activity
+  // access (owner is excluded) rather than customer-activity access.
   const canOpenEngineerActivity =
     Boolean(
       user &&
         request.assignedEngineerId &&
-        (canViewCustomerActivity(user.role) ||
+        (canAccessPeopleActivity(user.role) ||
           (user.role === "engineer" && assignedToMe)),
     );
   const sortedHistory = [...allHistory].sort(

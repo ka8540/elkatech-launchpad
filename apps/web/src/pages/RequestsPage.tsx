@@ -14,6 +14,7 @@ import {
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
 import PageHeader from "@/components/PageHeader";
+import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -124,63 +125,6 @@ function Skeleton({ className }: { className?: string }) {
 /* ─── Matte card surface (shared utility — see index.css `.lp-card`) ──────── */
 const cardSurface = "lp-card border";
 
-/* ─── Stat card ────────────────────────────────────────────────────────────── */
-function StatCard({
-  label,
-  count,
-  icon: Icon,
-  accent,
-  active = false,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  icon: React.ComponentType<{ className?: string }>;
-  accent: "copper" | "emerald" | "amber" | "steel";
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  const badgeMap = {
-    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "group relative w-full overflow-hidden rounded-xl p-4 text-left transition-colors duration-150",
-        cardSurface,
-        "hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
-        active && "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/[0.08]",
-      )}
-    >
-      <div className="relative flex items-center justify-between gap-3">
-        <div>
-          <p className="lp-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
-            {label}
-          </p>
-          <p className="lp-display mt-1.5 text-3xl font-bold text-[var(--lp-ink)]">
-            {count}
-          </p>
-        </div>
-        <div
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
-            badgeMap[accent],
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-    </button>
-  );
-}
-
-/* ─── Loading skeleton ─────────────────────────────────────────────────────── */
 function LoadingSkeleton() {
   return (
     <div className={PAGE_CONTAINER}>
@@ -516,7 +460,7 @@ const RequestsPage = () => {
       )}
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatGrid minTileWidth="11rem">
         <StatCard
           label="Total Requests"
           count={totalCount}
@@ -549,7 +493,7 @@ const RequestsPage = () => {
           active={activeFilter === "resolved"}
           onClick={() => setFilter("resolved")}
         />
-      </div>
+      </StatGrid>
 
       <section className={cn("rounded-xl p-3 sm:p-4", cardSurface)}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

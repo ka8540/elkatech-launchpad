@@ -15,7 +15,7 @@ import {
   canManageUsers,
   canViewCustomerActivity,
   canViewReports,
-  canViewSupportDashboard,
+  canAccessPeopleActivity,
   type Role,
 } from "@elkatech/contracts";
 
@@ -83,7 +83,9 @@ export function buildNavItems(role: Role | undefined): NavItem[] {
           },
         ]
       : []),
-    ...(role && canViewSupportDashboard(role)
+    // Owner is excluded: it is an account-management role and gets Customer
+    // Activity below, not the per-staff-member roster.
+    ...(role && canAccessPeopleActivity(role)
       ? [
           {
             to: "/app/activity",

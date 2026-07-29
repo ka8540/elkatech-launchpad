@@ -16,7 +16,6 @@ import {
   Search,
   Users,
   Wrench,
-  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CatalogProduct, CustomerMachine } from "@elkatech/contracts";
@@ -38,6 +37,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import MachineFormDialog from "@/components/MachineFormDialog";
+import { StatCard, StatGrid } from "@/components/ui/stat-card";
 
 const cardSurface = "lp-card border";
 
@@ -151,41 +151,6 @@ function actionClasses(tone: ActionTone, className?: string) {
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-45",
     actionToneClass[tone],
     className,
-  );
-}
-
-/* KPI card */
-function StatCard({
-  label,
-  count,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  count: number | string;
-  icon: LucideIcon;
-  accent: "copper" | "emerald" | "steel" | "amber";
-}) {
-  const badge: Record<typeof accent, string> = {
-    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-  };
-  return (
-    <div className={cn("relative min-w-0 overflow-hidden rounded-2xl p-5", cardSurface, "hover:border-[var(--lp-line-strong)]")}>
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="lp-mono break-words text-[10px] font-medium uppercase leading-4 tracking-[0.14em] text-[var(--lp-faint)]">
-            {label}
-          </p>
-          <p className="lp-display mt-2 text-4xl font-bold text-[var(--lp-ink)]">{count}</p>
-        </div>
-        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border", badge[accent])}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -552,12 +517,12 @@ const MachinesPage = () => {
       />
 
       {/* KPIs */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatGrid minTileWidth="13rem">
         <StatCard label="Total machines" count={stats.total} icon={HardDrive} accent="copper" />
         <StatCard label="Active" count={stats.active} icon={Wrench} accent="emerald" />
         <StatCard label="Customers with machines" count={stats.customers} icon={Users} accent="steel" />
         <StatCard label="Inactive / archived" count={stats.inactive} icon={Archive} accent="amber" />
-      </div>
+      </StatGrid>
 
       {/* Filters */}
       <div className={cn("flex min-w-0 flex-col gap-2.5 rounded-2xl p-3 sm:p-3.5 2xl:flex-row 2xl:items-center", cardSurface)}>

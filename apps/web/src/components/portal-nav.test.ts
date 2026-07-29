@@ -41,14 +41,15 @@ describe("portal sidebar navigation", () => {
       "Activity",
       "Customer Activity",
     ]);
+    // Owner keeps Customer Activity but not the People Activity roster.
     expect(labelsFor("owner")).toEqual([
       "Requests",
       "Queue",
-      "Activity",
       "Customer Activity",
       "Customer Machines",
       "Users",
     ]);
+    expect(labelsFor("owner")).not.toContain("Activity");
   });
 
   it("hides the staff reports console from Engineer and keeps customer My Reports", () => {

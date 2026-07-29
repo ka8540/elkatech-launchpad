@@ -23,12 +23,16 @@ function work(overrides: Partial<PersonWorkload> = {}): PersonWorkload {
 }
 
 describe("activity console RBAC", () => {
-  it("allows only admin, owner and support into the people directory", () => {
+  it("allows only admin and support into the people directory", () => {
     const allowed = ALL_ROLES.filter(canAccessActivityDirectory);
-    expect(allowed).toEqual(["support", "owner", "admin"]);
+    expect(allowed).toEqual(["support", "admin"]);
   });
 
-  it("keeps engineers and customers out of the directory", () => {
+  it("keeps owner, engineers and customers out of the directory", () => {
+    // Owner is account-management: it keeps Customer Activity but has no
+    // reason to monitor what each staff member is doing.
+    expect(canAccessActivityDirectory("owner")).toBe(false);
+    expect(canAccessPersonPage("owner", "owner-1", "eng-1")).toBe(false);
     expect(canAccessActivityDirectory("engineer")).toBe(false);
     expect(canAccessActivityDirectory("customer")).toBe(false);
   });
@@ -45,7 +49,7 @@ describe("activity console RBAC", () => {
   });
 
   it("lets staff open anyone's page", () => {
-    for (const role of ["support", "owner", "admin"] as Role[]) {
+    for (const role of ["support", "admin"] as Role[]) {
       expect(canAccessPersonPage(role, "staff-1", "someone-else")).toBe(true);
     }
   });

@@ -67,16 +67,30 @@ describe("App route declarations", () => {
 
   it("restricts the directory to staff and the person page to staff plus engineers", () => {
     const source = APP_SOURCE;
-    const directory = source.slice(source.indexOf('path="activity"'));
-    expect(directory.slice(0, 400)).toContain('roles={["support", "owner", "admin"]}');
+    // Scope each window to the route's own <ProtectedRoute> so a later
+    // route's roles cannot satisfy the assertion.
+    const routeWindow = (marker: string) => {
+      const from = source.indexOf(marker);
+      return source.slice(from, source.indexOf("</ProtectedRoute>", from));
+    };
+    const directory = routeWindow('path="activity"');
+    expect(directory).toContain('roles={["support", "admin"]}');
 
-    const personPage = source.slice(source.indexOf('path="activity/:userId"'));
-    expect(personPage.slice(0, 400)).toContain(
-      'roles={["support", "owner", "admin", "engineer"]}',
-    );
-    // Customers are never granted either route.
-    expect(directory.slice(0, 400)).not.toContain("customer");
-    expect(personPage.slice(0, 400)).not.toContain('"customer"');
+    const personPage = routeWindow('path="activity/:userId"');
+    expect(personPage).toContain('roles={["support", "admin", "engineer"]}');
+    // Customers are never granted either route, and owner is account
+    // management: it keeps customer-activity but not the staff roster.
+    expect(directory).not.toContain("customer");
+    expect(directory).not.toContain('"owner"');
+    expect(personPage).not.toContain('"customer"');
+    expect(personPage).not.toContain('"owner"');
+  });
+
+  it("keeps Customer Activity available to owner", () => {
+    const source = APP_SOURCE;
+    const from = source.indexOf('path="customer-activity"');
+    const customerActivity = source.slice(from, source.indexOf("</ProtectedRoute>", from));
+    expect(customerActivity).toContain('roles={["support", "owner", "admin"]}');
   });
 });
 

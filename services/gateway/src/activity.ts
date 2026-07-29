@@ -1,5 +1,5 @@
 import {
-  canViewSupportDashboard,
+  canAccessPeopleActivity,
   type ActivityPersonState,
   type ApprovalStatus,
   type Role,
@@ -49,9 +49,9 @@ export function emptyWorkload(): PersonWorkload {
 // ─── RBAC ───────────────────────────────────────────────────────────────────
 
 /** The people directory is a staff-coordination surface. Engineers get their
- *  own page but never the roster; customers never reach any of it. */
+ *  own page but never the roster; owner and customers never reach any of it. */
 export function canAccessActivityDirectory(role: Role): boolean {
-  return canViewSupportDashboard(role);
+  return canAccessPeopleActivity(role);
 }
 
 /** Directory access, or an engineer opening strictly their own page. */

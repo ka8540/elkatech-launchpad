@@ -30,8 +30,18 @@ const statusTransitions: Record<RequestStatus, RequestStatus[]> = {
   closed: ["new"],
 };
 
+/**
+ * Oversight roles see and answer every request regardless of assignment: the
+ * queue listing already returns all rows to them, and they assign/reassign
+ * work (`canAssignRequests`), which is impossible without opening the request
+ * first. Engineers remain scoped to their own queue.
+ */
+function hasRequestOversight(role: Role): boolean {
+  return role === "admin" || role === "owner" || role === "support";
+}
+
 export function canViewRequest(actor: WorkflowActor, request: WorkflowRequest) {
-  if (actor.role === "admin") {
+  if (hasRequestOversight(actor.role)) {
     return true;
   }
 
@@ -47,7 +57,7 @@ export function canViewRequest(actor: WorkflowActor, request: WorkflowRequest) {
 }
 
 export function canReplyToRequest(actor: WorkflowActor, request: WorkflowRequest) {
-  if (actor.role === "admin") {
+  if (hasRequestOversight(actor.role)) {
     return true;
   }
 

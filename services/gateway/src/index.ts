@@ -46,7 +46,6 @@ import {
   canManageUsers,
   canSuspendUsers,
   canViewCustomerActivity,
-  canViewSupportDashboard,
   portalHomePathForRole,
   type Role,
 } from "@elkatech/contracts";
@@ -328,9 +327,13 @@ app.patch("/api/me/profile", async (request: any, reply: any) => {
 });
 
 // Admin: read any customer's profile.
+// Reading a customer's profile backs the Customer Machine Profile page, which
+// owner already reaches (see the sibling `/machines` route). Editing stays
+// admin-only on the PATCH below.
 app.get("/api/admin/users/:userId/profile", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   const { userId } = z.object({ userId: z.string().uuid() }).parse(request.params);
   try {
     return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/profile`, {
@@ -1595,8 +1598,8 @@ async function buildPeopleRows() {
 
 app.get("/api/activity/people", async (request, reply) => {
   // Directory is staff-coordination surface only. Engineers get their own
-  // page but never the roster; customers never reach any of it.
-  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  // page but never the roster; owner and customers never reach any of it.
+  const session = await requireSession(request, reply, ["admin", "support"]);
   if (!session) return;
   if (!canAccessActivityDirectory(session.user.role)) return forbidden(reply);
 
@@ -1678,7 +1681,7 @@ const activityUserParams = z.object({ userId: z.string().uuid() });
  * permitted (directory access, or an engineer opening strictly their own page).
  */
 async function resolvePersonRoute(request: any, reply: any) {
-  const session = await requireSession(request, reply, ["admin", "owner", "support", "engineer"]);
+  const session = await requireSession(request, reply, ["admin", "support", "engineer"]);
   if (!session) return null;
 
   const parsed = activityUserParams.safeParse(request.params);

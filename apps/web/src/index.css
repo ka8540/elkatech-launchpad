@@ -668,6 +668,22 @@
     box-shadow: 0 14px 36px -28px rgba(0, 0, 0, 0.55);
   }
 
+  /*
+   * Stat tile row. Columns are sized from the AVAILABLE width rather than a
+   * viewport breakpoint, because the portal sidebar swings between 76px and
+   * 276px — `lg:grid-cols-6` cannot see that and crammed six tiles into the
+   * narrow content area, wrapping labels to ragged heights. auto-fit keeps
+   * every tile at least `--lp-stat-min` wide and drops a column instead.
+   */
+  .lp-stat-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(100%, var(--lp-stat-min, 9.5rem)), 1fr)
+    );
+  }
+
   /* Engineering blueprint grid (theme-aware via --lp-line) */
   .lp-grid {
     background-image:

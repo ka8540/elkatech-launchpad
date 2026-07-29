@@ -104,7 +104,7 @@ const App = () => {
               <Route
                 path="activity"
                 element={
-                  <ProtectedRoute roles={["support", "owner", "admin"]}>
+                  <ProtectedRoute roles={["support", "admin"]}>
                     <PeopleActivityPage />
                   </ProtectedRoute>
                 }
@@ -114,7 +114,7 @@ const App = () => {
               <Route
                 path="activity/:userId"
                 element={
-                  <ProtectedRoute roles={["support", "owner", "admin", "engineer"]}>
+                  <ProtectedRoute roles={["support", "admin", "engineer"]}>
                     <PersonActivityPage />
                   </ProtectedRoute>
                 }

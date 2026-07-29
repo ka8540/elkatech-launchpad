@@ -20,6 +20,7 @@ import { apiRequest } from "@/lib/api";
 import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
+import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 
 type ApprovalSummary = {
@@ -36,61 +37,6 @@ type HealthResponse = {
 
 /* ─── Shared surface helper ───────────────────────────────────────────────── */
 const cardSurface = "lp-card border";
-
-/* ─── Stat card ────────────────────────────────────────────────────────────── */
-function StatCard({
-  label,
-  count,
-  icon: Icon,
-  accent,
-  hint,
-}: {
-  label: string;
-  count: number | string;
-  icon: LucideIcon;
-  accent: "copper" | "emerald" | "amber" | "steel" | "rose";
-  hint?: string;
-}) {
-  const badgeMap: Record<typeof accent, string> = {
-    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-    rose: "border-rose-400/30 bg-rose-400/10 text-rose-600 dark:text-rose-300",
-  };
-
-  return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-2xl p-5 transition-colors duration-150",
-        cardSurface,
-        "hover:border-[var(--lp-line-strong)]",
-      )}
-    >
-      <div className="relative flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="lp-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
-            {label}
-          </p>
-          <p className="lp-display mt-2 text-4xl font-bold text-[var(--lp-ink)]">{count}</p>
-          {hint && (
-            <p className="mt-1.5 text-[11px] font-medium text-[var(--lp-faint)]">
-              {hint}
-            </p>
-          )}
-        </div>
-        <div
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-            badgeMap[accent],
-          )}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Service heartbeat row ────────────────────────────────────────────────── */
 function statusColor(status: ServiceHeartbeat["status"]): string {
@@ -228,7 +174,7 @@ const AdminDashboardPage = () => {
       )}
 
       {/* User approval stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <StatGrid minTileWidth="12rem">
         <StatCard
           label="Pending approvals"
           count={summaryQuery.data?.pendingApproval ?? "—"}
@@ -257,10 +203,10 @@ const AdminDashboardPage = () => {
           accent="steel"
           hint="Not approved"
         />
-      </div>
+      </StatGrid>
 
       {/* Request load stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <StatGrid minTileWidth="12rem">
         <StatCard
           label="Open requests"
           count={requestStats.open}
@@ -289,7 +235,7 @@ const AdminDashboardPage = () => {
           accent="steel"
           hint="All accounts"
         />
-      </div>
+      </StatGrid>
 
       {/* Service heartbeats */}
       <section
