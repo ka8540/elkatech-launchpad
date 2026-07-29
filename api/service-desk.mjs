@@ -97893,7 +97893,13 @@ var coerce = {
 var NEVER = INVALID;
 
 // packages/contracts/src/index.ts
-var roleSchema = external_exports.enum(["customer", "engineer", "admin"]);
+var roleSchema = external_exports.enum(["customer", "engineer", "support", "owner", "admin"]);
+function canManageOperational(role) {
+  return role === "admin" || role === "owner";
+}
+function canAssignRequests(role) {
+  return role === "admin" || role === "owner" || role === "support";
+}
 var requestPrioritySchema = external_exports.enum(["low", "normal", "high", "urgent"]);
 var requestStatusSchema = external_exports.enum([
   "new",
@@ -98048,7 +98054,7 @@ var verifyEmailInputSchema = external_exports.object({
 var inviteUserInputSchema = external_exports.object({
   email: external_exports.string().email(),
   displayName: external_exports.string().min(2),
-  role: external_exports.enum(["customer", "engineer", "admin"])
+  role: roleSchema
 });
 var changeUserRoleInputSchema = external_exports.object({
   role: roleSchema
@@ -100999,8 +101005,8 @@ function addressSummary(profile) {
   const cityState = [profile.city, profile.state].map((v) => v?.trim()).filter(Boolean).join(", ");
   return [profile.addressLine1?.trim(), cityState].filter(Boolean).join(", ").trim();
 }
-function ensureAdmin(actor, reply) {
-  if (actor.role !== "admin") {
+function ensureOperational(actor, reply) {
+  if (!canManageOperational(actor.role)) {
     reply.code(403).send({ message: "Forbidden" });
     return false;
   }
@@ -101601,7 +101607,7 @@ app.post("/requests/:requestId/assign", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (actor.role !== "admin") {
+  if (!canAssignRequests(actor.role)) {
     return reply.code(403).send({ message: "Forbidden" });
   }
   const paramsSchema = external_exports.object({ requestId: external_exports.string().uuid() });
@@ -101815,7 +101821,7 @@ app.get("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const rows = await sql`
     select *
@@ -101830,7 +101836,7 @@ app.post("/admin/customers/:customerId/machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = customerParamSchema.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
   const customerError = await customerAssignmentError(params.customerId);
@@ -101857,7 +101863,7 @@ app.get("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const query = adminMachineListQuerySchema.parse(request.query);
   const rows = await sql`
     select *
@@ -101874,7 +101880,7 @@ app.post("/admin/customer-machines", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const input = adminLinkMachineInputSchema.parse(request.body);
   const customerError = await customerAssignmentError(input.customerId);
   if (customerError) {
@@ -101901,7 +101907,7 @@ app.patch("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
   const existing = await getMachineById(params.machineId);
@@ -101949,7 +101955,7 @@ app.delete("/admin/machines/:machineId", async (request, reply) => {
     return reply.code(401).send({ message: "Unauthorized" });
   }
   const actor = getUserContext(request.headers);
-  if (!ensureAdmin(actor, reply)) return;
+  if (!ensureOperational(actor, reply)) return;
   const params = machineParamSchema.parse(request.params);
   const existing = await getMachineById(params.machineId);
   if (!existing) {
@@ -102109,6 +102115,100 @@ app.get("/requests/:requestId/attachments", async (request, reply) => {
       });
     })
   );
+});
+app.get("/internal/customer-activity", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const perCustomer = await sql`
+    select
+      customer_id,
+      count(*)::int as total_requests,
+      count(*) filter (where status not in ('resolved', 'closed'))::int as open_requests,
+      count(*) filter (where status = 'resolved')::int as resolved_requests,
+      count(*) filter (where status = 'waiting_for_customer')::int as pending_requests,
+      max(updated_at) as last_activity
+    from service_desk.requests
+    group by customer_id
+  `;
+  const latest = await sql`
+    select distinct on (customer_id)
+      customer_id, subject, status, created_at
+    from service_desk.requests
+    order by customer_id, created_at desc
+  `;
+  const machines = await sql`
+    select customer_id, count(*)::int as machine_count
+    from service_desk.customer_machines
+    where status = 'active'
+    group by customer_id
+  `;
+  const latestById = new Map(latest.map((r5) => [r5.customer_id, r5]));
+  const machinesById = new Map(machines.map((r5) => [r5.customer_id, r5.machine_count]));
+  const customers = perCustomer.map((r5) => {
+    const latestRow = latestById.get(r5.customer_id);
+    return {
+      customerId: r5.customer_id,
+      totalRequests: r5.total_requests,
+      openRequests: r5.open_requests,
+      resolvedRequests: r5.resolved_requests,
+      pendingRequests: r5.pending_requests,
+      machineCount: machinesById.get(r5.customer_id) ?? 0,
+      lastActivity: r5.last_activity ? new Date(r5.last_activity).toISOString() : null,
+      latestSubject: latestRow?.subject ?? null,
+      latestStatus: latestRow?.status ?? null,
+      latestAt: latestRow?.created_at ? new Date(latestRow.created_at).toISOString() : null
+    };
+  });
+  for (const m3 of machines) {
+    if (!customers.some((c5) => c5.customerId === m3.customer_id)) {
+      customers.push({
+        customerId: m3.customer_id,
+        totalRequests: 0,
+        openRequests: 0,
+        resolvedRequests: 0,
+        pendingRequests: 0,
+        machineCount: m3.machine_count,
+        lastActivity: null,
+        latestSubject: null,
+        latestStatus: null,
+        latestAt: null
+      });
+    }
+  }
+  return { customers };
+});
+app.get("/internal/customer-activity/:customerId", async (request, reply) => {
+  if (!ensureInternal(request.headers)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const params = external_exports.object({ customerId: external_exports.string().uuid() }).parse(request.params);
+  const requestRows = await sql`
+    select *
+    from service_desk.requests
+    where customer_id = ${params.customerId}
+    order by created_at desc
+  `;
+  const machineRows = await sql`
+    select *
+    from service_desk.customer_machines
+    where customer_id = ${params.customerId}
+    order by updated_at desc
+  `;
+  const stats = {
+    totalRequests: requestRows.length,
+    openRequests: requestRows.filter(
+      (r5) => r5.status !== "resolved" && r5.status !== "closed"
+    ).length,
+    pendingRequests: requestRows.filter((r5) => r5.status === "waiting_for_customer").length,
+    resolvedRequests: requestRows.filter((r5) => r5.status === "resolved").length,
+    machineCount: machineRows.filter((r5) => r5.status === "active").length
+  };
+  return {
+    stats,
+    requests: requestRows.map(mapRequestRow),
+    machines: machineRows.map(mapMachineRow)
+  };
 });
 var port = Number(new URL(env2.SERVICE_DESK_URL).port || "4003");
 if (!process.env.VERCEL) {

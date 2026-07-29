@@ -43427,7 +43427,7 @@ var require_parse_url = __commonJS({
 var require_form_data = __commonJS({
   "node_modules/light-my-request/lib/form-data.js"(exports, module) {
     "use strict";
-    var { randomUUID: randomUUID2 } = __require("node:crypto");
+    var { randomUUID: randomUUID3 } = __require("node:crypto");
     var { Readable: Readable6 } = __require("node:stream");
     var textEncoder;
     function isFormDataLike(payload2) {
@@ -43435,7 +43435,7 @@ var require_form_data = __commonJS({
     }
     function formDataToStream(formdata) {
       textEncoder = textEncoder ?? new TextEncoder();
-      const boundary = `----formdata-${randomUUID2()}`;
+      const boundary = `----formdata-${randomUUID3()}`;
       const prefix = `--${boundary}\r
 Content-Disposition: form-data`;
       const escape3 = (str) => str.replace(/\n/g, "%0A").replace(/\r/g, "%0D").replace(/"/g, "%22");
@@ -78308,7 +78308,7 @@ var init_constants4 = __esm({
     TRANSIENT_ERROR_CODES = ["TimeoutError", "RequestTimeout", "RequestTimeoutException"];
     TRANSIENT_ERROR_STATUS_CODES = [500, 502, 503, 504];
     NODEJS_TIMEOUT_ERROR_CODES = ["ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"];
-    NODEJS_NETWORK_ERROR_CODES = ["EHOSTUNREACH", "ENETUNREACH", "ENOTFOUND"];
+    NODEJS_NETWORK_ERROR_CODES = ["EHOSTUNREACH", "ENETUNREACH", "ENOTFOUND", "EAI_AGAIN"];
   }
 });
 
@@ -78470,9 +78470,6 @@ function bindRetryMiddleware(isStreamingPayload2) {
           try {
             retryToken = await retryStrategy.refreshRetryTokenForRetry(retryToken, retryErrorInfo);
           } catch (refreshError) {
-            if (typeof refreshError.$backoff === "number") {
-              await cooldown(refreshError.$backoff);
-            }
             if (!lastError.$metadata) {
               lastError.$metadata = {};
             }
@@ -78482,8 +78479,10 @@ function bindRetryMiddleware(isStreamingPayload2) {
           }
           attempts = retryToken.getRetryCount();
           const delay = retryToken.getRetryDelay();
-          totalRetryDelay += delay;
-          await cooldown(delay);
+          totalRetryDelay += (retryToken?.$retryLog?.acquisitionDelay ?? 0) + delay;
+          if (delay > 0) {
+            await cooldown(delay);
+          }
         }
       }
     } else {
@@ -78718,6 +78717,9 @@ var init_DefaultRetryToken = __esm({
       count;
       cost;
       longPoll;
+      $retryLog = {
+        acquisitionDelay: 0
+      };
       constructor(delay, count, cost, longPoll) {
         this.delay = delay;
         this.count = count;
@@ -78769,8 +78771,8 @@ var init_StandardRetryStrategy = __esm({
     };
     StandardRetryStrategy = class {
       mode = RETRY_MODES.STANDARD;
-      capacity = INITIAL_RETRY_TOKENS;
       retryBackoffStrategy;
+      capacity = INITIAL_RETRY_TOKENS;
       maxAttemptsProvider;
       baseDelay;
       constructor(arg1) {
@@ -78804,13 +78806,17 @@ var init_StandardRetryStrategy = __esm({
             retryDelay = Math.max(delayFromErrorType, Math.min(errorInfo.retryAfterHint.getTime() - Date.now(), delayFromErrorType + 5e3));
           }
           if (!shouldRetry) {
-            throw Object.assign(new Error("No retry token available"), {
-              $backoff: Retry.v2026 && retryCode === refusal.capacity && isLongPoll ? retryDelay : 0
-            });
+            const longPollBackoff = Retry.v2026 && retryCode === refusal.capacity && isLongPoll ? retryDelay : 0;
+            if (longPollBackoff > 0) {
+              await new Promise((r5) => setTimeout(r5, longPollBackoff));
+            }
           } else {
             const capacityCost = this.getCapacityCost(errorType);
             this.capacity -= capacityCost;
-            return new DefaultRetryToken(retryDelay, token.getRetryCount() + 1, capacityCost, token.isLongPoll?.() ?? false);
+            const nextToken = new DefaultRetryToken(0, token.getRetryCount() + 1, capacityCost, token.isLongPoll?.() ?? false);
+            await new Promise((r5) => setTimeout(r5, retryDelay));
+            nextToken.$retryLog.acquisitionDelay = retryDelay;
+            return nextToken;
           }
         }
         throw new Error("No retry token available");
@@ -78905,11 +78911,10 @@ var init_ConfiguredRetryStrategy = __esm({
         } else {
           this.computeNextBackoffDelay = computeNextBackoffDelay;
         }
-      }
-      async refreshRetryTokenForRetry(tokenToRenew, errorInfo) {
-        const token = await super.refreshRetryTokenForRetry(tokenToRenew, errorInfo);
-        token.getRetryDelay = () => this.computeNextBackoffDelay(token.getRetryCount());
-        return token;
+        this.retryBackoffStrategy.computeNextBackoffDelay = (completedAttempt) => {
+          const nextAttempt = completedAttempt + 1;
+          return this.computeNextBackoffDelay(nextAttempt);
+        };
       }
     };
   }
@@ -79109,6 +79114,7 @@ var init_configurations = __esm({
     init_AdaptiveRetryStrategy();
     init_StandardRetryStrategy();
     init_config3();
+    init_retries_2026_config();
     ENV_MAX_ATTEMPTS = "AWS_MAX_ATTEMPTS";
     CONFIG_MAX_ATTEMPTS = "max_attempts";
     NODE_MAX_ATTEMPT_CONFIG_OPTIONS = {
@@ -79134,13 +79140,27 @@ var init_configurations = __esm({
       },
       default: DEFAULT_MAX_ATTEMPTS
     };
-    resolveRetryConfig = (input) => {
+    resolveRetryConfig = (input, defaults) => {
       const { retryStrategy, retryMode } = input;
-      const maxAttempts = normalizeProvider(input.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
+      const { defaultMaxAttempts = DEFAULT_MAX_ATTEMPTS, defaultBaseDelay = Retry.delay() } = defaults ?? {};
+      const maxAttemptsProvider = normalizeProvider(input.maxAttempts ?? defaultMaxAttempts);
       let controller = retryStrategy ? Promise.resolve(retryStrategy) : void 0;
-      const getDefault = async () => await normalizeProvider(retryMode)() === RETRY_MODES.ADAPTIVE ? new AdaptiveRetryStrategy(maxAttempts) : new StandardRetryStrategy(maxAttempts);
+      const getDefault = async () => {
+        const maxAttempts = await maxAttemptsProvider();
+        const adaptive = await normalizeProvider(retryMode)() === RETRY_MODES.ADAPTIVE;
+        if (adaptive) {
+          return new AdaptiveRetryStrategy(maxAttemptsProvider, {
+            maxAttempts,
+            baseDelay: defaultBaseDelay
+          });
+        }
+        return new StandardRetryStrategy({
+          maxAttempts,
+          baseDelay: defaultBaseDelay
+        });
+      };
       return Object.assign(input, {
-        maxAttempts,
+        maxAttempts: maxAttemptsProvider,
         retryStrategy: () => controller ??= getDefault()
       });
     };
@@ -81753,6 +81773,7 @@ var init_AwsSdkSigV4Signer = __esm({
             signingName = second?.signingName ?? signingName;
           }
         }
+        signingProperties._preRequestSystemClockOffset = config.systemClockOffset;
         const signedRequest = await signer.sign(httpRequest, {
           signingDate: getSkewCorrectedDate(config.systemClockOffset),
           signingRegion,
@@ -81762,14 +81783,18 @@ var init_AwsSdkSigV4Signer = __esm({
       }
       errorHandler(signingProperties) {
         return (error2) => {
-          const serverTime = error2.ServerTime ?? getDateHeader(error2.$response);
+          const errorException = error2;
+          const serverTime = errorException.ServerTime ?? getDateHeader(errorException.$response);
           if (serverTime) {
             const config = throwSigningPropertyError("config", signingProperties.config);
-            const initialSystemClockOffset = config.systemClockOffset;
-            config.systemClockOffset = getUpdatedSystemClockOffset(serverTime, config.systemClockOffset);
-            const clockSkewCorrected = config.systemClockOffset !== initialSystemClockOffset;
-            if (clockSkewCorrected && error2.$metadata) {
-              error2.$metadata.clockSkewCorrected = true;
+            const preRequestOffset = signingProperties._preRequestSystemClockOffset;
+            const newOffset = getUpdatedSystemClockOffset(serverTime, config.systemClockOffset);
+            const isLocalCorrection = newOffset !== config.systemClockOffset;
+            const isConcurrentCorrection = preRequestOffset !== void 0 && preRequestOffset !== newOffset;
+            const clockSkewCorrected = isLocalCorrection || isConcurrentCorrection;
+            if (clockSkewCorrected && errorException.$metadata) {
+              config.systemClockOffset = newOffset;
+              errorException.$metadata.clockSkewCorrected = true;
             }
           }
           throw error2;
@@ -81802,6 +81827,7 @@ var init_AwsSdkSigV4ASigner = __esm({
         const { config, signer, signingRegion, signingRegionSet, signingName } = await validateSigningProperties(signingProperties);
         const configResolvedSigningRegionSet = await config.sigv4aSigningRegionSet?.();
         const multiRegionOverride = (configResolvedSigningRegionSet ?? signingRegionSet ?? [signingRegion]).join(",");
+        signingProperties._preRequestSystemClockOffset = config.systemClockOffset;
         const signedRequest = await signer.sign(httpRequest, {
           signingDate: getSkewCorrectedDate(config.systemClockOffset),
           signingRegion: multiRegionOverride,
@@ -98543,7 +98569,7 @@ var require_dist_cjs19 = __commonJS({
 // services/notification/src/index.ts
 var import_fastify = __toESM(require_fastify(), 1);
 var import_nodemailer = __toESM(require_nodemailer(), 1);
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // packages/config/src/crypto.ts
 import { createHash, randomBytes } from "node:crypto";
@@ -104750,6 +104776,11 @@ var envSchema = external_exports.object({
   SESSION_TTL_HOURS: external_exports.coerce.number().int().positive().default(720),
   SMTP_HOST: external_exports.string().default("127.0.0.1"),
   SMTP_PORT: external_exports.coerce.number().int().positive().default(1025),
+  // Optional SMTP credentials. Set both when using a relay like Resend,
+  // SendGrid, Postmark, Brevo, or Gmail SMTPS. Leave unset for local
+  // Mailpit which doesn't require auth.
+  SMTP_USER: external_exports.string().optional(),
+  SMTP_PASS: external_exports.string().optional(),
   // Nodemailer accepts both bare emails ("a@b.com") and addresses with a
   // display name ("Name <a@b.com>"), so we only require a non-empty string.
   SMTP_FROM: external_exports.string().min(3).default("no-reply@elkatech.local"),
@@ -104770,7 +104801,24 @@ var envSchema = external_exports.object({
   AWS_SECRET_ACCESS_KEY: external_exports.string().optional(),
   SES_FROM_EMAIL: external_exports.string().optional(),
   SES_ACCOUNT_ADDED_TEMPLATE: external_exports.string().default("ElkaTechAccountAdded"),
-  SES_REQUEST_CLAIMED_TEMPLATE: external_exports.string().default("ElkaTechRequestClaimed")
+  SES_REQUEST_CLAIMED_TEMPLATE: external_exports.string().default("ElkaTechRequestClaimed"),
+  // ─── Cloudflare R2 (request attachment storage) ──────────────────────────
+  // S3-compatible object storage. When all four required vars are set, the
+  // service-desk issues presigned upload/download URLs so the browser uploads
+  // photos/videos straight to R2 (never through the serverless function).
+  // Leave unset to disable attachments cleanly. R2_PUBLIC_BASE_URL is optional
+  // and only used when the bucket is intentionally public; otherwise reads use
+  // short-lived signed GET URLs.
+  R2_ACCOUNT_ID: external_exports.string().optional(),
+  R2_ACCESS_KEY_ID: external_exports.string().optional(),
+  R2_SECRET_ACCESS_KEY: external_exports.string().optional(),
+  R2_BUCKET_NAME: external_exports.string().optional(),
+  R2_ENDPOINT: external_exports.string().optional(),
+  R2_PUBLIC_BASE_URL: external_exports.string().optional(),
+  MAX_REQUEST_ATTACHMENT_MB: external_exports.coerce.number().int().positive().default(25),
+  ALLOWED_REQUEST_ATTACHMENT_TYPES: external_exports.string().default(
+    "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm"
+  )
 });
 var cachedEnv = null;
 function getEnv() {
@@ -104806,6 +104854,9 @@ function getDb() {
   }
   return sqlClient;
 }
+
+// packages/config/src/r2.ts
+import { randomUUID } from "node:crypto";
 
 // packages/config/src/redis.ts
 var import_ioredis = __toESM(require_built3(), 1);
@@ -104934,7 +104985,10 @@ function buildSesSends(eventType, payload2) {
 var transporter = import_nodemailer.default.createTransport({
   host: env2.SMTP_HOST,
   port: env2.SMTP_PORT,
-  secure: false
+  // Port 465 → implicit TLS (Resend production, Gmail SMTPS).
+  // Port 587/25/1025 → STARTTLS or plaintext (Mailpit dev).
+  secure: env2.SMTP_PORT === 465,
+  auth: env2.SMTP_USER && env2.SMTP_PASS ? { user: env2.SMTP_USER, pass: env2.SMTP_PASS } : void 0
 });
 function buildEmails(eventType, payload2) {
   switch (eventType) {
@@ -105100,7 +105154,7 @@ async function processOutbox(schemaName, tableName, serviceName) {
                 id, event_id, event_type, recipient_email, subject, status, sent_at
               )
               values (
-                ${randomUUID()}, ${row.id}, ${row.event_type},
+                ${randomUUID2()}, ${row.id}, ${row.event_type},
                 ${outcome.to}, ${outcome.subject}, ${"sent"}, now()
               )
               on conflict (event_id, recipient_email)
@@ -105116,7 +105170,7 @@ async function processOutbox(schemaName, tableName, serviceName) {
                 id, event_id, event_type, recipient_email, subject, status, last_error
               )
               values (
-                ${randomUUID()}, ${row.id}, ${row.event_type},
+                ${randomUUID2()}, ${row.id}, ${row.event_type},
                 ${outcome.to}, ${outcome.subject}, ${"failed"}, ${outcome.error}
               )
               on conflict (event_id, recipient_email)
@@ -105141,7 +105195,7 @@ async function processOutbox(schemaName, tableName, serviceName) {
           id, event_id, event_type, recipient_email, subject, status, last_error
         )
         values (
-          ${randomUUID()}, ${row.id}, ${row.event_type},
+          ${randomUUID2()}, ${row.id}, ${row.event_type},
           ${fallbackTo}, ${fallbackSubject}, ${"failed"}, ${message}
         )
         on conflict (event_id, recipient_email)

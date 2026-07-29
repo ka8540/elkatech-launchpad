@@ -99136,7 +99136,44 @@ var coerce = {
 var NEVER = INVALID;
 
 // packages/contracts/src/index.ts
-var roleSchema = external_exports.enum(["customer", "engineer", "admin"]);
+var roleSchema = external_exports.enum(["customer", "engineer", "support", "owner", "admin"]);
+function canDeleteUsers(role) {
+  return role === "admin";
+}
+function canApproveUsers(role) {
+  return role === "admin" || role === "owner";
+}
+function canSuspendUsers(role) {
+  return role === "admin" || role === "owner";
+}
+function canChangeRoles(role) {
+  return role === "admin" || role === "owner";
+}
+function canManageUsers(role) {
+  return role === "admin" || role === "owner";
+}
+function canManageOperational(role) {
+  return role === "admin" || role === "owner";
+}
+function canAssignRequests(role) {
+  return role === "admin" || role === "owner" || role === "support";
+}
+function canCreateRequestForCustomer(role) {
+  return role === "admin" || role === "owner" || role === "support";
+}
+function canViewCustomerActivity(role) {
+  return role === "admin" || role === "owner" || role === "support";
+}
+function assignableRolesFor(actor) {
+  if (actor === "admin") return ["customer", "engineer", "support", "owner", "admin"];
+  if (actor === "owner") return ["customer", "engineer", "support", "owner"];
+  return [];
+}
+function canManageTargetUser(actorRole, targetRole) {
+  if (actorRole === "admin") return true;
+  if (actorRole === "owner") return targetRole !== "admin";
+  return false;
+}
 var requestPrioritySchema = external_exports.enum(["low", "normal", "high", "urgent"]);
 var requestStatusSchema = external_exports.enum([
   "new",
@@ -99281,7 +99318,7 @@ var verifyEmailInputSchema = external_exports.object({
 var inviteUserInputSchema = external_exports.object({
   email: external_exports.string().email(),
   displayName: external_exports.string().min(2),
-  role: external_exports.enum(["customer", "engineer", "admin"])
+  role: roleSchema
 });
 var changeUserRoleInputSchema = external_exports.object({
   role: roleSchema
@@ -101912,6 +101949,10 @@ await app.register(import_rate_limit.default, {
   max: 10,
   timeWindow: "1 minute"
 });
+function forbidden(reply, message = "You do not have permission to perform this action.") {
+  return reply.code(403).send({ message });
+}
+var PORTAL_ROLES = ["customer", "engineer", "support", "owner", "admin"];
 function getSessionCookie(request) {
   return request.cookies[env.SESSION_COOKIE_NAME];
 }
@@ -101981,6 +102022,17 @@ function userHeaders(user) {
     "x-user-role": user.role,
     "x-user-display-name": user.displayName
   });
+}
+async function getTargetUserRole(userId) {
+  try {
+    const user = await fetchJson(
+      `${env.AUTH_SERVICE_URL}/internal/users/${userId}`,
+      { headers: internalHeaders() }
+    );
+    return user.role ?? null;
+  } catch {
+    return null;
+  }
 }
 app.get("/health", async () => ({
   ok: true,
@@ -102331,7 +102383,13 @@ function assertApproved(reply, user) {
   return false;
 }
 app.post("/api/requests", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, [
+    "customer",
+    "engineer",
+    "support",
+    "owner",
+    "admin"
+  ]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   if (!assertApproved(reply, session.user)) return;
@@ -102367,7 +102425,7 @@ app.get("/api/me/machines", async (request, reply) => {
   }
 });
 app.get("/api/requests", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
   const queryString = request.url.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
   return fetchJson(`${env.SERVICE_DESK_URL}/requests${queryString}`, {
@@ -102375,7 +102433,7 @@ app.get("/api/requests", async (request, reply) => {
   });
 });
 app.get("/api/requests/:requestId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
@@ -102395,7 +102453,7 @@ app.patch("/api/requests/:requestId", async (request, reply) => {
   });
 });
 app.post("/api/requests/:requestId/messages", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
@@ -102430,8 +102488,9 @@ app.post("/api/requests/:requestId/claim", async (request, reply) => {
   }
 });
 app.post("/api/requests/:requestId/assign", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
   if (!session) return;
+  if (!canAssignRequests(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const params = external_exports.object({ requestId: external_exports.string().uuid() }).parse(request.params);
   const input = external_exports.object({ engineerId: external_exports.string().uuid() }).parse(request.body);
@@ -102528,7 +102587,7 @@ app.post("/api/requests/:requestId/attachments", async (request, reply) => {
   }
 });
 app.get("/api/requests/:requestId/attachments", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
   const { requestId } = attachmentRequestParams.parse(request.params);
   try {
@@ -102540,8 +102599,9 @@ app.get("/api/requests/:requestId/attachments", async (request, reply) => {
   }
 });
 app.get("/api/admin/users", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageUsers(session.user.role)) return forbidden(reply);
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users`, {
     headers: internalHeaders()
   });
@@ -102549,8 +102609,9 @@ app.get("/api/admin/users", async (request, reply) => {
 var adminMachineUserParams = external_exports.object({ userId: external_exports.string().uuid() });
 var adminMachineParams = external_exports.object({ machineId: external_exports.string().uuid() });
 app.get("/api/admin/users/:userId/machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   const { userId } = adminMachineUserParams.parse(request.params);
   try {
     return await fetchJson(`${env.SERVICE_DESK_URL}/admin/customers/${userId}/machines`, {
@@ -102561,8 +102622,9 @@ app.get("/api/admin/users/:userId/machines", async (request, reply) => {
   }
 });
 app.post("/api/admin/users/:userId/machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = adminMachineUserParams.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
@@ -102577,8 +102639,9 @@ app.post("/api/admin/users/:userId/machines", async (request, reply) => {
   }
 });
 app.patch("/api/admin/machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
@@ -102593,8 +102656,9 @@ app.patch("/api/admin/machines/:machineId", async (request, reply) => {
   }
 });
 app.delete("/api/admin/machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   try {
@@ -102607,8 +102671,9 @@ app.delete("/api/admin/machines/:machineId", async (request, reply) => {
   }
 });
 app.get("/api/admin/customer-machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   const query = adminMachineListQuerySchema.parse(request.query ?? {});
   const params = new URLSearchParams();
   if (query.customerId) params.set("customerId", query.customerId);
@@ -102625,8 +102690,9 @@ app.get("/api/admin/customer-machines", async (request, reply) => {
   }
 });
 app.post("/api/admin/customer-machines", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const input = adminLinkMachineInputSchema.parse(request.body);
   try {
@@ -102640,8 +102706,9 @@ app.post("/api/admin/customer-machines", async (request, reply) => {
   }
 });
 app.patch("/api/admin/customer-machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
@@ -102656,8 +102723,9 @@ app.patch("/api/admin/customer-machines/:machineId", async (request, reply) => {
   }
 });
 app.delete("/api/admin/customer-machines/:machineId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   try {
@@ -102670,10 +102738,14 @@ app.delete("/api/admin/customer-machines/:machineId", async (request, reply) => 
   }
 });
 app.post("/api/admin/users/invite", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageUsers(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const input = inviteUserInputSchema.parse(request.body);
+  if (!assignableRolesFor(session.user.role).includes(input.role)) {
+    return forbidden(reply, "You are not allowed to invite a user with that role.");
+  }
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/invite`, {
     method: "POST",
     headers: internalHeaders({
@@ -102685,10 +102757,17 @@ app.post("/api/admin/users/invite", async (request, reply) => {
 });
 var approvalUserParams = external_exports.object({ userId: external_exports.string().uuid() });
 async function forwardApprovalAction(request, reply, action) {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  const needsApprove = action === "approve" || action === "reject";
+  const allowed = needsApprove ? canApproveUsers(session.user.role) : canSuspendUsers(session.user.role);
+  if (!allowed) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
+  const targetRole = await getTargetUserRole(userId);
+  if (targetRole && !canManageTargetUser(session.user.role, targetRole)) {
+    return forbidden(reply, "You cannot modify an administrator account.");
+  }
   const body = approvalActionInputSchema.parse(request.body ?? {});
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/${action}`, {
     method: "POST",
@@ -102713,11 +102792,19 @@ app.post(
   (request, reply) => forwardApprovalAction(request, reply, "reactivate")
 );
 app.post("/api/admin/users/:userId/role", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canChangeRoles(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
-  const input = external_exports.object({ role: external_exports.enum(["customer", "engineer", "admin"]) }).parse(request.body);
+  const input = external_exports.object({ role: roleSchema }).parse(request.body);
+  if (!assignableRolesFor(session.user.role).includes(input.role)) {
+    return forbidden(reply, "You are not allowed to assign that role.");
+  }
+  const targetRole = await getTargetUserRole(userId);
+  if (targetRole && !canManageTargetUser(session.user.role, targetRole)) {
+    return forbidden(reply, "You cannot modify an administrator account.");
+  }
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/role`, {
     method: "POST",
     headers: internalHeaders({ "x-user-id": session.user.id }),
@@ -102725,8 +102812,11 @@ app.post("/api/admin/users/:userId/role", async (request, reply) => {
   });
 });
 app.delete("/api/admin/users/:userId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
   if (!session) return;
+  if (!canDeleteUsers(session.user.role)) {
+    return forbidden(reply, "Only admins can permanently delete user data.");
+  }
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
   try {
@@ -102822,6 +102912,124 @@ app.get("/api/admin/users/summary", async (request, reply) => {
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/summary`, {
     headers: internalHeaders()
   });
+});
+app.get("/api/customer-activity", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canViewCustomerActivity(session.user.role)) return forbidden(reply);
+  const [customers, activity] = await Promise.all([
+    fetchJson(`${env.AUTH_SERVICE_URL}/internal/users?role=customer`, {
+      headers: internalHeaders()
+    }),
+    fetchJson(`${env.SERVICE_DESK_URL}/internal/customer-activity`, {
+      headers: internalHeaders()
+    })
+  ]);
+  const activityById = new Map(activity.customers.map((c) => [c.customerId, c]));
+  const rows = customers.map((u) => {
+    const a = activityById.get(u.id);
+    return {
+      id: u.id,
+      displayName: u.displayName,
+      email: u.email,
+      approvalStatus: u.approvalStatus,
+      createdAt: u.createdAt,
+      totalRequests: a?.totalRequests ?? 0,
+      openRequests: a?.openRequests ?? 0,
+      pendingRequests: a?.pendingRequests ?? 0,
+      resolvedRequests: a?.resolvedRequests ?? 0,
+      machineCount: a?.machineCount ?? 0,
+      lastActivity: a?.lastActivity ?? null,
+      latestSubject: a?.latestSubject ?? null,
+      latestStatus: a?.latestStatus ?? null,
+      latestAt: a?.latestAt ?? null
+    };
+  });
+  const summary = {
+    totalCustomers: rows.length,
+    activeCustomers: rows.filter((r) => r.approvalStatus === "approved").length,
+    openRequests: rows.reduce((s, r) => s + r.openRequests, 0),
+    pendingRequests: rows.reduce((s, r) => s + r.pendingRequests, 0),
+    resolvedRequests: rows.reduce((s, r) => s + r.resolvedRequests, 0),
+    customersWithMachines: rows.filter((r) => r.machineCount > 0).length
+  };
+  return { summary, customers: rows };
+});
+app.get("/api/customer-activity/:customerId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canViewCustomerActivity(session.user.role)) return forbidden(reply);
+  const { customerId } = external_exports.object({ customerId: external_exports.string().uuid() }).parse(request.params);
+  const [profileBundle, detail] = await Promise.all([
+    fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${customerId}/profile`, {
+      headers: internalHeaders()
+    }),
+    fetchJson(`${env.SERVICE_DESK_URL}/internal/customer-activity/${customerId}`, {
+      headers: internalHeaders()
+    })
+  ]);
+  return {
+    customer: profileBundle.user,
+    profile: profileBundle.profile,
+    stats: detail.stats,
+    requests: detail.requests,
+    machines: detail.machines
+  };
+});
+app.get("/api/support/summary", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canViewCustomerActivity(session.user.role)) return forbidden(reply);
+  const requests = await fetchJson(`${env.SERVICE_DESK_URL}/requests`, {
+    headers: userHeaders(session.user)
+  });
+  const byStatus = (s) => requests.filter((r) => r.status === s).length;
+  return {
+    queued: byStatus("new") + byStatus("triaged"),
+    assigned: byStatus("assigned"),
+    inProgress: byStatus("in_progress"),
+    waitingForCustomer: byStatus("waiting_for_customer"),
+    resolved: byStatus("resolved"),
+    closed: byStatus("closed"),
+    unassigned: requests.filter((r) => !r.assignedEngineerId && r.status !== "closed").length,
+    total: requests.length
+  };
+});
+app.get("/api/staff/customers", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canCreateRequestForCustomer(session.user.role)) return forbidden(reply);
+  const users = await fetchJson(
+    `${env.AUTH_SERVICE_URL}/internal/users?role=customer`,
+    { headers: internalHeaders() }
+  );
+  return users.map((u) => ({
+    id: u.id,
+    displayName: u.displayName,
+    email: u.email,
+    approvalStatus: u.approvalStatus
+  }));
+});
+app.get("/api/staff/customers/:customerId/machines", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canCreateRequestForCustomer(session.user.role)) return forbidden(reply);
+  const { customerId } = external_exports.object({ customerId: external_exports.string().uuid() }).parse(request.params);
+  const detail = await fetchJson(
+    `${env.SERVICE_DESK_URL}/internal/customer-activity/${customerId}`,
+    { headers: internalHeaders() }
+  );
+  return detail.machines.filter((m) => m.status === "active");
+});
+app.get("/api/engineers", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canAssignRequests(session.user.role)) return forbidden(reply);
+  const users = await fetchJson(
+    `${env.AUTH_SERVICE_URL}/internal/users?role=engineer`,
+    { headers: internalHeaders() }
+  );
+  return users.map((u) => ({ id: u.id, displayName: u.displayName, email: u.email }));
 });
 var port = Number(new URL(env.GATEWAY_URL).port || "4000");
 if (!process.env.VERCEL) {

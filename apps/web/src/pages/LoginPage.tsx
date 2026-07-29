@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
+import { landingPathForUser } from "@/lib/portal-landing";
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   google_oauth_failed: "Google sign-in failed. Please try again or continue with email.",
@@ -43,14 +44,6 @@ function describeFirebaseError(error: unknown): string {
 function isLegacyFallbackError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return /auth\/(user-not-found|invalid-credential|wrong-password|invalid-login-credentials)/i.test(message);
-}
-
-function landingPathForUser(user: AuthUser, next: string): string {
-  // Customers must finish onboarding before anything else.
-  if (user.role === "customer" && !user.profileCompleted) return "/app/complete-profile";
-  if (next) return next;
-  if (user.role === "customer") return "/app/requests";
-  return "/app/queue";
 }
 
 const LoginPage = () => {
@@ -226,7 +219,7 @@ const LoginPage = () => {
             value={form.email}
             onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
             placeholder="you@company.com"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <div>
@@ -236,7 +229,7 @@ const LoginPage = () => {
             value={form.password}
             onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
             placeholder="Enter your password"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loginMutation.isPending}>

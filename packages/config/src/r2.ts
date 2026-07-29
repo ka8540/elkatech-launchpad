@@ -81,6 +81,23 @@ export function isAllowedAttachmentType(contentType: string): boolean {
   return allowedAttachmentTypes().includes(contentType.trim().toLowerCase());
 }
 
+/** Maximum allowed issue-report attachment size in bytes. */
+export function maxReportAttachmentBytes(): number {
+  return getEnv().MAX_REPORT_ATTACHMENT_MB * 1024 * 1024;
+}
+
+/** Allowed issue-report upload content types (lowercased), from env. */
+export function allowedReportAttachmentTypes(): string[] {
+  return getEnv()
+    .ALLOWED_REPORT_ATTACHMENT_TYPES.split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isAllowedReportAttachmentType(contentType: string): boolean {
+  return allowedReportAttachmentTypes().includes(contentType.trim().toLowerCase());
+}
+
 /** Map a content type to the coarse attachment kind stored in the DB. */
 export function attachmentKindFor(contentType: string): "image" | "video" | null {
   const ct = contentType.trim().toLowerCase();
@@ -104,6 +121,12 @@ export function buildAttachmentObjectKey(requestId: string, fileName: string): s
   return `service-requests/${requestId}/${randomUUID()}-${safeFileName(fileName)}`;
 }
 
+/** Object key for issue-report evidence:
+ *  issue-reports/{reportId}/{uuid}-{safeFilename} */
+export function buildReportAttachmentObjectKey(reportId: string, fileName: string): string {
+  return `issue-reports/${reportId}/${randomUUID()}-${safeFileName(fileName)}`;
+}
+
 /** A presigned PUT the browser uses to upload bytes straight to R2. The PUT
  *  must carry the same Content-Type that was signed. */
 export async function presignAttachmentUpload(params: {
@@ -123,14 +146,23 @@ export async function presignAttachmentUpload(params: {
   return { uploadUrl, headers: { "Content-Type": params.contentType } };
 }
 
-/** A read URL for an attachment. Uses the public base URL when the bucket is
- *  intentionally public, otherwise a short-lived signed GET URL. */
+/**
+ * A read URL for an attachment. Uses the public base URL when the bucket is
+ * intentionally public, otherwise a short-lived signed GET URL.
+ *
+ * `forceSigned` opts out of the public base URL entirely and always returns an
+ * expiring signed URL. Issue-report evidence uses it: a permanent public URL
+ * would be a durable, shareable handle on a customer's screenshot, which the
+ * reports feature must never hand out even when the bucket happens to be
+ * public. Request attachments keep the existing behaviour.
+ */
 export async function attachmentReadUrl(params: {
   objectKey: string;
   fileName?: string;
+  forceSigned?: boolean;
 }): Promise<string> {
   const env = getEnv();
-  if (env.R2_PUBLIC_BASE_URL) {
+  if (env.R2_PUBLIC_BASE_URL && !params.forceSigned) {
     return `${env.R2_PUBLIC_BASE_URL.replace(/\/$/, "")}/${params.objectKey}`;
   }
   const client = getR2Client();

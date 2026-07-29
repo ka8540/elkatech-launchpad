@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
@@ -16,12 +16,14 @@ import {
   Search,
   Users,
   Wrench,
-  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { AuthUser, CatalogProduct, CustomerMachine } from "@elkatech/contracts";
+import type { CatalogProduct, CustomerMachine } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
+import { customerMachineProfileState } from "@/lib/customer-machine-navigation";
+import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -35,6 +37,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import MachineFormDialog from "@/components/MachineFormDialog";
+import { StatCard, StatGrid } from "@/components/ui/stat-card";
 
 const cardSurface = "lp-card border";
 
@@ -98,52 +101,47 @@ function FilterSelect({
   );
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 const pagerButtonClass =
-  "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/55 hover:text-[var(--lp-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-40";
+  "inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/55 hover:text-[var(--lp-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-40";
 
-/** Compact range pager: ‹ 1–10 › — no labels, prev disabled on first page,
- *  next disabled on last page. */
+/** Icon-only pager shared with the other portal data tables. */
 function Pagination({
   page,
   totalPages,
-  rangeStart,
-  rangeEnd,
   onPrev,
   onNext,
 }: {
   page: number;
   totalPages: number;
-  rangeStart: number;
-  rangeEnd: number;
   onPrev: () => void;
   onNext: () => void;
 }) {
   return (
-    <div className="flex items-center justify-center gap-2 sm:justify-end">
+    <nav
+      aria-label="Customer machines pagination"
+      className="flex items-center justify-center gap-2 sm:justify-end"
+    >
       <button
         type="button"
         onClick={onPrev}
         disabled={page <= 1}
-        aria-label="Previous page"
+        aria-label="Previous customer machines page"
         className={pagerButtonClass}
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft aria-hidden="true" className="h-4 w-4" />
       </button>
-      <span className="lp-mono min-w-[58px] text-center text-xs font-medium tabular-nums text-[var(--lp-ink-soft)]">
-        {rangeStart}–{rangeEnd}
-      </span>
       <button
         type="button"
         onClick={onNext}
         disabled={page >= totalPages}
-        aria-label="Next page"
+        aria-label="Next customer machines page"
         className={pagerButtonClass}
       >
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight aria-hidden="true" className="h-4 w-4" />
       </button>
-    </div>
+    </nav>
   );
 }
 
@@ -153,41 +151,6 @@ function actionClasses(tone: ActionTone, className?: string) {
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40 disabled:pointer-events-none disabled:opacity-45",
     actionToneClass[tone],
     className,
-  );
-}
-
-/* KPI card */
-function StatCard({
-  label,
-  count,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  count: number | string;
-  icon: LucideIcon;
-  accent: "copper" | "emerald" | "steel" | "amber";
-}) {
-  const badge: Record<typeof accent, string> = {
-    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-  };
-  return (
-    <div className={cn("relative min-w-0 overflow-hidden rounded-2xl p-5", cardSurface, "hover:border-[var(--lp-line-strong)]")}>
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="lp-mono break-words text-[10px] font-medium uppercase leading-4 tracking-[0.14em] text-[var(--lp-faint)]">
-            {label}
-          </p>
-          <p className="lp-display mt-2 text-4xl font-bold text-[var(--lp-ink)]">{count}</p>
-        </div>
-        <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border", badge[accent])}>
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -323,6 +286,7 @@ function CardField({
 /* Page */
 const MachinesPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const defaultCustomerId = searchParams.get("customerId") ?? undefined;
@@ -344,31 +308,14 @@ const MachinesPage = () => {
 
   const machinesQuery = useQuery({
     queryKey: ["admin", "customer-machines"],
-    queryFn: () => apiRequest<CustomerMachine[]>("/api/admin/customer-machines"),
-  });
-  const usersQuery = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => apiRequest<AuthUser[]>("/api/admin/users"),
+    queryFn: () => apiRequest<EnrichedMachine[]>("/api/admin/customer-machines"),
   });
   const productsQuery = useQuery({
     queryKey: ["catalog-products"],
     queryFn: () => apiRequest<CatalogProduct[]>("/api/catalog/products"),
   });
 
-  const userMap = useMemo(() => {
-    const map = new Map<string, AuthUser>();
-    for (const u of usersQuery.data ?? []) map.set(u.id, u);
-    return map;
-  }, [usersQuery.data]);
-
-  const enriched: EnrichedMachine[] = useMemo(
-    () =>
-      (machinesQuery.data ?? []).map((m) => {
-        const u = userMap.get(m.customerId);
-        return { ...m, customer: u ? { displayName: u.displayName, email: u.email } : null };
-      }),
-    [machinesQuery.data, userMap],
-  );
+  const enriched = useMemo(() => machinesQuery.data ?? [], [machinesQuery.data]);
 
   const stats = useMemo(() => {
     const active = enriched.filter((m) => m.status === "active");
@@ -403,14 +350,14 @@ const MachinesPage = () => {
 
   const groups = useMemo(() => groupByCustomer(filteredMachines), [filteredMachines]);
 
-  // Pagination over the filtered + grouped rows (10 per page).
+  // Pagination over the filtered + grouped customer rows (five per page).
   const totalPages = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
   const pagedGroups = useMemo(
     () => groups.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
     [groups, page],
   );
-  const rangeStart = groups.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const rangeEnd = Math.min(page * PAGE_SIZE, groups.length);
+  const emptyPageSlots =
+    totalPages > 1 && pagedGroups.length > 0 ? Math.max(0, PAGE_SIZE - pagedGroups.length) : 0;
 
   // Reset to the first page whenever the filtered set changes (search/filters).
   useEffect(() => {
@@ -461,7 +408,9 @@ const MachinesPage = () => {
   }
 
   function openCustomer(customerId: string) {
-    navigate(`/app/machines/${customerId}`);
+    navigate(`/app/machines/${customerId}`, {
+      state: customerMachineProfileState(location.pathname, location.search),
+    });
   }
 
   function onRowKeyDown(event: KeyboardEvent<HTMLTableRowElement>, customerId: string) {
@@ -471,7 +420,7 @@ const MachinesPage = () => {
     }
   }
 
-  const isLoading = machinesQuery.isLoading || usersQuery.isLoading;
+  const isLoading = machinesQuery.isLoading;
   const emptyText = enriched.length === 0 ? "No machines linked yet." : "No machines match your filters.";
 
   const renderActions = (group: CustomerMachineGroup) => {
@@ -551,36 +500,29 @@ const MachinesPage = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl min-w-0 space-y-5 overflow-x-hidden">
-      {/* Header */}
-      <header className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-            <HardDrive className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="lp-display break-words text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">Customer Machines</h1>
-            <p className="mt-0.5 text-sm text-[var(--lp-ink-soft)]">
-              Link machines to customers and manage installed equipment.
-            </p>
-          </div>
-        </div>
-        <Button
-          onClick={openCreate}
-          className="h-10 shrink-0 rounded-full bg-[var(--lp-accent)] px-5 text-sm font-semibold text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
-        >
-          <Plus className="h-4 w-4" />
-          Add machine
-        </Button>
-      </header>
+    <div className={cn(PAGE_CONTAINER, "overflow-x-hidden")}>
+      <PageHeader
+        icon={HardDrive}
+        title="Customer Machines"
+        description="Link machines to customers and manage installed equipment."
+        action={
+          <Button
+            onClick={openCreate}
+            className={PAGE_PRIMARY_ACTION}
+          >
+            <Plus className="h-4 w-4" />
+            Add machine
+          </Button>
+        }
+      />
 
       {/* KPIs */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatGrid minTileWidth="13rem">
         <StatCard label="Total machines" count={stats.total} icon={HardDrive} accent="copper" />
         <StatCard label="Active" count={stats.active} icon={Wrench} accent="emerald" />
         <StatCard label="Customers with machines" count={stats.customers} icon={Users} accent="steel" />
         <StatCard label="Inactive / archived" count={stats.inactive} icon={Archive} accent="amber" />
-      </div>
+      </StatGrid>
 
       {/* Filters */}
       <div className={cn("flex min-w-0 flex-col gap-2.5 rounded-2xl p-3 sm:p-3.5 2xl:flex-row 2xl:items-center", cardSurface)}>
@@ -661,17 +603,18 @@ const MachinesPage = () => {
                 </td>
               </tr>
             ) : (
-              pagedGroups.map((group) => {
-                const moreLabel = machineMoreLabel(group);
-                return (
-                  <tr
-                    key={group.customerId}
-                    role="link"
-                    tabIndex={0}
-                    onClick={() => openCustomer(group.customerId)}
-                    onKeyDown={(event) => onRowKeyDown(event, group.customerId)}
-                    className="cursor-pointer border-b border-[var(--lp-line)] align-top transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
-                  >
+              <>
+                {pagedGroups.map((group) => {
+                  const moreLabel = machineMoreLabel(group);
+                  return (
+                    <tr
+                      key={group.customerId}
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => openCustomer(group.customerId)}
+                      onKeyDown={(event) => onRowKeyDown(event, group.customerId)}
+                      className="h-[88px] cursor-pointer border-b border-[var(--lp-line)] align-top transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
+                    >
                     <td className="px-4 py-3">
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-2">
@@ -714,9 +657,19 @@ const MachinesPage = () => {
                     </td>
                     <td className="px-4 py-3 text-xs text-[var(--lp-faint)]">{formatDate(group.lastUpdated)}</td>
                     <td className="px-4 py-3">{renderActions(group)}</td>
+                    </tr>
+                  );
+                })}
+                {Array.from({ length: emptyPageSlots }, (_, index) => (
+                  <tr
+                    key={`customer-machine-empty-row-${index}`}
+                    aria-hidden="true"
+                    className="h-[88px] border-b border-[var(--lp-line)] last:border-0"
+                  >
+                    <td colSpan={6} />
                   </tr>
-                );
-              })
+                ))}
+              </>
             )}
           </tbody>
         </table>
@@ -799,8 +752,6 @@ const MachinesPage = () => {
         <Pagination
           page={page}
           totalPages={totalPages}
-          rangeStart={rangeStart}
-          rangeEnd={rangeEnd}
           onPrev={() => setPage((p) => Math.max(1, p - 1))}
           onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
         />
@@ -809,7 +760,6 @@ const MachinesPage = () => {
       <MachineFormDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        customers={usersQuery.data ?? []}
         products={products}
         editing={editing}
         defaultCustomerId={defaultCustomerId}

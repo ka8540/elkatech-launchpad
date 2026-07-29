@@ -27,6 +27,27 @@ import {
   updateServiceRequestInputSchema,
   updateRequestStatusInputSchema,
   verifyEmailInputSchema,
+  activityPeopleQuerySchema,
+  activityTaskBucketSchema,
+  ACTIVITY_PAGE_SIZE_DEFAULT,
+  ACTIVITY_PAGE_SIZE_MAX,
+  ACTIVITY_RECENT_DAYS,
+  ACTIVITY_STALE_AFTER_DAYS,
+  assignableRolesFor,
+  canApproveUsers,
+  canAssignRequests,
+  canChangeUserRole,
+  canChangeRoles,
+  canCreateRequestForCustomer,
+  canDeleteUsers,
+  canEditUserProfiles,
+  canManageOperational,
+  canManageTargetUser,
+  canManageUsers,
+  canSuspendUsers,
+  canViewCustomerActivity,
+  portalHomePathForRole,
+  type Role,
 } from "@elkatech/contracts";
 import {
   fetchJson,
@@ -36,6 +57,21 @@ import {
   verifyFirebaseIdTokenForRequest,
 } from "@elkatech/config";
 import { evaluateApprovalGate } from "./approval";
+import { registerReportRoutes } from "./reports";
+import {
+  customerPickerQueryString,
+  registerCustomerPickerRoute,
+} from "./customer-picker";
+import {
+  canAccessActivityDirectory,
+  canAccessPersonPage,
+  derivePersonState,
+  emptyWorkload,
+  headlineCounts,
+  whitelistEventDetails,
+  type PersonWorkload,
+  type RelCounts,
+} from "./activity";
 
 const env = getEnv();
 const app = Fastify({ logger: true });
@@ -51,12 +87,22 @@ type SessionUser = {
   id: string;
   email: string;
   displayName: string;
-  role: "customer" | "engineer" | "admin";
+  role: Role;
   emailVerified: boolean;
   approvalStatus: "pending_approval" | "approved" | "rejected" | "suspended";
   profileCompleted: boolean;
   createdAt: string;
 };
+
+// Shared 403 body for actions the caller's role may not perform. Centralised so
+// the message is consistent and the deletion rule reads the same everywhere.
+function forbidden(reply: any, message = "You do not have permission to perform this action.") {
+  return reply.code(403).send({ message });
+}
+
+// Every authenticated portal role. Used for read endpoints that any signed-in
+// user may reach (the service layer still scopes the data per role).
+const PORTAL_ROLES: Role[] = ["customer", "engineer", "support", "owner", "admin"];
 
 function getSessionCookie(request: { cookies: Record<string, string | undefined> }) {
   return request.cookies[env.SESSION_COOKIE_NAME];
@@ -147,6 +193,30 @@ function userHeaders(user: SessionUser) {
     "x-user-display-name": user.displayName,
   });
 }
+
+// Look up the current role of the user a management action targets. Used to
+// enforce that an owner may never touch an admin account (canManageTargetUser)
+// — a rule that depends on the *target's* role, not just the actor's.
+async function getTargetUserRole(userId: string): Promise<Role | null> {
+  try {
+    const user = await fetchJson<{ role: Role }>(
+      `${env.AUTH_SERVICE_URL}/internal/users/${userId}`,
+      { headers: internalHeaders() },
+    );
+    return user.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Surface Fastify's per-request id so the browser can quote it when the user
+// files an issue report. It is an opaque counter, carries no user data, and
+// makes an otherwise decorative "correlation ID" field genuinely traceable
+// back to a log line.
+app.addHook("onSend", async (request, reply, payload) => {
+  reply.header("x-correlation-id", request.id);
+  return payload;
+});
 
 app.get("/health", async () => ({
   ok: true,
@@ -257,9 +327,13 @@ app.patch("/api/me/profile", async (request: any, reply: any) => {
 });
 
 // Admin: read any customer's profile.
+// Reading a customer's profile backs the Customer Machine Profile page, which
+// owner already reaches (see the sibling `/machines` route). Editing stays
+// admin-only on the PATCH below.
 app.get("/api/admin/users/:userId/profile", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   const { userId } = z.object({ userId: z.string().uuid() }).parse(request.params);
   try {
     return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/profile`, {
@@ -274,6 +348,7 @@ app.get("/api/admin/users/:userId/profile", async (request: any, reply: any) => 
 app.patch("/api/admin/users/:userId/profile", async (request: any, reply: any) => {
   const session = await requireSession(request, reply, ["admin"]);
   if (!session) return;
+  if (!canEditUserProfiles(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = z.object({ userId: z.string().uuid() }).parse(request.params);
   const input = adminUpdateProfileInputSchema.parse(request.body);
@@ -568,7 +643,7 @@ app.get("/api/auth/google/callback", async (request, reply) => {
     setSessionCookies(reply, oauthResult);
 
     // Redirect to portal
-    const defaultPath = oauthResult.user.role === "customer" ? "/app/requests" : "/app/queue";
+    const defaultPath = portalHomePathForRole(oauthResult.user.role);
     return reply.redirect(returnTo || defaultPath);
   } catch {
     return reply.redirect(`${appBase}/login?error=google_oauth_failed`);
@@ -603,7 +678,13 @@ function assertApproved(reply: any, user: SessionUser) {
 }
 
 app.post("/api/requests", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, [
+    "customer",
+    "engineer",
+    "support",
+    "owner",
+    "admin",
+  ]);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
   if (!assertApproved(reply, session.user)) return;
@@ -648,7 +729,7 @@ app.get("/api/me/machines", async (request: any, reply: any) => {
 });
 
 app.get("/api/requests", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
 
   const queryString = request.url.includes("?") ? request.url.slice(request.url.indexOf("?")) : "";
@@ -658,11 +739,14 @@ app.get("/api/requests", async (request, reply) => {
 });
 
 app.get("/api/requests/:requestId", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
-  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}`, {
+  const queryString = request.url.includes("?")
+    ? request.url.slice(request.url.indexOf("?"))
+    : "";
+  return fetchJson(`${env.SERVICE_DESK_URL}/requests/${params.requestId}${queryString}`, {
     headers: userHeaders(session.user),
   });
 });
@@ -682,7 +766,7 @@ app.patch("/api/requests/:requestId", async (request, reply) => {
 });
 
 app.post("/api/requests/:requestId/messages", async (request, reply) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
   if (!assertCsrf(request, reply)) return;
 
@@ -724,8 +808,10 @@ app.post("/api/requests/:requestId/claim", async (request: any, reply: any) => {
 });
 
 app.post("/api/requests/:requestId/assign", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  // Admin, owner and support can assign/reassign requests to engineers.
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
   if (!session) return;
+  if (!canAssignRequests(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
 
   const params = z.object({ requestId: z.string().uuid() }).parse(request.params);
@@ -838,7 +924,7 @@ app.post("/api/requests/:requestId/attachments", async (request: any, reply: any
 });
 
 app.get("/api/requests/:requestId/attachments", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["customer", "engineer", "admin"]);
+  const session = await requireSession(request, reply, PORTAL_ROLES);
   if (!session) return;
   const { requestId } = attachmentRequestParams.parse(request.params);
   try {
@@ -851,12 +937,27 @@ app.get("/api/requests/:requestId/attachments", async (request: any, reply: any)
 });
 
 app.get("/api/admin/users", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  // Users management page — admin and owner. Support uses the Customer
+  // Activity dashboard instead and never sees account-management controls.
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageUsers(session.user.role)) return forbidden(reply);
 
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users`, {
     headers: internalHeaders(),
   });
+});
+
+await registerCustomerPickerRoute(app, {
+  requireSession,
+  forbidden,
+  fetchCustomerPage: (query) =>
+    fetchJson(
+      `${env.AUTH_SERVICE_URL}/internal/customers/search?${customerPickerQueryString(query)}`,
+      { headers: internalHeaders() },
+    ),
+  forwardError: (request, reply, error) =>
+    forwardServiceError(request, reply, error, "customer picker search failed"),
 });
 
 // ─── Admin: customer machine management ─────────────────────────────────────
@@ -864,8 +965,9 @@ const adminMachineUserParams = z.object({ userId: z.string().uuid() });
 const adminMachineParams = z.object({ machineId: z.string().uuid() });
 
 app.get("/api/admin/users/:userId/machines", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   const { userId } = adminMachineUserParams.parse(request.params);
   try {
     return await fetchJson(`${env.SERVICE_DESK_URL}/admin/customers/${userId}/machines`, {
@@ -877,8 +979,9 @@ app.get("/api/admin/users/:userId/machines", async (request: any, reply: any) =>
 });
 
 app.post("/api/admin/users/:userId/machines", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = adminMachineUserParams.parse(request.params);
   const input = createCustomerMachineInputSchema.parse(request.body);
@@ -894,8 +997,9 @@ app.post("/api/admin/users/:userId/machines", async (request: any, reply: any) =
 });
 
 app.patch("/api/admin/machines/:machineId", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
@@ -911,8 +1015,9 @@ app.patch("/api/admin/machines/:machineId", async (request: any, reply: any) => 
 });
 
 app.delete("/api/admin/machines/:machineId", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   try {
@@ -927,8 +1032,9 @@ app.delete("/api/admin/machines/:machineId", async (request: any, reply: any) =>
 
 // ─── Admin: customer-machines dashboard (global collection) ─────────────────
 app.get("/api/admin/customer-machines", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   // Validate/normalise filters; forward only the recognised ones.
   const query = adminMachineListQuerySchema.parse(request.query ?? {});
   const params = new URLSearchParams();
@@ -937,18 +1043,36 @@ app.get("/api/admin/customer-machines", async (request: any, reply: any) => {
   if (query.status) params.set("status", query.status);
   const qs = params.toString();
   try {
-    return await fetchJson(
+    const machines = await fetchJson<any[]>(
       `${env.SERVICE_DESK_URL}/admin/customer-machines${qs ? `?${qs}` : ""}`,
       { headers: userHeaders(session.user) },
     );
+    const customerIds = [...new Set(machines.map((machine) => machine.customerId))];
+    const customers =
+      customerIds.length === 0
+        ? []
+        : await fetchJson<Array<{ id: string; displayName: string; email: string }>>(
+            `${env.AUTH_SERVICE_URL}/internal/customers/lookup`,
+            {
+              method: "POST",
+              headers: internalHeaders(),
+              body: JSON.stringify({ customerIds }),
+            },
+          );
+    const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+    return machines.map((machine) => ({
+      ...machine,
+      customer: customerById.get(machine.customerId) ?? null,
+    }));
   } catch (error) {
     return forwardServiceError(request, reply, error, "admin customer-machines list failed");
   }
 });
 
 app.post("/api/admin/customer-machines", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const input = adminLinkMachineInputSchema.parse(request.body);
   try {
@@ -963,8 +1087,9 @@ app.post("/api/admin/customer-machines", async (request: any, reply: any) => {
 });
 
 app.patch("/api/admin/customer-machines/:machineId", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   const input = updateCustomerMachineInputSchema.parse(request.body);
@@ -980,8 +1105,9 @@ app.patch("/api/admin/customer-machines/:machineId", async (request: any, reply:
 });
 
 app.delete("/api/admin/customer-machines/:machineId", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageOperational(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { machineId } = adminMachineParams.parse(request.params);
   try {
@@ -995,11 +1121,16 @@ app.delete("/api/admin/customer-machines/:machineId", async (request: any, reply
 });
 
 app.post("/api/admin/users/invite", async (request, reply) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canManageUsers(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
 
   const input = inviteUserInputSchema.parse(request.body);
+  // Owner may invite any non-admin role, including customers; admin may invite anyone.
+  if (!assignableRolesFor(session.user.role).includes(input.role)) {
+    return forbidden(reply, "You are not allowed to invite a user with that role.");
+  }
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/invite`, {
     method: "POST",
     headers: internalHeaders({
@@ -1018,11 +1149,25 @@ async function forwardApprovalAction(
   reply: any,
   action: "approve" | "reject" | "suspend" | "reactivate",
 ) {
-  const session = await requireSession(request, reply, ["admin"]);
+  // approve/reject need approve permission; suspend/reactivate need suspend
+  // permission. Both are admin + owner; support and below get a 403.
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  const needsApprove = action === "approve" || action === "reject";
+  const allowed = needsApprove
+    ? canApproveUsers(session.user.role)
+    : canSuspendUsers(session.user.role);
+  if (!allowed) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
 
   const { userId } = approvalUserParams.parse(request.params);
+
+  // An owner may never act on an admin account.
+  const targetRole = await getTargetUserRole(userId);
+  if (targetRole && !canManageTargetUser(session.user.role, targetRole)) {
+    return forbidden(reply, "You cannot modify an administrator account.");
+  }
+
   const body = approvalActionInputSchema.parse(request.body ?? {});
 
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/${action}`, {
@@ -1046,13 +1191,37 @@ app.post("/api/admin/users/:userId/reactivate", (request, reply) =>
 );
 
 app.post("/api/admin/users/:userId/role", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  // Admin and owner can move staff accounts between permitted staff roles.
+  // Customer identities are never converted to or from staff identities.
+  const session = await requireSession(request, reply, ["admin", "owner"]);
   if (!session) return;
+  if (!canChangeRoles(session.user.role)) return forbidden(reply);
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
-  const input = z
-    .object({ role: z.enum(["customer", "engineer", "admin"]) })
-    .parse(request.body);
+  const input = z.object({ role: roleSchema }).parse(request.body);
+
+  if (input.role === "customer") {
+    return forbidden(
+      reply,
+      "Customer accounts cannot be converted to or from staff roles. Remove the account and send a new invitation instead.",
+    );
+  }
+  const targetRole = await getTargetUserRole(userId);
+  if (
+    targetRole &&
+    !canChangeUserRole(session.user.role, targetRole, input.role)
+  ) {
+    return forbidden(
+      reply,
+      targetRole === "customer"
+        ? "Customer accounts cannot be converted to or from staff roles. Remove the account and send a new invitation instead."
+        : "You are not allowed to assign that role.",
+    );
+  }
+  if (!targetRole && !assignableRolesFor(session.user.role).includes(input.role)) {
+    return forbidden(reply, "You are not allowed to assign that role.");
+  }
+
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}/role`, {
     method: "POST",
     headers: internalHeaders({ "x-user-id": session.user.id }),
@@ -1061,15 +1230,35 @@ app.post("/api/admin/users/:userId/role", async (request: any, reply: any) => {
 });
 
 app.delete("/api/admin/users/:userId", async (request: any, reply: any) => {
-  const session = await requireSession(request, reply, ["admin"]);
+  // Permanent deletion is admin-only. Owner/support are blocked here even
+  // though they can reach other user-management actions.
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
   if (!session) return;
+  if (!canDeleteUsers(session.user.role)) {
+    return forbidden(reply, "Only admins can permanently delete user data.");
+  }
   if (!assertCsrf(request, reply)) return;
   const { userId } = approvalUserParams.parse(request.params);
   try {
-    return await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
+    const result = await fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/${userId}`, {
       method: "DELETE",
       headers: internalHeaders({ "x-user-id": session.user.id }),
     });
+    // Issue reports live in service-desk with no FK to auth.users, so deleting
+    // the account would otherwise leave reports pointing at a dead id. Null the
+    // reporter id while keeping the anonymous reference: the report survives,
+    // the path back to a person does not. Best-effort — the account is already
+    // gone and failing the response would imply it wasn't.
+    try {
+      await fetchJson(`${env.SERVICE_DESK_URL}/internal/reports/anonymize-reporter`, {
+        method: "POST",
+        headers: internalHeaders(),
+        body: JSON.stringify({ userId }),
+      });
+    } catch (anonymizeError) {
+      request.log.error({ err: anonymizeError }, "report reporter anonymization failed");
+    }
+    return result;
   } catch (error) {
     if (error instanceof InternalFetchError) {
       // Forward business-rule rejections (4xx) verbatim, but never leak raw
@@ -1182,6 +1371,511 @@ app.get("/api/admin/users/summary", async (request, reply) => {
   return fetchJson(`${env.AUTH_SERVICE_URL}/internal/users/summary`, {
     headers: internalHeaders(),
   });
+});
+
+// ─── Customer Activity dashboard (admin / owner / support) ──────────────────
+// Joins the auth customer directory with service-desk request/machine
+// aggregates. RBAC is enforced here; the internal calls use trusted headers.
+app.get("/api/customer-activity", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canViewCustomerActivity(session.user.role)) return forbidden(reply);
+
+  const [customers, activity] = await Promise.all([
+    fetchJson<any[]>(`${env.AUTH_SERVICE_URL}/internal/users?role=customer`, {
+      headers: internalHeaders(),
+    }),
+    fetchJson<{ customers: any[] }>(`${env.SERVICE_DESK_URL}/internal/customer-activity`, {
+      headers: internalHeaders(),
+    }),
+  ]);
+
+  const activityById = new Map(activity.customers.map((c) => [c.customerId, c]));
+  const rows = customers.map((u) => {
+    const a = activityById.get(u.id);
+    return {
+      id: u.id,
+      displayName: u.displayName,
+      email: u.email,
+      approvalStatus: u.approvalStatus,
+      createdAt: u.createdAt,
+      totalRequests: a?.totalRequests ?? 0,
+      openRequests: a?.openRequests ?? 0,
+      pendingRequests: a?.pendingRequests ?? 0,
+      resolvedRequests: a?.resolvedRequests ?? 0,
+      machineCount: a?.machineCount ?? 0,
+      lastActivity: a?.lastActivity ?? null,
+      latestSubject: a?.latestSubject ?? null,
+      latestStatus: a?.latestStatus ?? null,
+      latestAt: a?.latestAt ?? null,
+    };
+  });
+
+  const summary = {
+    totalCustomers: rows.length,
+    activeCustomers: rows.filter((r) => r.approvalStatus === "approved").length,
+    openRequests: rows.reduce((s, r) => s + r.openRequests, 0),
+    pendingRequests: rows.reduce((s, r) => s + r.pendingRequests, 0),
+    resolvedRequests: rows.reduce((s, r) => s + r.resolvedRequests, 0),
+    customersWithMachines: rows.filter((r) => r.machineCount > 0).length,
+  };
+
+  return { summary, customers: rows };
+});
+
+app.get("/api/customer-activity/:customerId", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canViewCustomerActivity(session.user.role)) return forbidden(reply);
+  const { customerId } = z.object({ customerId: z.string().uuid() }).parse(request.params);
+
+  const [profileBundle, detail] = await Promise.all([
+    fetchJson<any>(`${env.AUTH_SERVICE_URL}/internal/users/${customerId}/profile`, {
+      headers: internalHeaders(),
+    }),
+    fetchJson<any>(`${env.SERVICE_DESK_URL}/internal/customer-activity/${customerId}`, {
+      headers: internalHeaders(),
+    }),
+  ]);
+
+  return {
+    customer: profileBundle.user,
+    profile: profileBundle.profile,
+    stats: detail.stats,
+    requests: detail.requests,
+    machines: detail.machines,
+  };
+});
+
+// ─── Support operations dashboard (admin / owner / support) ─────────────────
+app.get("/api/support/summary", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canViewCustomerActivity(session.user.role)) return forbidden(reply);
+
+  const requests = await fetchJson<any[]>(`${env.SERVICE_DESK_URL}/requests`, {
+    headers: userHeaders(session.user),
+  });
+  const byStatus = (s: string) => requests.filter((r) => r.status === s).length;
+  return {
+    queued: byStatus("new") + byStatus("triaged"),
+    assigned: byStatus("assigned"),
+    inProgress: byStatus("in_progress"),
+    waitingForCustomer: byStatus("waiting_for_customer"),
+    resolved: byStatus("resolved"),
+    closed: byStatus("closed"),
+    unassigned: requests.filter((r) => !r.assignedEngineerId && r.status !== "closed").length,
+    total: requests.length,
+  };
+});
+
+// ─── Staff directories for create-on-behalf and assignment ──────────────────
+// These are deliberately separate from the admin user-management endpoints so
+// support can pick a customer / engineer without seeing account controls.
+app.get("/api/staff/customers", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canCreateRequestForCustomer(session.user.role)) return forbidden(reply);
+  const users = await fetchJson<any[]>(
+    `${env.AUTH_SERVICE_URL}/internal/users?role=customer`,
+    { headers: internalHeaders() },
+  );
+  return users.map((u) => ({
+    id: u.id,
+    displayName: u.displayName,
+    email: u.email,
+    approvalStatus: u.approvalStatus,
+  }));
+});
+
+app.get("/api/staff/customers/:customerId/machines", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canCreateRequestForCustomer(session.user.role)) return forbidden(reply);
+  const { customerId } = z.object({ customerId: z.string().uuid() }).parse(request.params);
+  const detail = await fetchJson<{ machines: any[] }>(
+    `${env.SERVICE_DESK_URL}/internal/customer-activity/${customerId}`,
+    { headers: internalHeaders() },
+  );
+  return detail.machines.filter((m) => m.status === "active");
+});
+
+// ─── Activity console (person-centric operations views) ─────────────────────
+// Read-only. Admin/owner/support reach the whole directory; an engineer may
+// open ONLY their own person page and never the directory; customers never
+// reach any of it. Enforced here, not just in the UI.
+
+type DirectoryUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  approvalStatus: "pending_approval" | "approved" | "rejected" | "suspended";
+  accountOrigin: string;
+  companyName: string | null;
+  profileCompleted: boolean;
+  createdAt: string;
+  lastSeenAt: string | null;
+};
+
+function fetchUserDirectory() {
+  return fetchJson<DirectoryUser[]>(`${env.AUTH_SERVICE_URL}/internal/users/directory`, {
+    headers: internalHeaders(),
+  });
+}
+
+function fetchActivityAggregates() {
+  return fetchJson<{
+    workload: Array<{ personId: string; rel: "engineer" | "customer" | "creator" } & RelCounts>;
+    recorded: Array<{ personId: string; events: number; lastActivityAt: string | null }>;
+    machines: Array<{ personId: string; machineCount: number }>;
+  }>(
+    `${env.SERVICE_DESK_URL}/internal/activity/aggregates?staleAfterDays=${ACTIVITY_STALE_AFTER_DAYS}`,
+    { headers: internalHeaders() },
+  );
+}
+
+async function buildPeopleRows() {
+  // Exactly two upstream calls for the whole directory — no per-person lookup.
+  const [users, aggregates] = await Promise.all([fetchUserDirectory(), fetchActivityAggregates()]);
+
+  const byPerson = new Map<string, PersonWorkload>();
+  for (const row of aggregates.workload) {
+    const entry = byPerson.get(row.personId) ?? emptyWorkload();
+    entry[row.rel] = {
+      total: row.total,
+      inProgress: row.inProgress,
+      pending: row.pending,
+      waiting: row.waiting,
+      open: row.open,
+      completed: row.completed,
+      unassigned: row.unassigned,
+      stale: row.stale,
+    };
+    byPerson.set(row.personId, entry);
+  }
+  const recordedByPerson = new Map(aggregates.recorded.map((r) => [r.personId, r]));
+  const machinesByPerson = new Map(aggregates.machines.map((m) => [m.personId, m.machineCount]));
+
+  const people = users.map((user) => {
+    const work = byPerson.get(user.id) ?? emptyWorkload();
+    const recorded = recordedByPerson.get(user.id);
+    const approvalStatus = user.role === "admin" ? null : user.approvalStatus;
+    const { state, count } = derivePersonState(
+      { role: user.role, approvalStatus },
+      work,
+    );
+    const headline = headlineCounts(user.role, work);
+
+    return {
+      id: user.id,
+      displayName: user.displayName,
+      email: user.email,
+      role: user.role,
+      approvalStatus,
+      accountOrigin: user.accountOrigin,
+      companyName: user.companyName,
+      profileCompleted: user.profileCompleted,
+      createdAt: user.createdAt,
+      lastSeenAt: user.lastSeenAt,
+      lastRecordedActivityAt: recorded?.lastActivityAt ?? null,
+      state,
+      stateCount: count,
+      open: headline.open,
+      completed: headline.completed,
+      machineCount: machinesByPerson.get(user.id) ?? 0,
+      workload: {
+        asEngineer: work.engineer,
+        asCustomer: work.customer,
+        asCreator: work.creator,
+        recordedEvents: recorded?.events ?? 0,
+      },
+    };
+  });
+
+  return people;
+}
+
+app.get("/api/activity/people", async (request, reply) => {
+  // Directory is staff-coordination surface only. Engineers get their own
+  // page but never the roster; owner and customers never reach any of it.
+  const session = await requireSession(request, reply, ["admin", "support"]);
+  if (!session) return;
+  if (!canAccessActivityDirectory(session.user.role)) return forbidden(reply);
+
+  const parsedQuery = activityPeopleQuerySchema.safeParse(request.query ?? {});
+  if (!parsedQuery.success) {
+    return reply.code(400).send({ message: "Invalid query parameters." });
+  }
+  const query = parsedQuery.data;
+  const all = await buildPeopleRows();
+
+  const needle = query.search?.toLowerCase();
+  const recentCutoff = Date.now() - ACTIVITY_RECENT_DAYS * 86_400_000;
+
+  const filtered = all.filter((p) => {
+    if (query.role && p.role !== query.role) return false;
+    if (query.status && p.approvalStatus !== query.status) return false;
+    if (query.filter === "active_work" && p.state !== "working" && p.state !== "assignments_pending")
+      return false;
+    if (query.filter === "has_open" && p.open <= 0) return false;
+    if (query.filter === "recently_active") {
+      const stamps = [p.lastSeenAt, p.lastRecordedActivityAt]
+        .filter((v): v is string => Boolean(v))
+        .map((v) => Date.parse(v));
+      if (stamps.length === 0 || Math.max(...stamps) < recentCutoff) return false;
+    }
+    if (needle) {
+      const haystack =
+        `${p.displayName} ${p.email} ${p.role} ${p.companyName ?? ""}`.toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
+    return true;
+  });
+
+  // Deterministic ordering: people with live work first, then most recently
+  // active, then a stable id tie-break so paging never repeats or skips a row.
+  const activeRank = (state: string) =>
+    state === "working" ? 0 : state === "assignments_pending" ? 1 : state === "waiting_on_customer" ? 2 : 3;
+  filtered.sort((a, b) => {
+    const rank = activeRank(a.state) - activeRank(b.state);
+    if (rank !== 0) return rank;
+    const at = Date.parse(a.lastRecordedActivityAt ?? a.lastSeenAt ?? a.createdAt);
+    const bt = Date.parse(b.lastRecordedActivityAt ?? b.lastSeenAt ?? b.createdAt);
+    if (bt !== at) return bt - at;
+    return a.id.localeCompare(b.id);
+  });
+
+  const summary = {
+    totalPeople: all.length,
+    activeEngineers: all.filter((p) => p.role === "engineer" && p.approvalStatus === "approved")
+      .length,
+    activeSupport: all.filter((p) => p.role === "support" && p.approvalStatus === "approved").length,
+    withOpenWork: all.filter((p) => p.open > 0).length,
+    recentlyActive: all.filter((p) => {
+      const stamps = [p.lastSeenAt, p.lastRecordedActivityAt]
+        .filter((v): v is string => Boolean(v))
+        .map((v) => Date.parse(v));
+      return stamps.length > 0 && Math.max(...stamps) >= recentCutoff;
+    }).length,
+    inactiveAccounts: all.filter(
+      (p) => p.approvalStatus !== null && p.approvalStatus !== "approved",
+    ).length,
+  };
+
+  return {
+    people: filtered.slice(query.offset, query.offset + query.limit),
+    total: filtered.length,
+    limit: query.limit,
+    offset: query.offset,
+    summary,
+  };
+});
+
+const activityUserParams = z.object({ userId: z.string().uuid() });
+
+/**
+ * Resolve the session and target person for a person-scoped route.
+ * Authenticates before parsing so an unauthenticated caller learns nothing
+ * from the shape of the id: 401 unauthenticated → 400 malformed id → 403 not
+ * permitted (directory access, or an engineer opening strictly their own page).
+ */
+async function resolvePersonRoute(request: any, reply: any) {
+  const session = await requireSession(request, reply, ["admin", "support", "engineer"]);
+  if (!session) return null;
+
+  const parsed = activityUserParams.safeParse(request.params);
+  if (!parsed.success) {
+    reply.code(400).send({ message: "Invalid user id." });
+    return null;
+  }
+
+  const { userId } = parsed.data;
+  if (!canAccessPersonPage(session.user.role, session.user.id, userId)) {
+    forbidden(reply);
+    return null;
+  }
+  return { session, userId };
+}
+
+app.get("/api/activity/people/:userId", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const [people, summary] = await Promise.all([
+    buildPeopleRows(),
+    fetchJson<{
+      priorityDistribution: Record<string, Record<string, number>>;
+      eventCounts: Record<string, number>;
+      machineCount: number;
+    }>(`${env.SERVICE_DESK_URL}/internal/activity/${userId}/summary`, {
+      headers: internalHeaders(),
+    }),
+  ]);
+
+  const person = people.find((p) => p.id === userId);
+  if (!person) return reply.code(404).send({ message: "Person not found." });
+
+  const rel = person.role === "customer" ? "customer" : "engineer";
+  return {
+    person,
+    machineCount: summary.machineCount,
+    priorityDistribution: summary.priorityDistribution[rel] ?? {},
+    eventCounts: summary.eventCounts,
+  };
+});
+
+app.get("/api/activity/people/:userId/history", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const parsedQuery = z
+    .object({
+      limit: z.coerce.number().int().min(1).max(ACTIVITY_PAGE_SIZE_MAX).default(ACTIVITY_PAGE_SIZE_DEFAULT),
+      cursor: z.string().max(200).optional(),
+      eventTypes: z.string().max(400).optional(),
+      search: z.string().trim().max(120).optional(),
+    })
+    .safeParse(request.query ?? {});
+  if (!parsedQuery.success) {
+    return reply.code(400).send({ message: "Invalid query parameters." });
+  }
+  const query = parsedQuery.data;
+
+  const params = new URLSearchParams({ limit: String(query.limit) });
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.eventTypes) params.set("eventTypes", query.eventTypes);
+  if (query.search) params.set("search", query.search);
+
+  const [page, directory] = await Promise.all([
+    fetchJson<{ events: any[]; nextCursor: string | null }>(
+      `${env.SERVICE_DESK_URL}/internal/activity/${userId}/history?${params}`,
+      { headers: internalHeaders() },
+    ),
+    fetchUserDirectory(),
+  ]);
+
+  // One directory fetch resolves every referenced person on the page — no
+  // per-row auth lookup.
+  const nameById = new Map(directory.map((u) => [u.id, u.displayName]));
+
+  return {
+    events: page.events.map((event) => ({
+      id: event.id,
+      occurredAt: event.occurredAt,
+      eventType: event.eventType,
+      // Role recorded at the time of the action — never the actor's role today.
+      recordedRole: event.recordedRole,
+      actorId: event.actorId,
+      request: event.request,
+      details: whitelistEventDetails(event.metadata, (id) => nameById.get(id) ?? null),
+    })),
+    nextCursor: page.nextCursor,
+  };
+});
+
+app.get("/api/activity/people/:userId/tasks", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const parsedQuery = z
+    .object({
+      rel: z.enum(["engineer", "customer"]).default("engineer"),
+      bucket: activityTaskBucketSchema.default("active"),
+      limit: z.coerce.number().int().min(1).max(ACTIVITY_PAGE_SIZE_MAX).default(ACTIVITY_PAGE_SIZE_DEFAULT),
+      cursor: z.string().max(200).optional(),
+      search: z.string().trim().max(120).optional(),
+    })
+    .safeParse(request.query ?? {});
+  if (!parsedQuery.success) {
+    return reply.code(400).send({ message: "Invalid query parameters." });
+  }
+  const query = parsedQuery.data;
+
+  const params = new URLSearchParams({
+    rel: query.rel,
+    bucket: query.bucket,
+    limit: String(query.limit),
+    staleAfterDays: String(ACTIVITY_STALE_AFTER_DAYS),
+  });
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.search) params.set("search", query.search);
+
+  const [page, directory] = await Promise.all([
+    fetchJson<{ tasks: any[]; nextCursor: string | null }>(
+      `${env.SERVICE_DESK_URL}/internal/activity/${userId}/tasks?${params}`,
+      { headers: internalHeaders() },
+    ),
+    fetchUserDirectory(),
+  ]);
+
+  const nameById = new Map(directory.map((u) => [u.id, u.displayName]));
+
+  return {
+    tasks: page.tasks.map((task) => ({
+      ...task,
+      // Null name = the account was hard-deleted; the UI renders "Removed
+      // user" rather than silently attributing it to someone else.
+      customerName: nameById.get(task.customerId) ?? null,
+      assignedEngineerName: task.assignedEngineerId
+        ? nameById.get(task.assignedEngineerId) ?? null
+        : null,
+    })),
+    nextCursor: page.nextCursor,
+  };
+});
+
+/**
+ * Customer-safe machine list for a person page. Support can reach this
+ * surface, so the internal serial number and admin notes are stripped here —
+ * unlike /api/staff/customers/:id/machines, which returns the full admin view.
+ */
+app.get("/api/activity/people/:userId/machines", async (request: any, reply: any) => {
+  const resolved = await resolvePersonRoute(request, reply);
+  if (!resolved) return;
+  const { userId } = resolved;
+
+  const detail = await fetchJson<{ machines: any[] }>(
+    `${env.SERVICE_DESK_URL}/internal/customer-activity/${userId}`,
+    { headers: internalHeaders() },
+  );
+
+  return {
+    machines: (detail.machines ?? []).map((machine) => ({
+      id: machine.id,
+      displayLabel: machine.displayLabel,
+      productName: machine.productSnapshot?.name ?? machine.productId,
+      unitNumber: machine.unitNumber ?? null,
+      siteName: machine.siteName ?? null,
+      siteLocation: machine.siteLocation,
+      status: machine.status,
+    })),
+  };
+});
+
+app.get("/api/engineers", async (request, reply) => {
+  const session = await requireSession(request, reply, ["admin", "owner", "support"]);
+  if (!session) return;
+  if (!canAssignRequests(session.user.role)) return forbidden(reply);
+  const users = await fetchJson<any[]>(
+    `${env.AUTH_SERVICE_URL}/internal/users?role=engineer`,
+    { headers: internalHeaders() },
+  );
+  return users.map((u) => ({ id: u.id, displayName: u.displayName, email: u.email }));
+});
+
+// Issue-report routes live in their own module — this file is already large,
+// and the reports surface shares nothing with the request pipeline beyond the
+// session helpers passed in here.
+await registerReportRoutes(app, {
+  requireSession,
+  assertCsrf,
+  userHeaders,
+  forbidden,
+  fetchUserDirectory,
 });
 
 const port = Number(new URL(env.GATEWAY_URL).port || "4000");

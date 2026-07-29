@@ -1,5 +1,18 @@
-import postgres, { type Sql } from "postgres";
+import postgres, { type ISql, type Sql } from "postgres";
 import { getEnv } from "./env";
+
+/**
+ * Anything that can run a tagged-template query.
+ *
+ * `Sql` (the pooled client from `getDb()`) and `TransactionSql` (what
+ * `sql.begin()` hands its callback) are *siblings* — both extend `ISql`, but
+ * neither is assignable to the other, since only `Sql` has `begin`/`reserve`
+ * and only `TransactionSql` has `savepoint`. `ISql` is their common base and
+ * carries the tagged-template call signatures plus `json`/`unsafe`, so a
+ * helper typed against it works standalone *or* enlisted in a caller's
+ * transaction with no loss of template typing.
+ */
+export type DbExecutor = ISql;
 
 let sqlClient: Sql | null = null;
 

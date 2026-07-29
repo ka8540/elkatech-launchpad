@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   approvalActionInputSchema,
   approvalStatusSchema,
+  customerPickerQuerySchema,
   createServiceRequestInputSchema,
   firebaseSessionRequestSchema,
   forgotPasswordInputSchema,
@@ -26,6 +27,11 @@ import {
   internalHeaders,
   verifyFirebaseIdTokenForRequest,
 } from "@elkatech/config";
+import {
+  customerPickerSearchPattern,
+  decodeCustomerPickerCursor,
+  encodeCustomerPickerCursor,
+} from "./customer-picker";
 
 const app = Fastify({ logger: true });
 const sql = getDb();
@@ -33,17 +39,19 @@ const env = getEnv();
 
 // Preview deployments run against a per-branch Neon database (the Neon-Vercel
 // integration) that is forked once and never re-migrated, so it can be missing
-// migration 006's customer-profile columns. When `profile_completed` is absent,
-// `resolvedProfileCompleted` falls back to "treat as complete" and new
-// customers skip /app/complete-profile and land on the dashboard. We can't
-// migrate at build time (the Vercel build has no Neon DATABASE_URL — it falls
-// back to localhost), so guarantee the columns at runtime on the same
-// connection the handlers use. Idempotent and cached: at most one run per cold
-// start, and a no-op once the columns already exist (e.g. the production DB).
-let ensureProfileColumnsPromise: Promise<void> | null = null;
-function ensureProfileColumns(): Promise<void> {
-  if (!ensureProfileColumnsPromise) {
-    ensureProfileColumnsPromise = sql
+// migration 006's customer-profile columns and migration 008's relaxed role
+// check. When `profile_completed` is absent, `resolvedProfileCompleted` falls
+// back to "treat as complete" and new customers skip /app/complete-profile;
+// when the role check still only allows customer/engineer/admin, creating an
+// owner/support user fails. We can't migrate at build time (the Vercel build
+// has no Neon DATABASE_URL — it falls back to localhost), so guarantee the
+// schema at runtime on the same connection the handlers use. Idempotent and
+// cached: at most one run per cold start, and a no-op once the schema is
+// already current (e.g. the production DB).
+let ensureAuthSchemaPromise: Promise<void> | null = null;
+function ensureAuthSchema(): Promise<void> {
+  if (!ensureAuthSchemaPromise) {
+    ensureAuthSchemaPromise = sql
       .unsafe(
         `alter table auth.users add column if not exists company_name text;
          alter table auth.users add column if not exists contact_phone text;
@@ -55,22 +63,44 @@ function ensureProfileColumns(): Promise<void> {
          alter table auth.users add column if not exists postal_code text;
          alter table auth.users add column if not exists country text default 'India';
          alter table auth.users add column if not exists profile_completed boolean not null default false;
-         alter table auth.users add column if not exists profile_completed_at timestamptz;`,
+         alter table auth.users add column if not exists profile_completed_at timestamptz;
+         do $$
+         begin
+           if not exists (
+             select 1 from pg_constraint
+             where conname = 'users_role_check'
+               and pg_get_constraintdef(oid) like '%owner%'
+           ) then
+             alter table auth.users drop constraint if exists users_role_check;
+             alter table auth.users add constraint users_role_check
+               check (role in ('customer','engineer','support','owner','admin'));
+           end if;
+           if not exists (
+             select 1 from pg_constraint
+             where conname = 'tokens_role_check'
+               and pg_get_constraintdef(oid) like '%owner%'
+           ) then
+             alter table auth.tokens drop constraint if exists tokens_role_check;
+             alter table auth.tokens add constraint tokens_role_check
+               check (role in ('customer','engineer','support','owner','admin'));
+           end if;
+         end $$;`,
       )
       .then(() => undefined)
       .catch((error) => {
         // Don't cache the failure — let a later request retry.
-        ensureProfileColumnsPromise = null;
+        ensureAuthSchemaPromise = null;
         throw error;
       });
   }
-  return ensureProfileColumnsPromise;
+  return ensureAuthSchemaPromise;
 }
 
-// Guarantee the customer-profile schema exists before any handler reads or
-// writes auth.users. Cached, so this is a no-op after the first request.
+// Guarantee the auth schema (customer-profile columns + relaxed role check)
+// exists before any handler reads or writes auth.users. Cached, so this is a
+// no-op after the first request.
 app.addHook("onRequest", async () => {
-  await ensureProfileColumns();
+  await ensureAuthSchema();
 });
 
 type AccountOrigin = "self_signup" | "admin_invite" | "firebase_google" | "legacy";
@@ -397,7 +427,7 @@ app.post("/signup", async (request, reply) => {
     }
 
     const userId = invite.user_id ?? randomUUID();
-    // Invited staff users are pre-approved by definition (an admin invited them).
+    // Invited users are pre-approved by definition (a permitted actor invited them).
     await sql`
       insert into auth.users (id, email, display_name, role, password_hash, email_verified, status, approval_status, approved_at)
       values (
@@ -757,6 +787,203 @@ app.get("/internal/users", async (request, reply) => {
   return rows.map(mapUser);
 });
 
+/**
+ * Compact, server-filtered customer picker for operational workflows.
+ *
+ * One bounded query searches name, email, and company. Removed, rejected, and
+ * suspended accounts never leave the auth service because machine assignment
+ * rejects them. Approved customers sort first, then profile-complete accounts,
+ * followed by a deterministic name/email/id ordering for stable pagination.
+ */
+app.get("/internal/customers/search", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const parsed = customerPickerQuerySchema.safeParse(request.query ?? {});
+  if (!parsed.success) {
+    return reply.code(400).send({ message: "Enter at least 2 characters to search." });
+  }
+  const query = parsed.data;
+
+  let offset: number;
+  try {
+    offset = decodeCustomerPickerCursor(query.cursor);
+  } catch {
+    return reply.code(400).send({ message: "Invalid customer search cursor." });
+  }
+
+  const searchPattern = customerPickerSearchPattern(query.search);
+  const customerId = query.customerId ?? null;
+  const supportsRemovedAt = await hasRemovedAtColumn();
+  const pageLimit = query.limit + 1;
+
+  type CustomerPickerRow = Pick<
+    UserRow,
+    | "id"
+    | "email"
+    | "display_name"
+    | "role"
+    | "approval_status"
+    | "company_name"
+    | "contact_phone"
+    | "address_line1"
+    | "city"
+    | "state"
+    | "profile_completed"
+  >;
+
+  const rows = supportsRemovedAt
+    ? await sql<CustomerPickerRow[]>`
+        select
+          id, email, display_name, role, approval_status, company_name,
+          contact_phone, address_line1, city, state, profile_completed
+        from auth.users
+        where role = 'customer'
+          and removed_at is null
+          and coalesce(approval_status, 'approved') in ('approved', 'pending_approval')
+          and (${customerId}::uuid is null or id = ${customerId})
+          and (
+            ${searchPattern}::text is null
+            or lower(display_name) like ${searchPattern} escape '\'
+            or lower(email) like ${searchPattern} escape '\'
+            or lower(coalesce(company_name, '')) like ${searchPattern} escape '\'
+          )
+        order by
+          case when coalesce(approval_status, 'approved') = 'approved' then 0 else 1 end,
+          case when profile_completed then 0 else 1 end,
+          lower(display_name),
+          lower(email),
+          id
+        limit ${pageLimit}
+        offset ${offset}
+      `
+    : await sql<CustomerPickerRow[]>`
+        select
+          id, email, display_name, role, approval_status, company_name,
+          contact_phone, address_line1, city, state, profile_completed
+        from auth.users
+        where role = 'customer'
+          and coalesce(approval_status, 'approved') in ('approved', 'pending_approval')
+          and (${customerId}::uuid is null or id = ${customerId})
+          and (
+            ${searchPattern}::text is null
+            or lower(display_name) like ${searchPattern} escape '\'
+            or lower(email) like ${searchPattern} escape '\'
+            or lower(coalesce(company_name, '')) like ${searchPattern} escape '\'
+          )
+        order by
+          case when coalesce(approval_status, 'approved') = 'approved' then 0 else 1 end,
+          case when profile_completed then 0 else 1 end,
+          lower(display_name),
+          lower(email),
+          id
+        limit ${pageLimit}
+        offset ${offset}
+      `;
+
+  const hasMore = !customerId && rows.length > query.limit;
+  const page = rows.slice(0, query.limit);
+  return {
+    customers: page.map((row) => ({
+      id: row.id,
+      displayName: row.display_name,
+      email: row.email,
+      companyName: row.company_name ?? null,
+      approvalStatus: row.approval_status ?? "approved",
+      profileCompleted: resolvedProfileCompleted(row as UserRow),
+    })),
+    nextCursor: hasMore ? encodeCustomerPickerCursor(offset + query.limit) : null,
+  };
+});
+
+/**
+ * One-query customer identity lookup for machine rows. This avoids the
+ * machines page downloading the complete user directory or issuing N+1
+ * profile calls. It is internal-only and returns no contact/profile data.
+ */
+app.post("/internal/customers/lookup", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+  const input = z
+    .object({
+      customerIds: z.array(z.string().uuid()).max(1_000),
+    })
+    .parse(request.body);
+  const customerIds = [...new Set(input.customerIds)];
+  if (customerIds.length === 0) return [];
+
+  const supportsRemovedAt = await hasRemovedAtColumn();
+  const rows = supportsRemovedAt
+    ? await sql<Array<{ id: string; display_name: string; email: string }>>`
+        select id, display_name, email
+        from auth.users
+        where role = 'customer'
+          and removed_at is null
+          and id = any(${customerIds}::uuid[])
+      `
+    : await sql<Array<{ id: string; display_name: string; email: string }>>`
+        select id, display_name, email
+        from auth.users
+        where role = 'customer'
+          and id = any(${customerIds}::uuid[])
+      `;
+
+  return rows.map((row) => ({
+    id: row.id,
+    displayName: row.display_name,
+    email: row.email,
+  }));
+});
+
+/**
+ * Directory projection for the activity console.
+ *
+ * Deliberately separate from `/internal/users` so the shared `AuthUser` shape
+ * stays untouched: this adds `companyName` (searchable) and `lastSeenAt`
+ * (from auth.sessions, maintained on every session resolve), neither of which
+ * belongs on the session payload. One query, no N+1 — the last-seen timestamp
+ * comes from a grouped sub-select rather than a per-user lookup.
+ *
+ * Read-only. Removed users are excluded, exactly as `/internal/users` does.
+ */
+app.get("/internal/users/directory", async (request, reply) => {
+  if (!ensureInternal(request)) {
+    return reply.code(401).send({ message: "Unauthorized" });
+  }
+
+  const supportsRemovedAt = await hasRemovedAtColumn();
+
+  // `u.*` mirrors /internal/users so resolvedProfileCompleted sees the same
+  // columns it does; the response below is an explicit whitelist, so no extra
+  // column ever leaves this handler.
+  const rows = await sql<any[]>`
+    select u.*, s.last_seen_at
+    from auth.users u
+    left join (
+      select user_id, max(last_seen_at) as last_seen_at
+      from auth.sessions
+      group by user_id
+    ) s on s.user_id = u.id
+    ${supportsRemovedAt ? sql`where u.removed_at is null` : sql``}
+    order by u.created_at desc
+  `;
+
+  return rows.map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role,
+    approvalStatus: row.approval_status ?? "approved",
+    accountOrigin: row.account_origin ?? "self_signup",
+    companyName: row.company_name ?? null,
+    profileCompleted: resolvedProfileCompleted(row),
+    createdAt: new Date(row.created_at).toISOString(),
+    lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at).toISOString() : null,
+  }));
+});
+
 app.get("/internal/users/:id", async (request, reply) => {
   if (!ensureInternal(request)) {
     return reply.code(401).send({ message: "Unauthorized" });
@@ -904,7 +1131,7 @@ app.post("/internal/invite", async (request, reply) => {
   `;
 
   const userId = existingUsers[0]?.id ?? randomUUID();
-  // Staff invites from an admin land approved.
+  // User invitations from a permitted actor land approved.
   await sql`
     insert into auth.users (id, email, display_name, role, status, approval_status, approved_at)
     values (
@@ -1417,6 +1644,17 @@ app.post("/internal/users/:id/role", async (request, reply) => {
     return reply.send({ user: mapUser(user) });
   }
 
+  // Customer and staff identities are intentionally separate. Never carry
+  // customer-owned machines, requests, or profile data across this privilege
+  // boundary; the old account must be removed and a new invitation sent.
+  if (user.role === "customer" || input.role === "customer") {
+    return reply.code(403).send({
+      code: "CUSTOMER_ROLE_IMMUTABLE",
+      message:
+        "Customer accounts cannot be converted to or from staff roles. Remove the account and send a new invitation instead.",
+    });
+  }
+
   const actor = actorIdFrom(request);
   if (actor && actor === user.id) {
     return reply.code(400).send({
@@ -1440,17 +1678,13 @@ app.post("/internal/users/:id/role", async (request, reply) => {
     }
   }
 
-  // Staff-only role moves (anything that grants engineer or admin) require
-  // the target to be a staff-managed account. Self-signup customers can be
-  // approved, suspended, or removed, but not promoted.
-  const grantingStaffRole = input.role === "engineer" || input.role === "admin";
+  // Staff role moves require the target to be a staff-managed account.
   const origin = (user.account_origin ?? "self_signup") as AccountOrigin;
   const isStaffManaged = origin === "admin_invite" || origin === "legacy";
-  if (grantingStaffRole && !isStaffManaged && user.role === "customer") {
+  if (!isStaffManaged) {
     return reply.code(400).send({
       code: "USER_NOT_STAFF_MANAGED",
-      message:
-        "Only staff-invited accounts can be promoted. Invite this user through Manage staff access first.",
+      message: "Only invited staff accounts can change roles.",
     });
   }
 
@@ -1615,20 +1849,20 @@ app.get("/internal/users/summary", async (request, reply) => {
   const rows = supportsRemovedAt
     ? await sql<SummaryRow[]>`
         select
-          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-          count(*) filter (where approval_status = 'approved')         as approved,
-          count(*) filter (where approval_status = 'rejected')         as rejected,
-          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*) filter (where role <> 'admin' and approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where role <> 'admin' and approval_status = 'approved')         as approved,
+          count(*) filter (where role <> 'admin' and approval_status = 'rejected')         as rejected,
+          count(*) filter (where role <> 'admin' and approval_status = 'suspended')        as suspended,
           count(*)                                                     as total
         from auth.users
         where removed_at is null
       `
     : await sql<SummaryRow[]>`
         select
-          count(*) filter (where approval_status = 'pending_approval') as pending_approval,
-          count(*) filter (where approval_status = 'approved')         as approved,
-          count(*) filter (where approval_status = 'rejected')         as rejected,
-          count(*) filter (where approval_status = 'suspended')        as suspended,
+          count(*) filter (where role <> 'admin' and approval_status = 'pending_approval') as pending_approval,
+          count(*) filter (where role <> 'admin' and approval_status = 'approved')         as approved,
+          count(*) filter (where role <> 'admin' and approval_status = 'rejected')         as rejected,
+          count(*) filter (where role <> 'admin' and approval_status = 'suspended')        as suspended,
           count(*)                                                     as total
         from auth.users
       `;

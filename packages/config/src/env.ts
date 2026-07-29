@@ -89,6 +89,19 @@ const envSchema = z.object({
     .default(
       "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm",
     ),
+  // ─── Issue reports ───────────────────────────────────────────────────────
+  // Key for the one-way reporter reference (RPT-USR-8F3A2C). Without the
+  // secret a reference cannot be turned back into a user id. The default only
+  // exists so local dev and tests run without extra setup — production MUST
+  // set a real value, and rotating it does not rewrite references already
+  // stored on existing reports.
+  REPORT_REFERENCE_SECRET: z.string().min(1).default("dev-report-reference-secret"),
+  // Report evidence is screenshots, not service-visit video, so the cap is
+  // much lower than MAX_REQUEST_ATTACHMENT_MB and the type list is images only.
+  MAX_REPORT_ATTACHMENT_MB: z.coerce.number().int().positive().default(10),
+  ALLOWED_REPORT_ATTACHMENT_TYPES: z
+    .string()
+    .default("image/jpeg,image/png,image/webp"),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

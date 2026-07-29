@@ -4,35 +4,22 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleUser,
-  ClipboardList,
-  Gauge,
-  HardDrive,
-  Inbox,
   LogOut,
   Menu,
   Moon,
   Sun,
   SunMoon,
-  Users,
-  PlusCircle,
   X,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { type Role } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
 import { firebaseSignOut } from "@/lib/firebase";
 import { useSession } from "@/hooks/use-session";
 import { useTheme } from "@/components/ThemeProvider";
+import { buildNavItems, type NavItem } from "@/components/portal-nav";
 import { cn } from "@/lib/utils";
-
-/* ── Types ───────────────────────────────────────────────────────────────── */
-type NavItem = {
-  to: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  exact?: boolean;
-  activeWhen?: (pathname: string) => boolean;
-};
 
 /* ── Real ElkaTech SVG logo mark (copper accent, matches premium brand) ──── */
 function ElkaTechMark({ size = 32 }: { size?: number }) {
@@ -315,38 +302,8 @@ const PortalShell = () => {
   });
 
   const user = data?.user;
-  const isStaff = user?.role === "engineer" || user?.role === "admin";
-
-  const requestsItem: NavItem = {
-    to: "/app/requests",
-    icon: ClipboardList,
-    label: "Requests",
-    activeWhen: (pathname) =>
-      pathname === "/app/requests" ||
-      (pathname.startsWith("/app/requests/") && pathname !== "/app/requests/new"),
-  };
-
-  const createRequestItem: NavItem = {
-    to: "/app/requests/new",
-    icon: PlusCircle,
-    label: "Create Request",
-    exact: true,
-  };
-
-  const navItems: NavItem[] = [
-    requestsItem,
-    createRequestItem,
-    ...(isStaff
-      ? [{ to: "/app/queue", icon: Inbox, label: "Queue" }]
-      : []),
-    ...(user?.role === "admin"
-      ? [
-          { to: "/app/admin", icon: Gauge, label: "Admin" },
-          { to: "/app/users", icon: Users, label: "Users" },
-          { to: "/app/machines", icon: HardDrive, label: "Customer Machines" },
-        ]
-      : []),
-  ];
+  const role = user?.role as Role | undefined;
+  const navItems = buildNavItems(role);
 
   const sidebarWidth = collapsed ? "76px" : "276px";
 
@@ -359,14 +316,16 @@ const PortalShell = () => {
         /* Collapsed: clean centered logo mark. The collapse/expand control now
            lives as a floating button on the sidebar edge (see desktop aside). */
         <div className="flex items-center justify-center border-b border-[var(--lp-line)] px-3 py-5">
-          <Link
-            to="/app/requests"
-            title="ElkaTech"
-            aria-label="ElkaTech"
-            className="flex h-11 w-11 items-center justify-center text-[var(--lp-ink)] transition-opacity hover:opacity-80"
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+            aria-expanded={false}
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-[var(--lp-ink)] transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45"
           >
             <ElkaTechMark size={40} />
-          </Link>
+          </button>
         </div>
       ) : (
         /* Expanded / mobile: brand block. */
@@ -421,7 +380,7 @@ const PortalShell = () => {
       </nav>
 
       {/* ── Bottom section ─────────────────────────────────────────────────── */}
-      <div className="space-y-0 border-t border-[var(--lp-line)] pb-4 pt-3">
+      <div className="border-t border-[var(--lp-line)] pb-4 pt-3">
 
         {/* ── Group A: Theme selector ───────────────────────────────────── */}
         <div className="px-3 pb-3">
@@ -473,7 +432,7 @@ const PortalShell = () => {
         <div className="mx-3 border-t border-[var(--lp-line)]" />
 
         {/* ── Group C: My Account ────────────────────────────────────────── */}
-        <div className="px-3 pt-3">
+        <div className="px-3 pb-3 pt-3">
           {collapsed && !isMobile ? (
             <div className="flex justify-center">
               <Link
@@ -509,7 +468,7 @@ const PortalShell = () => {
         </div>
 
         {/* Divider Account→Logout */}
-        <div className="mx-3 mt-3 border-t border-[var(--lp-line)]" />
+        <div className="mx-3 border-t border-[var(--lp-line)]" />
 
         {/* ── Group D: Logout ────────────────────────────────────────────── */}
         <div className="px-3 pt-3">
