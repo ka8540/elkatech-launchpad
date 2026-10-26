@@ -30,7 +30,16 @@ import UsersPage from "@/pages/UsersPage";
 import MachinesPage from "@/pages/MachinesPage";
 import CustomerMachineProfilePage from "@/pages/CustomerMachineProfilePage";
 import AdminDashboardPage from "@/pages/AdminDashboardPage";
+import CustomerActivityPage from "@/pages/CustomerActivityPage";
+import PeopleActivityPage from "@/pages/PeopleActivityPage";
+import PersonActivityPage from "@/pages/PersonActivityPage";
 import AccountPage from "@/pages/AccountPage";
+import ReportsPage from "@/pages/ReportsPage";
+import ReportNewPage from "@/pages/ReportNewPage";
+import ReportDetailPage from "@/pages/ReportDetailPage";
+import MyReportsPage from "@/pages/MyReportsPage";
+import MyReportDetailPage from "@/pages/MyReportDetailPage";
+import PortalIndexRedirect from "@/components/PortalIndexRedirect";
 
 const queryClient = new QueryClient();
 
@@ -78,15 +87,51 @@ const App = () => {
                 </ProtectedRoute>
               }
             >
-              <Route index element={<Navigate to="requests" replace />} />
+              <Route index element={<PortalIndexRedirect />} />
               <Route path="requests" element={<RequestsPage />} />
               <Route path="requests/new" element={<RequestNewPage />} />
               <Route path="requests/:requestId" element={<RequestDetailPage />} />
               <Route
                 path="queue"
                 element={
-                  <ProtectedRoute roles={["engineer", "admin"]}>
+                  <ProtectedRoute roles={["engineer", "support", "owner", "admin"]}>
                     <QueuePage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* The old Support Dashboard is gone; keep its URL working. */}
+              <Route path="support" element={<Navigate to="/app/activity" replace />} />
+              <Route
+                path="activity"
+                element={
+                  <ProtectedRoute roles={["support", "admin"]}>
+                    <PeopleActivityPage />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Engineers may open only their own page; the gateway is
+                  authoritative and returns 403 for anyone else's. */}
+              <Route
+                path="activity/:userId"
+                element={
+                  <ProtectedRoute roles={["support", "admin", "engineer"]}>
+                    <PersonActivityPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="customer-activity"
+                element={
+                  <ProtectedRoute roles={["support", "owner", "admin"]}>
+                    <CustomerActivityPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="customer-activity/:customerId"
+                element={
+                  <ProtectedRoute roles={["support", "owner", "admin"]}>
+                    <CustomerActivityPage />
                   </ProtectedRoute>
                 }
               />
@@ -101,7 +146,7 @@ const App = () => {
               <Route
                 path="users"
                 element={
-                  <ProtectedRoute roles={["admin"]}>
+                  <ProtectedRoute roles={["owner", "admin"]}>
                     <UsersPage />
                   </ProtectedRoute>
                 }
@@ -109,7 +154,7 @@ const App = () => {
               <Route
                 path="machines"
                 element={
-                  <ProtectedRoute roles={["admin"]}>
+                  <ProtectedRoute roles={["owner", "admin"]}>
                     <MachinesPage />
                   </ProtectedRoute>
                 }
@@ -117,11 +162,32 @@ const App = () => {
               <Route
                 path="machines/:customerId"
                 element={
-                  <ProtectedRoute roles={["admin"]}>
+                  <ProtectedRoute roles={["owner", "admin"]}>
                     <CustomerMachineProfilePage />
                   </ProtectedRoute>
                 }
               />
+              {/* Submission and My Reports stay available to signed-in users.
+                  The staff console and its detail payload are Admin-only. */}
+              <Route path="reports/new" element={<ReportNewPage />} />
+              <Route
+                path="reports"
+                element={
+                  <ProtectedRoute roles={["admin"]}>
+                    <ReportsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="reports/:reportId"
+                element={
+                  <ProtectedRoute roles={["admin"]}>
+                    <ReportDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="my-reports" element={<MyReportsPage />} />
+              <Route path="my-reports/:reportId" element={<MyReportDetailPage />} />
               <Route path="account" element={<AccountPage />} />
             </Route>
 

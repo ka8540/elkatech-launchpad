@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ServiceRequest } from "@elkatech/contracts";
+import { Inbox } from "lucide-react";
 import { apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER } from "@/lib/page-layout";
+import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { cn } from "@/lib/utils";
 
@@ -14,15 +17,12 @@ const QueuePage = () => {
   });
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
-      <header className={cn("rounded-2xl p-5 sm:p-6", cardSurface)}>
-        <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-          Queue
-        </p>
-        <h2 className="mt-2 lp-display text-2xl font-bold text-[var(--lp-ink)]">
-          Engineer work queue
-        </h2>
-      </header>
+    <div className={PAGE_CONTAINER}>
+      <PageHeader
+        icon={Inbox}
+        title="Queue"
+        description="Unassigned and in-flight service requests waiting for an engineer."
+      />
 
       {isLoading ? (
         <div className={cn("rounded-2xl p-5 text-sm text-[var(--lp-ink-soft)]", cardSurface)}>

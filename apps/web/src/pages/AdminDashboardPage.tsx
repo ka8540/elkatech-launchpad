@@ -5,7 +5,6 @@ import {
   Activity,
   ArrowRight,
   CheckCircle2,
-  ClipboardList,
   Clock,
   Gauge,
   RefreshCw,
@@ -18,7 +17,10 @@ import {
 } from "lucide-react";
 import type { AuthUser, ServiceRequest, ServiceHeartbeat } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import { cn } from "@/lib/utils";
+import PageHeader from "@/components/PageHeader";
+import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 
 type ApprovalSummary = {
@@ -35,61 +37,6 @@ type HealthResponse = {
 
 /* ─── Shared surface helper ───────────────────────────────────────────────── */
 const cardSurface = "lp-card border";
-
-/* ─── Stat card ────────────────────────────────────────────────────────────── */
-function StatCard({
-  label,
-  count,
-  icon: Icon,
-  accent,
-  hint,
-}: {
-  label: string;
-  count: number | string;
-  icon: LucideIcon;
-  accent: "copper" | "emerald" | "amber" | "steel" | "rose";
-  hint?: string;
-}) {
-  const badgeMap: Record<typeof accent, string> = {
-    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-    rose: "border-rose-400/30 bg-rose-400/10 text-rose-600 dark:text-rose-300",
-  };
-
-  return (
-    <div
-      className={cn(
-        "relative overflow-hidden rounded-2xl p-5 transition-colors duration-150",
-        cardSurface,
-        "hover:border-[var(--lp-line-strong)]",
-      )}
-    >
-      <div className="relative flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="lp-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
-            {label}
-          </p>
-          <p className="lp-display mt-2 text-4xl font-bold text-[var(--lp-ink)]">{count}</p>
-          {hint && (
-            <p className="mt-1.5 text-[11px] font-medium text-[var(--lp-faint)]">
-              {hint}
-            </p>
-          )}
-        </div>
-        <div
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border",
-            badgeMap[accent],
-          )}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─── Service heartbeat row ────────────────────────────────────────────────── */
 function statusColor(status: ServiceHeartbeat["status"]): string {
@@ -191,59 +138,23 @@ const AdminDashboardPage = () => {
   const pendingCount = summaryQuery.data?.pendingApproval ?? 0;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      {/* Header */}
-      <header
-        className={cn(
-          "relative overflow-hidden rounded-3xl p-6 sm:p-8",
-          cardSurface,
-        )}
-      >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
-          style={{
-            maskImage: "linear-gradient(to right, black, transparent 70%)",
-            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
-          }}
-        />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="mb-4 flex items-center gap-3">
-              <div
-                className={cn(
-                  "flex h-11 w-11 items-center justify-center rounded-2xl border",
-                  "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-                )}
-              >
-                <Gauge className="h-5 w-5" />
-              </div>
-              <p className="lp-mono text-xs font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-                Admin Dashboard
-              </p>
-            </div>
-            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)] sm:text-3xl">
-              Operations overview
-            </h1>
-            <p className="mt-2.5 max-w-xl text-sm leading-7 text-[var(--lp-ink-soft)]">
-              Account approvals, service request load, and live service health for the
-              ElkaTech platform.
-            </p>
-          </div>
-
-          <div className="flex w-fit shrink-0 items-center gap-2">
-            <Button
-              asChild
-              className="h-11 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] shadow-sm transition-colors hover:bg-[var(--lp-accent-2)]"
-            >
-              <Link to="/app/users">
-                <UserPlus className="mr-1.5 h-4 w-4" />
-                Manage users
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className={PAGE_CONTAINER}>
+      <PageHeader
+        icon={Gauge}
+        title="Operations Overview"
+        description="Account approvals, service request load, and live service health."
+        action={
+          <Button
+            asChild
+            className={PAGE_PRIMARY_ACTION}
+          >
+            <Link to="/app/users">
+              <UserPlus className="mr-1.5 h-4 w-4" />
+              Manage users
+            </Link>
+          </Button>
+        }
+      />
 
       {/* Pending banner if work to do */}
       {pendingCount > 0 && (
@@ -263,7 +174,7 @@ const AdminDashboardPage = () => {
       )}
 
       {/* User approval stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <StatGrid minTileWidth="12rem">
         <StatCard
           label="Pending approvals"
           count={summaryQuery.data?.pendingApproval ?? "—"}
@@ -292,10 +203,10 @@ const AdminDashboardPage = () => {
           accent="steel"
           hint="Not approved"
         />
-      </div>
+      </StatGrid>
 
       {/* Request load stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <StatGrid minTileWidth="12rem">
         <StatCard
           label="Open requests"
           count={requestStats.open}
@@ -324,7 +235,7 @@ const AdminDashboardPage = () => {
           accent="steel"
           hint="All accounts"
         />
-      </div>
+      </StatGrid>
 
       {/* Service heartbeats */}
       <section
@@ -535,26 +446,6 @@ const AdminDashboardPage = () => {
         </section>
       </div>
 
-      {/* Footer help */}
-      <div className={cn("rounded-2xl px-5 py-4", cardSurface)}>
-        <div className="flex items-start gap-3">
-          <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
-          <p className="text-sm leading-6 text-[var(--lp-ink-soft)]">
-            <span className="font-medium text-[var(--lp-ink)]">
-              Approve a customer:
-            </span>{" "}
-            new signups land in <em>pending_approval</em> and cannot create service
-            requests until you approve them on the{" "}
-            <Link
-              to="/app/users"
-              className="text-[var(--lp-accent)] underline-offset-2 hover:underline"
-            >
-              Users page
-            </Link>
-            .
-          </p>
-        </div>
-      </div>
     </div>
   );
 };

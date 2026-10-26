@@ -1,4 +1,8 @@
-import type { AttachmentUploadTicket, RequestAttachment } from "@elkatech/contracts";
+import type {
+  AttachmentUploadTicket,
+  MessageVisibility,
+  RequestAttachment,
+} from "@elkatech/contracts";
 import { apiRequest } from "./api";
 
 /**
@@ -10,7 +14,12 @@ import { apiRequest } from "./api";
 export async function uploadRequestAttachment(
   requestId: string,
   file: File,
+  options: {
+    visibility?: MessageVisibility;
+    messageId?: string;
+  } = {},
 ): Promise<RequestAttachment> {
+  const visibility = options.visibility ?? "customer_visible";
   const ticket = await apiRequest<AttachmentUploadTicket>(
     `/api/requests/${requestId}/attachments/presign`,
     {
@@ -19,6 +28,7 @@ export async function uploadRequestAttachment(
         fileName: file.name,
         contentType: file.type,
         sizeBytes: file.size,
+        visibility,
       }),
     },
   );
@@ -58,6 +68,8 @@ export async function uploadRequestAttachment(
       fileName: file.name,
       contentType: file.type,
       sizeBytes: file.size,
+      visibility,
+      messageId: options.messageId,
     }),
   });
 }

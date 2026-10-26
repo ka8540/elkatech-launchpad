@@ -51,7 +51,7 @@ const ForgotPasswordPage = () => {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@company.com"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <Button type="submit" variant="cta" size="lg" className="w-full" disabled={mutation.isPending}>

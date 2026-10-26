@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { approvalStatusSchema, authUserSchema, firebaseSessionInputSchema } from "./index";
+import {
+  approvalStatusSchema,
+  authUserSchema,
+  canEditUserProfiles,
+  firebaseSessionInputSchema,
+} from "./index";
 
 describe("approval status schemas", () => {
   it("accepts all four approval statuses", () => {
@@ -47,5 +52,15 @@ describe("firebase session input schema", () => {
     expect(
       firebaseSessionInputSchema.safeParse({ idToken: "x".repeat(40) }).success,
     ).toBe(true);
+  });
+});
+
+describe("profile-edit permission", () => {
+  it("keeps editing another user's profile Admin-only", () => {
+    expect(canEditUserProfiles("admin")).toBe(true);
+    expect(canEditUserProfiles("owner")).toBe(false);
+    expect(canEditUserProfiles("support")).toBe(false);
+    expect(canEditUserProfiles("engineer")).toBe(false);
+    expect(canEditUserProfiles("customer")).toBe(false);
   });
 });

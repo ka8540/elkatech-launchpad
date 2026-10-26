@@ -13,9 +13,11 @@ import type { AuthUser } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest, ApiError } from "@/lib/api";
 import { firebaseSignOut } from "@/lib/firebase";
+import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { PAGE_CONTAINER_READING } from "@/lib/page-layout";
 
 const cardSurface = "lp-card border";
 
@@ -37,7 +39,7 @@ function statusBadgeClass(status: AuthUser["approvalStatus"]) {
 function originLabel(origin: AuthUser["accountOrigin"]) {
   switch (origin) {
     case "admin_invite":
-      return "Staff invited";
+      return "Invited account";
     case "firebase_google":
       return "Google sign-in";
     case "legacy":
@@ -119,7 +121,7 @@ const AccountPage = () => {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-3xl space-y-4">
+      <div className={PAGE_CONTAINER_READING}>
         <div className={cn("h-28 animate-pulse rounded-2xl", cardSurface)} />
         <div className={cn("h-48 animate-pulse rounded-2xl", cardSurface)} />
       </div>
@@ -152,32 +154,13 @@ const AccountPage = () => {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className={PAGE_CONTAINER_READING}>
       {/* Header */}
-      <header className={cn("relative overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
-          style={{
-            maskImage: "linear-gradient(to right, black, transparent 70%)",
-            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
-          }}
-        />
-        <div className="relative">
-          <div className="mb-3 flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-              <CircleUser className="h-4 w-4" />
-            </div>
-            <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-              Account
-            </p>
-          </div>
-          <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">My Account</h1>
-          <p className="mt-1.5 max-w-xl text-sm leading-6 text-[var(--lp-ink-soft)]">
-            View your portal details and manage sign-in settings.
-          </p>
-        </div>
-      </header>
+      <PageHeader
+        icon={CircleUser}
+        title="My Account"
+        description="View your portal details and manage sign-in settings."
+      />
 
       {/* Profile summary */}
       <section className={cn("rounded-2xl p-5", cardSurface)}>

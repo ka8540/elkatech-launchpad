@@ -48,7 +48,7 @@ const ResetPasswordPage = () => {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="At least 8 characters"
-            className="bg-background"
+            className="lp-field"
           />
         </div>
         <Button type="submit" variant="cta" size="lg" className="w-full" disabled={mutation.isPending || !token}>

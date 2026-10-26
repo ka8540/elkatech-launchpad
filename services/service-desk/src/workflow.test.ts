@@ -51,6 +51,30 @@ describe("service desk workflow permissions", () => {
     expect(canViewRequest(otherEngineer, assignedRequest)).toBe(false);
   });
 
+  it("lets owner and support open and answer a request assigned to someone else", () => {
+    const owner = { id: "owner-1", role: "owner" as const };
+    const support = { id: "support-1", role: "support" as const };
+    const assignedRequest = {
+      customerId: "customer-1",
+      assignedEngineerId: "engineer-1",
+      status: "in_progress" as const,
+    };
+    const closedRequest = {
+      customerId: "customer-1",
+      assignedEngineerId: "engineer-1",
+      status: "closed" as const,
+    };
+
+    for (const actor of [owner, support, admin]) {
+      expect(canViewRequest(actor, assignedRequest)).toBe(true);
+      expect(canReplyToRequest(actor, assignedRequest)).toBe(true);
+      expect(canViewRequest(actor, closedRequest)).toBe(true);
+    }
+
+    // Engineers stay scoped to their own queue.
+    expect(canViewRequest(otherEngineer, assignedRequest)).toBe(false);
+  });
+
   it("restricts claim and status updates to the right staff", () => {
     const openRequest = {
       customerId: "customer-1",

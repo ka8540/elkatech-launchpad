@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { RequestStatusGroup, ServiceRequest } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 import { apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER, PAGE_PRIMARY_ACTION } from "@/lib/page-layout";
 import {
   getRequestStatusGroup,
   getRequestStatusLabel,
@@ -12,6 +13,8 @@ import {
 } from "@/lib/request-status";
 import VerifyEmailNotice from "@/components/VerifyEmailNotice";
 import { ApprovalStateCard, isCustomerActionBlocked } from "@/components/ApprovalState";
+import PageHeader from "@/components/PageHeader";
+import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -19,8 +22,9 @@ import {
   ArrowRight,
   Archive,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
-  ExternalLink,
   Inbox,
   LifeBuoy,
   Package2,
@@ -34,6 +38,8 @@ type DashboardFilter = Extract<
   RequestStatusGroup,
   "all" | "open" | "in_progress" | "resolved" | "archived"
 >;
+
+const REQUESTS_PAGE_SIZE = 10;
 
 const dashboardFilters: Array<{
   value: DashboardFilter;
@@ -119,66 +125,9 @@ function Skeleton({ className }: { className?: string }) {
 /* ─── Matte card surface (shared utility — see index.css `.lp-card`) ──────── */
 const cardSurface = "lp-card border";
 
-/* ─── Stat card ────────────────────────────────────────────────────────────── */
-function StatCard({
-  label,
-  count,
-  icon: Icon,
-  accent,
-  active = false,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  icon: React.ComponentType<{ className?: string }>;
-  accent: "copper" | "emerald" | "amber" | "steel";
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  const badgeMap = {
-    copper: "border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]",
-    emerald: "border-emerald-400/30 bg-emerald-400/10 text-emerald-600 dark:text-emerald-300",
-    amber: "border-amber-400/30 bg-amber-400/10 text-amber-600 dark:text-amber-300",
-    steel: "border-[var(--lp-line-strong)] bg-[var(--lp-panel-2)] text-[var(--lp-ink-soft)]",
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "group relative w-full overflow-hidden rounded-xl p-4 text-left transition-colors duration-150",
-        cardSurface,
-        "hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35",
-        active && "border-[var(--lp-accent)]/55 bg-[var(--lp-accent)]/[0.08]",
-      )}
-    >
-      <div className="relative flex items-center justify-between gap-3">
-        <div>
-          <p className="lp-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--lp-faint)]">
-            {label}
-          </p>
-          <p className="lp-display mt-1.5 text-3xl font-bold text-[var(--lp-ink)]">
-            {count}
-          </p>
-        </div>
-        <div
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
-            badgeMap[accent],
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </div>
-      </div>
-    </button>
-  );
-}
-
-/* ─── Loading skeleton ─────────────────────────────────────────────────────── */
 function LoadingSkeleton() {
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className={PAGE_CONTAINER}>
       {/* Header skeleton */}
       <div className={cn("rounded-2xl p-5 sm:p-6", cardSurface)}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -282,7 +231,7 @@ function RequestCard({ request }: { request: ServiceRequest }) {
     <Link
       to={`/app/requests/${request.id}`}
       className={cn(
-        "group block overflow-hidden rounded-2xl p-5 transition-colors duration-150",
+        "group block min-h-[132px] overflow-hidden rounded-2xl p-5 transition-colors duration-150",
         cardSurface,
         "hover:border-[var(--lp-accent)]/45",
       )}
@@ -361,6 +310,7 @@ const RequestsPage = () => {
   const { data: session } = useSession();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const activeFilter = normalizeDashboardFilter(searchParams.get("status"));
   const filterMeta =
     dashboardFilters.find((filter) => filter.value === activeFilter) ??
@@ -390,8 +340,11 @@ const RequestsPage = () => {
       : null;
 
   /* ── Derive stats ─── */
-  const activeRequests = activeData ?? [];
-  const sourceRequests = activeFilter === "archived" ? archivedData ?? [] : activeRequests;
+  const activeRequests = useMemo(() => activeData ?? [], [activeData]);
+  const sourceRequests = useMemo(
+    () => (activeFilter === "archived" ? archivedData ?? [] : activeRequests),
+    [activeFilter, activeRequests, archivedData],
+  );
   const requests = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     return sourceRequests.filter((request) => {
@@ -412,6 +365,30 @@ const RequestsPage = () => {
         .some((value) => value.toLowerCase().includes(normalizedSearch));
     });
   }, [activeFilter, searchQuery, sourceRequests]);
+  const pageCount = Math.max(1, Math.ceil(requests.length / REQUESTS_PAGE_SIZE));
+  const visiblePageIndex = Math.min(pageIndex, pageCount - 1);
+  const pagedRequests = useMemo(
+    () =>
+      requests.slice(
+        visiblePageIndex * REQUESTS_PAGE_SIZE,
+        (visiblePageIndex + 1) * REQUESTS_PAGE_SIZE,
+      ),
+    [requests, visiblePageIndex],
+  );
+  const showPagination = requests.length > REQUESTS_PAGE_SIZE;
+  const emptyPageSlots =
+    showPagination && pagedRequests.length > 0
+      ? Math.max(0, REQUESTS_PAGE_SIZE - pagedRequests.length)
+      : 0;
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [activeFilter, searchQuery]);
+
+  useEffect(() => {
+    if (pageIndex >= pageCount) setPageIndex(pageCount - 1);
+  }, [pageCount, pageIndex]);
+
   const summaryRequests = activeRequests;
   const totalCount = summaryRequests.length;
 
@@ -437,44 +414,24 @@ const RequestsPage = () => {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className={PAGE_CONTAINER}>
       {/* ── Header card ───────────────────────────────────────────────────── */}
-      <header className={cn("relative overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 lp-grid-fine opacity-[0.18]"
-          style={{
-            maskImage: "linear-gradient(to right, black, transparent 70%)",
-            WebkitMaskImage: "linear-gradient(to right, black, transparent 70%)",
-          }}
-        />
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <div className="mb-3 flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-                <ClipboardList className="h-4 w-4" />
-              </div>
-              <p className="lp-mono text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--lp-accent)]">
-                Service Requests
-              </p>
-            </div>
-            <h1 className="lp-display text-2xl font-bold text-[var(--lp-ink)]">
-              {activeFilter === "all"
-                ? isCustomer
-                  ? "Your Requests"
-                  : "Requests"
-                : `${filterMeta.label} Requests`}
-            </h1>
-            <p className="mt-1.5 max-w-xl text-sm leading-6 text-[var(--lp-ink-soft)]">
-              {filterMeta.description}
-            </p>
-          </div>
-
+      <PageHeader
+        icon={ClipboardList}
+        title={
+          activeFilter === "all"
+            ? isCustomer
+              ? "Your Requests"
+              : "Requests"
+            : `${filterMeta.label} Requests`
+        }
+        description={filterMeta.description}
+        action={
           <Button
             asChild
             disabled={approvalBlocked}
             className={cn(
-              "h-10 w-fit shrink-0 rounded-full bg-[var(--lp-accent)] px-5 font-semibold text-[#fbfaf6] transition-colors hover:bg-[var(--lp-accent-2)]",
+              PAGE_PRIMARY_ACTION,
               approvalBlocked && "pointer-events-none opacity-60",
             )}
           >
@@ -487,8 +444,8 @@ const RequestsPage = () => {
               Create Service Request
             </Link>
           </Button>
-        </div>
-      </header>
+        }
+      />
 
       {/* ── Approval gate banner (pending / rejected / suspended) ───────── */}
       {approvalStatus && (
@@ -503,7 +460,7 @@ const RequestsPage = () => {
       )}
 
       {/* ── Stat cards ────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <StatGrid minTileWidth="11rem">
         <StatCard
           label="Total Requests"
           count={totalCount}
@@ -536,7 +493,7 @@ const RequestsPage = () => {
           active={activeFilter === "resolved"}
           onClick={() => setFilter("resolved")}
         />
-      </div>
+      </StatGrid>
 
       <section className={cn("rounded-xl p-3 sm:p-4", cardSurface)}>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -632,34 +589,53 @@ const RequestsPage = () => {
                   {requests.length} request{requests.length !== 1 ? "s" : ""} shown
                 </p>
               </div>
-              {requests.map((request) => (
+              {pagedRequests.map((request) => (
                 <RequestCard key={request.id} request={request} />
               ))}
+              {Array.from({ length: emptyPageSlots }, (_, index) => (
+                <div
+                  key={`request-empty-card-${index}`}
+                  aria-hidden="true"
+                  className="invisible min-h-[132px] rounded-2xl border"
+                />
+              ))}
+
+              {showPagination && (
+                <nav
+                  aria-label="Requests pagination"
+                  className="flex items-center justify-end gap-2"
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Previous requests page"
+                    disabled={visiblePageIndex === 0}
+                    onClick={() => setPageIndex((current) => Math.max(0, current - 1))}
+                    className="h-8 w-8 rounded-full"
+                  >
+                    <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    aria-label="Next requests page"
+                    disabled={visiblePageIndex + 1 >= pageCount}
+                    onClick={() =>
+                      setPageIndex((current) => Math.min(pageCount - 1, current + 1))
+                    }
+                    className="h-8 w-8 rounded-full"
+                  >
+                    <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                </nav>
+              )}
             </div>
           )}
         </>
       )}
 
-      {/* ── Help panel ────────────────────────────────────────────────────── */}
-      {requests.length > 0 && (
-        <div className={cn("rounded-2xl px-5 py-4 border", cardSurface)}>
-          <div className="flex items-start gap-3">
-            <LifeBuoy className="mt-0.5 h-4 w-4 shrink-0 text-[var(--lp-accent)]" />
-            <div className="min-w-0 text-sm leading-6 text-[var(--lp-ink-soft)]">
-              <span className="font-medium text-[var(--lp-ink)]">Need to report a new issue?</span>{" "}
-              You can also start a request directly from a{" "}
-              <Link
-                to="/"
-                className="inline-flex items-center gap-1 text-[var(--lp-accent)] underline-offset-2 hover:underline"
-              >
-                product page
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-              .
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
-import type { Role } from "@elkatech/contracts";
+import { portalHomePathForRole, type Role } from "@elkatech/contracts";
 import { useSession } from "@/hooks/use-session";
 
 type ProtectedRouteProps = {
@@ -63,7 +63,7 @@ const ProtectedRoute = ({ children, roles, allowIncompleteProfile }: ProtectedRo
   }
 
   if (roles && !roles.includes(data.user.role)) {
-    const fallback = data.user.role === "customer" ? "/app/requests" : "/app/queue";
+    const fallback = portalHomePathForRole(data.user.role);
     return <Navigate to={fallback} replace />;
   }
 

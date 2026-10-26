@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Loader2, MapPin, Phone, Search, UserRound } from "lucide-react";
+import { Check, Loader2, MapPin, Phone } from "lucide-react";
 import type {
-  AuthUser,
   CatalogProduct,
+  CustomerPickerCustomer,
+  CustomerPickerResponse,
   CustomerMachine,
   CustomerProfile,
 } from "@elkatech/contracts";
@@ -27,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import CustomerPicker from "@/components/CustomerPicker";
 
 type FormState = {
   customerId: string;
@@ -116,7 +118,6 @@ function CheckRow({
 const MachineFormDialog = ({
   open,
   onOpenChange,
-  customers,
   products,
   editing,
   defaultCustomerId,
@@ -124,14 +125,13 @@ const MachineFormDialog = ({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  customers: AuthUser[];
   products: CatalogProduct[];
   editing: CustomerMachine | null;
   defaultCustomerId?: string;
   onSaved: () => void;
 }) => {
   const [form, setForm] = useState<FormState>(empty);
-  const [customerSearch, setCustomerSearch] = useState("");
+  const [chosenCustomer, setChosenCustomer] = useState<CustomerPickerCustomer | null>(null);
   const [useDifferentSite, setUseDifferentSite] = useState(false);
   const [useDifferentPhone, setUseDifferentPhone] = useState(false);
 
@@ -153,7 +153,7 @@ const MachineFormDialog = ({
     } else {
       setForm({ ...empty, customerId: defaultCustomerId ?? "" });
     }
-    setCustomerSearch("");
+    setChosenCustomer(null);
     setUseDifferentSite(false);
     setUseDifferentPhone(false);
   }, [open, editing, defaultCustomerId]);
@@ -163,20 +163,35 @@ const MachineFormDialog = ({
     (value: FormState[K]) =>
       setForm((f) => ({ ...f, [key]: value }));
 
-  function selectCustomer(id: string) {
-    setForm((f) => ({ ...f, customerId: id }));
+  function selectCustomer(customer: CustomerPickerCustomer | null) {
+    setChosenCustomer(customer);
+    setForm((f) => ({ ...f, customerId: customer?.id ?? "" }));
     setUseDifferentSite(false);
     setUseDifferentPhone(false);
   }
 
-  const filteredCustomers = useMemo(() => {
-    const needle = customerSearch.trim().toLowerCase();
-    const list = customers.filter((c) => c.role === "customer");
-    if (!needle) return list;
-    return list.filter((c) => `${c.displayName} ${c.email}`.toLowerCase().includes(needle));
-  }, [customers, customerSearch]);
-
-  const selectedCustomer = customers.find((c) => c.id === form.customerId) ?? null;
+  // Resolve a customer supplied by a deep link or an existing machine without
+  // downloading the full customer directory.
+  const selectedCustomerQuery = useQuery({
+    queryKey: ["admin", "customer-picker", "selected", form.customerId],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        customerId: form.customerId,
+        limit: "1",
+      });
+      return apiRequest<CustomerPickerResponse>(
+        `/api/admin/customer-picker?${params.toString()}`,
+      );
+    },
+    enabled:
+      open &&
+      Boolean(form.customerId) &&
+      chosenCustomer?.id !== form.customerId,
+  });
+  const selectedCustomer =
+    chosenCustomer?.id === form.customerId
+      ? chosenCustomer
+      : selectedCustomerQuery.data?.customers[0] ?? null;
 
   // Saved profile for the selected customer (create mode only).
   const profileQuery = useQuery({
@@ -252,7 +267,7 @@ const MachineFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[calc(100vh_-_2rem)] w-[calc(100%_-_2rem)] overflow-y-auto sm:max-w-4xl xl:max-w-5xl">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit machine" : "Link machine to customer"}</DialogTitle>
           <DialogDescription>
@@ -262,7 +277,10 @@ const MachineFormDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={submit} className="space-y-5">
+        <form
+          onSubmit={submit}
+          className="grid gap-5 lg:grid-cols-2 lg:items-start"
+        >
           {/* ── Customer ─────────────────────────────────────────────────── */}
           <section className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--lp-faint)]">
@@ -270,77 +288,30 @@ const MachineFormDialog = ({
             </p>
 
             {editing ? (
-              <div className="rounded-lg border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/60 px-3 py-2 text-sm text-[var(--lp-ink)]">
-                {selectedCustomer
-                  ? `${selectedCustomer.displayName} · ${selectedCustomer.email}`
-                  : editing.customerId}
-              </div>
-            ) : !form.customerId ? (
-              <>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--lp-faint)]" />
-                  <Input
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
-                    placeholder="Search customer by name or email"
-                    className="bg-background pl-9"
-                  />
-                </div>
-                <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[var(--lp-line)] p-1">
-                  {filteredCustomers.length === 0 ? (
-                    <p className="px-2 py-2 text-sm text-[var(--lp-faint)]">No customers match.</p>
-                  ) : (
-                    filteredCustomers.map((c) => (
-                      <button
-                        type="button"
-                        key={c.id}
-                        onClick={() => selectCustomer(c.id)}
-                        className="flex w-full items-center justify-between gap-2 rounded-md border border-transparent px-2.5 py-2 text-left text-sm text-[var(--lp-ink-soft)] transition-colors hover:bg-[var(--lp-panel-2)] focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/45"
-                      >
-                        <span className="min-w-0 truncate">
-                          {c.displayName} · {c.email}
-                        </span>
-                        {c.approvalStatus !== "approved" && (
-                          <span className="shrink-0 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-300">
-                            {c.approvalStatus === "pending_approval" ? "pending" : c.approvalStatus}
-                          </span>
-                        )}
-                      </button>
-                    ))
+              selectedCustomer ? (
+                <CustomerPicker
+                  value={selectedCustomer}
+                  onChange={() => undefined}
+                  readOnly
+                />
+              ) : (
+                <div className="flex items-center gap-2 rounded-lg border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/60 px-3 py-2 text-sm text-[var(--lp-faint)]">
+                  {selectedCustomerQuery.isLoading && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   )}
+                  {selectedCustomerQuery.isLoading
+                    ? "Loading customer…"
+                    : editing.customerId}
                 </div>
-              </>
+              )
             ) : (
-              /* Read-only summary of the selected customer's saved details. */
-              <div className="rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/50 p-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-start gap-2.5">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--lp-accent)]/30 bg-[var(--lp-accent)]/10 text-[var(--lp-accent)]">
-                      <UserRound className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-[var(--lp-ink)]">
-                        {profile?.displayName || selectedCustomer?.displayName}
-                      </p>
-                      <p className="truncate text-xs text-[var(--lp-ink-soft)]">
-                        {selectedCustomer?.email}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => selectCustomer("")}
-                    className="shrink-0 text-xs font-medium text-[var(--lp-accent)] hover:underline focus:outline-none"
-                  >
-                    Change
-                  </button>
-                </div>
-
-                {profileQuery.isLoading ? (
+              <>
+                <CustomerPicker value={selectedCustomer} onChange={selectCustomer} />
+                {form.customerId && profileQuery.isLoading ? (
                   <p className="mt-3 flex items-center gap-2 text-xs text-[var(--lp-faint)]">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading saved details…
                   </p>
-                ) : (
+                ) : form.customerId ? (
                   <dl className="mt-3 grid gap-1.5 text-xs">
                     <div className="flex items-center gap-2">
                       <Phone className="h-3.5 w-3.5 shrink-0 text-[var(--lp-faint)]" />
@@ -355,8 +326,8 @@ const MachineFormDialog = ({
                       </span>
                     </div>
                   </dl>
-                )}
-              </div>
+                ) : null}
+              </>
             )}
           </section>
 
@@ -520,14 +491,14 @@ const MachineFormDialog = ({
             />
           </Field>
 
-          <div className="flex justify-end gap-2 pt-1">
+          <div className="flex justify-end gap-2 pt-1 lg:col-span-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button
               type="submit"
               className="bg-[var(--lp-accent)] text-[#fbfaf6] hover:bg-[var(--lp-accent-2)]"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || (!editing && !form.customerId)}
             >
               {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               {editing ? "Save changes" : "Link machine"}

@@ -1,3 +1,5 @@
+import { setLastCorrelationId } from "./report-context";
+
 export class ApiError extends Error {
   status: number;
 
@@ -42,6 +44,13 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     body,
     headers,
   });
+
+  // Remember the gateway's request id so an issue report filed right after a
+  // failure can quote something that actually appears in the server logs.
+  const correlationId = response.headers.get("x-correlation-id");
+  if (correlationId) {
+    setLastCorrelationId(correlationId);
+  }
 
   if (!response.ok) {
     let message = response.statusText;

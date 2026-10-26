@@ -1,12 +1,14 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Link, useParams, type LinkProps } from "react-router-dom";
+import { Link, useLocation, useParams, type LinkProps } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   ArrowLeft,
   CalendarDays,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   ExternalLink,
   Eye,
@@ -33,6 +35,9 @@ import type {
 } from "@elkatech/contracts";
 import { ApiError, apiRequest } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PAGE_CONTAINER, PAGE_CONTAINER_READING } from "@/lib/page-layout";
+import { customerMachineProfileReturnTo } from "@/lib/customer-machine-navigation";
+import { customerProfilePage } from "@/lib/customer-profile-pagination";
 import { getRequestStatusLabel, REQUEST_STATUS_BADGE_CLASSES } from "@/lib/request-status";
 import { Button } from "@/components/ui/button";
 import {
@@ -176,12 +181,12 @@ function MetricCard({
     <div className={cn("min-w-0 rounded-2xl p-4", cardSurface)}>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="lp-mono break-words text-[10px] font-medium uppercase leading-4 tracking-[0.14em] text-[var(--lp-faint)]">
+          <p className="lp-mono min-h-8 break-words text-[10px] font-medium uppercase leading-4 tracking-[0.14em] text-[var(--lp-faint)]">
             {label}
           </p>
           <p
             className={cn(
-              "mt-2 min-w-0 break-words text-[var(--lp-ink)]",
+              "mt-2 flex min-h-8 min-w-0 items-center break-words text-[var(--lp-ink)]",
               valueClassName ?? "text-2xl font-bold",
             )}
           >
@@ -655,12 +660,16 @@ function MachineDetailDrawer({
 
 const CustomerMachineProfilePage = () => {
   const { customerId = "" } = useParams();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CustomerMachine | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<CustomerMachine | null>(null);
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
   const [pendingMachineId, setPendingMachineId] = useState<string | null>(null);
+  const [machinePage, setMachinePage] = useState(0);
+  const [requestPage, setRequestPage] = useState(0);
+  const backTo = customerMachineProfileReturnTo(location.state);
 
   const profileQuery = useQuery({
     queryKey: ["admin", "user", customerId, "profile"],
@@ -700,6 +709,10 @@ const CustomerMachineProfilePage = () => {
   const customer = profileQuery.data?.user ?? usersQuery.data?.find((user) => user.id === customerId) ?? null;
   const profile = profileQuery.data?.profile ?? null;
   const machines = useMemo(() => sortByUpdated(machinesQuery.data ?? []), [machinesQuery.data]);
+  const paginatedMachines = useMemo(
+    () => customerProfilePage(machines, machinePage),
+    [machinePage, machines],
+  );
   const activeMachines = useMemo(() => machines.filter((machine) => machine.status === "active"), [machines]);
   const inactiveMachines = useMemo(() => machines.filter((machine) => machine.status === "inactive"), [machines]);
   const machineMap = useMemo(() => new Map(machines.map((machine) => [machine.id, machine])), [machines]);
@@ -708,6 +721,10 @@ const CustomerMachineProfilePage = () => {
   const relatedRequests = useMemo(
     () => (requestsQuery.data ?? []).filter((request) => request.customerId === customerId),
     [requestsQuery.data, customerId],
+  );
+  const paginatedRequests = useMemo(
+    () => customerProfilePage(relatedRequests, requestPage),
+    [relatedRequests, requestPage],
   );
   const openRequests = useMemo(() => relatedRequests.filter(isOpenRequest), [relatedRequests]);
   const lastServiceActivity = relatedRequests[0]?.updatedAt ?? null;
@@ -720,6 +737,23 @@ const CustomerMachineProfilePage = () => {
   const selectedMachineRequests = selectedMachine
     ? relatedRequests.filter((request) => request.customerMachineId === selectedMachine.id)
     : [];
+
+  useEffect(() => {
+    setMachinePage(0);
+    setRequestPage(0);
+  }, [customerId]);
+
+  useEffect(() => {
+    if (machinePage !== paginatedMachines.page) {
+      setMachinePage(paginatedMachines.page);
+    }
+  }, [machinePage, paginatedMachines.page]);
+
+  useEffect(() => {
+    if (requestPage !== paginatedRequests.page) {
+      setRequestPage(paginatedRequests.page);
+    }
+  }, [paginatedRequests.page, requestPage]);
 
   const statusMutation = useMutation({
     mutationFn: async ({ machine, action }: { machine: CustomerMachine; action: "archive" | "reactivate" }) => {
@@ -759,6 +793,7 @@ const CustomerMachineProfilePage = () => {
   }
 
   function onSaved() {
+    setMachinePage(0);
     void queryClient.invalidateQueries({ queryKey: ["admin", "user", customerId, "machines"] });
     void queryClient.invalidateQueries({ queryKey: ["admin", "customer-machines"] });
   }
@@ -826,10 +861,10 @@ const CustomerMachineProfilePage = () => {
 
   if (!customerId) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
-        <Link to="/app/machines" className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
+      <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
+        <Link to={backTo} className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
           <ArrowLeft className="h-4 w-4" />
-          Back to Customer Machines
+          Back
         </Link>
         <div className={cn("rounded-2xl p-6 text-center", cardSurface)}>
           <h1 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">Customer not found</h1>
@@ -841,10 +876,10 @@ const CustomerMachineProfilePage = () => {
 
   if (profileQuery.isError) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
-        <Link to="/app/machines" className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
+      <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
+        <Link to={backTo} className="inline-flex items-center gap-2 text-sm text-[var(--lp-accent)] hover:underline">
           <ArrowLeft className="h-4 w-4" />
-          Back to Customer Machines
+          Back
         </Link>
         <div className={cn("rounded-2xl p-6 text-center", cardSurface)}>
           <h1 className="lp-display text-xl font-semibold text-[var(--lp-ink)]">Customer Machine Profile</h1>
@@ -855,14 +890,14 @@ const CustomerMachineProfilePage = () => {
   }
 
   return (
-    <div className="mx-auto max-w-7xl min-w-0 space-y-5 overflow-x-hidden">
+    <div className={cn(PAGE_CONTAINER, "overflow-x-hidden")}>
       {/* Back navigation, top-left — separate from the primary header actions. */}
       <Link
-        to="/app/machines"
+        to={backTo}
         className="inline-flex h-9 w-fit items-center gap-2 rounded-full border border-[var(--lp-line-strong)] bg-[var(--lp-panel)] px-4 text-sm font-medium text-[var(--lp-ink-soft)] transition-colors hover:border-[var(--lp-accent)]/45 hover:bg-[var(--lp-panel-2)] hover:text-[var(--lp-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/40"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Customer Machines
+        Back
       </Link>
 
       <header className={cn("min-w-0 overflow-hidden rounded-2xl p-5 sm:p-6", cardSurface)}>
@@ -961,7 +996,7 @@ const CustomerMachineProfilePage = () => {
       </section>
 
       <section className={cn("min-w-0 overflow-hidden rounded-2xl", cardSurface)}>
-        <div className="flex min-w-0 flex-col gap-3 border-b border-[var(--lp-line)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h2 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">Linked Machines</h2>
             <p className="mt-1 text-sm text-[var(--lp-ink-soft)]">
@@ -1002,7 +1037,7 @@ const CustomerMachineProfilePage = () => {
                   <col style={{ width: "20%" }} />
                 </colgroup>
                 <thead>
-                  <tr className="border-b border-[var(--lp-line)] text-left">
+                  <tr className="text-left">
                     {["Machine", "Nickname / Unit", "Serial", "Site", "Status", "Updated", "Actions"].map((header) => (
                       <th
                         key={header}
@@ -1017,7 +1052,7 @@ const CustomerMachineProfilePage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {machines.map((machine) => (
+                  {paginatedMachines.items.map((machine) => (
                     <tr
                       key={machine.id}
                       role="button"
@@ -1029,7 +1064,7 @@ const CustomerMachineProfilePage = () => {
                           openDetails(machine);
                         }
                       }}
-                      className="h-[76px] cursor-pointer border-b border-[var(--lp-line)] align-middle transition-colors last:border-b-0 hover:bg-[var(--lp-panel-2)]/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
+                      className="h-[76px] cursor-pointer align-middle transition-colors hover:bg-[var(--lp-panel-2)]/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--lp-accent)]/35"
                     >
                       <td className="px-4 py-2.5">
                         <span className="block truncate text-sm font-semibold leading-5 text-[var(--lp-ink)]" title={productLabel(machine)}>
@@ -1067,12 +1102,21 @@ const CustomerMachineProfilePage = () => {
                       </td>
                     </tr>
                   ))}
+                  {Array.from({ length: paginatedMachines.emptySlots }, (_, index) => (
+                    <tr
+                      key={`machine-empty-row-${index}`}
+                      aria-hidden="true"
+                      className="h-[76px]"
+                    >
+                      <td colSpan={7} />
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
             <div className="space-y-2.5 p-4 lg:hidden">
-              {machines.map((machine) => (
+              {paginatedMachines.items.map((machine) => (
                 <article
                   key={machine.id}
                   role="button"
@@ -1084,7 +1128,7 @@ const CustomerMachineProfilePage = () => {
                       openDetails(machine);
                     }
                   }}
-                  className="min-w-0 cursor-pointer rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/25 p-3.5 transition-colors hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35"
+                  className="min-h-[218px] min-w-0 cursor-pointer rounded-xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/25 p-3.5 transition-colors hover:border-[var(--lp-line-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-accent)]/35"
                 >
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1120,13 +1164,54 @@ const CustomerMachineProfilePage = () => {
                   </div>
                 </article>
               ))}
+              {Array.from({ length: paginatedMachines.emptySlots }, (_, index) => (
+                <div
+                  key={`machine-empty-card-${index}`}
+                  aria-hidden="true"
+                  className="invisible min-h-[218px] rounded-xl border"
+                />
+              ))}
             </div>
+
+            {paginatedMachines.pageCount > 1 && (
+              <nav
+                aria-label="Linked machines pagination"
+                className="flex items-center justify-end gap-2 px-4 py-3"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Previous machines page"
+                  disabled={paginatedMachines.page === 0}
+                  onClick={() => setMachinePage((current) => Math.max(0, current - 1))}
+                  className="h-8 w-8 rounded-full"
+                >
+                  <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Next machines page"
+                  disabled={paginatedMachines.page >= paginatedMachines.pageCount - 1}
+                  onClick={() =>
+                    setMachinePage((current) =>
+                      Math.min(paginatedMachines.pageCount - 1, current + 1),
+                    )
+                  }
+                  className="h-8 w-8 rounded-full"
+                >
+                  <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                </Button>
+              </nav>
+            )}
           </>
         )}
       </section>
 
       <section id="service-history" className={cn("scroll-mt-24 min-w-0 overflow-hidden rounded-2xl", cardSurface)}>
-        <div className="flex min-w-0 items-center gap-2 border-b border-[var(--lp-line)] px-5 py-4">
+        <div className="flex min-w-0 items-center gap-2 px-5 py-4">
           <ClipboardList className="h-5 w-5 shrink-0 text-[var(--lp-accent)]" />
           <div className="min-w-0">
             <h2 className="lp-display text-lg font-semibold text-[var(--lp-ink)]">Related service requests</h2>
@@ -1158,7 +1243,7 @@ const CustomerMachineProfilePage = () => {
                   <col style={{ width: "8%" }} />
                 </colgroup>
                 <thead>
-                  <tr className="border-b border-[var(--lp-line)] text-left">
+                  <tr className="text-left">
                     {["Request", "Machine", "Status", "Priority", "Created", "Assigned engineer", "Open"].map((header) => (
                       <th key={header} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--lp-faint)]">
                         {header}
@@ -1167,11 +1252,11 @@ const CustomerMachineProfilePage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {relatedRequests.slice(0, 12).map((request) => {
+                  {paginatedRequests.items.map((request) => {
                     const requestMachine = request.customerMachineId ? machineMap.get(request.customerMachineId) : undefined;
                     const engineer = request.assignedEngineerId ? userMap.get(request.assignedEngineerId) : null;
                     return (
-                      <tr key={request.id} className="border-b border-[var(--lp-line)] last:border-b-0">
+                      <tr key={request.id} className="h-[64px]">
                         <td className="px-4 py-3">
                           <Link to={`/app/requests/${request.id}`} className="block truncate font-medium text-[var(--lp-ink)] hover:text-[var(--lp-accent)]">
                             {request.requestNumber}
@@ -1207,19 +1292,28 @@ const CustomerMachineProfilePage = () => {
                       </tr>
                     );
                   })}
+                  {Array.from({ length: paginatedRequests.emptySlots }, (_, index) => (
+                    <tr
+                      key={`request-empty-row-${index}`}
+                      aria-hidden="true"
+                      className="h-[64px]"
+                    >
+                      <td colSpan={7} />
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
             <div className="space-y-3 p-4 lg:hidden">
-              {relatedRequests.slice(0, 12).map((request) => {
+              {paginatedRequests.items.map((request) => {
                 const requestMachine = request.customerMachineId ? machineMap.get(request.customerMachineId) : undefined;
                 const engineer = request.assignedEngineerId ? userMap.get(request.assignedEngineerId) : null;
                 return (
                   <Link
                     key={request.id}
                     to={`/app/requests/${request.id}`}
-                    className="block min-w-0 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/45 p-4 transition-colors hover:border-[var(--lp-accent)]/45"
+                    className="block min-h-[154px] min-w-0 rounded-2xl border border-[var(--lp-line)] bg-[var(--lp-panel-2)]/45 p-4 transition-colors hover:border-[var(--lp-accent)]/45"
                   >
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -1239,7 +1333,48 @@ const CustomerMachineProfilePage = () => {
                   </Link>
                 );
               })}
+              {Array.from({ length: paginatedRequests.emptySlots }, (_, index) => (
+                <div
+                  key={`request-empty-card-${index}`}
+                  aria-hidden="true"
+                  className="invisible min-h-[154px] rounded-2xl border"
+                />
+              ))}
             </div>
+
+            {paginatedRequests.pageCount > 1 && (
+              <nav
+                aria-label="Related service requests pagination"
+                className="flex items-center justify-end gap-2 px-4 py-3"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Previous requests page"
+                  disabled={paginatedRequests.page === 0}
+                  onClick={() => setRequestPage((current) => Math.max(0, current - 1))}
+                  className="h-8 w-8 rounded-full"
+                >
+                  <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  aria-label="Next requests page"
+                  disabled={paginatedRequests.page >= paginatedRequests.pageCount - 1}
+                  onClick={() =>
+                    setRequestPage((current) =>
+                      Math.min(paginatedRequests.pageCount - 1, current + 1),
+                    )
+                  }
+                  className="h-8 w-8 rounded-full"
+                >
+                  <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                </Button>
+              </nav>
+            )}
           </>
         )}
       </section>

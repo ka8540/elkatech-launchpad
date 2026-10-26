@@ -15,11 +15,19 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
-  AuthUser,
   CustomerMachine,
   IssueType,
   RequestPriority,
 } from "@elkatech/contracts";
+
+// Lightweight customer directory entry from /api/staff/customers (no account
+// management fields — usable by admin, owner, and support alike).
+type StaffCustomer = {
+  id: string;
+  displayName: string;
+  email: string;
+  approvalStatus: string;
+};
 import { apiRequest } from "@/lib/api";
 import { uploadRequestAttachment } from "@/lib/attachments";
 import { cn } from "@/lib/utils";
@@ -49,13 +57,10 @@ const AdminCreateRequest = () => {
   const attachments = useAttachmentPicker();
 
   const usersQuery = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => apiRequest<AuthUser[]>("/api/admin/users"),
+    queryKey: ["staff-customers"],
+    queryFn: () => apiRequest<StaffCustomer[]>("/api/staff/customers"),
   });
-  const customers = useMemo(
-    () => (usersQuery.data ?? []).filter((u) => u.role === "customer"),
-    [usersQuery.data],
-  );
+  const customers = useMemo(() => usersQuery.data ?? [], [usersQuery.data]);
 
   const filteredCustomers = useMemo(() => {
     const needle = customerSearch.trim().toLowerCase();
@@ -71,8 +76,8 @@ const AdminCreateRequest = () => {
   );
 
   const machinesQuery = useQuery({
-    queryKey: ["admin", "user", customerId, "machines"],
-    queryFn: () => apiRequest<CustomerMachine[]>(`/api/admin/users/${customerId}/machines`),
+    queryKey: ["staff", "customer", customerId, "machines"],
+    queryFn: () => apiRequest<CustomerMachine[]>(`/api/staff/customers/${customerId}/machines`),
     enabled: Boolean(customerId),
   });
   const activeMachines = useMemo(

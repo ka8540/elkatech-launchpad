@@ -173,7 +173,7 @@ export function useAttachmentPicker() {
       next.push({
         key: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
         file,
-        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+        previewUrl: URL.createObjectURL(file),
       });
     }
     if (next.length) setFiles((current) => [...current, ...next]);
@@ -187,7 +187,17 @@ export function useAttachmentPicker() {
     });
   }
 
-  return { files, add, remove };
+  function clear() {
+    setFiles((current) => {
+      current.forEach(
+        (picked) =>
+          picked.previewUrl && URL.revokeObjectURL(picked.previewUrl),
+      );
+      return [];
+    });
+  }
+
+  return { files, add, remove, clear };
 }
 
 export function AttachmentPicker({

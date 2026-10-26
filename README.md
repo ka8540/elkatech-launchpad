@@ -1,16 +1,35 @@
 # ElkaTech Launchpad
 
-ElkaTech Launchpad is a monorepo for ElkaTech's industrial printing and signage machinery web presence plus its authenticated service platform. The public site presents the ElkaTech brand, product-category pages, responsive landing sections, light/dark theming, and polished motion. The protected portal adds customer authentication, service-request workflows, engineer/admin tools, and email notifications.
+ElkaTech Launchpad is a monorepo for ElkaTech's industrial printing and signage machinery web presence plus its authenticated service platform. The public site presents the ElkaTech brand, product-category pages, responsive landing sections, light/dark theming, and polished motion. The protected portal adds customer authentication, service-request workflows, role-aware staff/owner/admin tools, customer profile onboarding, customer-machine management, request attachments, and email notifications.
 
 ## Overview
 
 This repository contains:
 
 - A React/Vite marketing and product-catalog frontend.
-- A protected service portal rendered by the same frontend.
+- A protected service portal rendered by the same frontend, including customer, engineer, support, owner, and admin roles.
 - A Fastify gateway plus four internal services for auth, catalog, service desk, and notifications.
 - Shared TypeScript/Zod contracts and shared backend configuration helpers.
 - Local development infrastructure for PostgreSQL and Mailpit.
+
+## Documentation
+
+Current product and technical documentation (PDF, regenerated from this branch's
+README and codebase). Editable Markdown sources sit alongside each PDF, and
+`docs/build_pdfs.py` rebuilds the PDFs from those sources.
+
+| Document | PDF | Source |
+| --- | --- | --- |
+| Product Requirements Document (PRD) | [docs/ElkaTech_PRD.pdf](docs/ElkaTech_PRD.pdf) | [docs/ElkaTech_PRD.md](docs/ElkaTech_PRD.md) |
+| Technical Requirements Document (TRD) | [docs/ElkaTech_TRD.pdf](docs/ElkaTech_TRD.pdf) | [docs/ElkaTech_TRD.md](docs/ElkaTech_TRD.md) |
+| App Flow / UI-UX Flow | [docs/ElkaTech_App_Flow_UI_UX.pdf](docs/ElkaTech_App_Flow_UI_UX.pdf) | [docs/ElkaTech_App_Flow_UI_UX.md](docs/ElkaTech_App_Flow_UI_UX.md) |
+| Database Schema Design | [docs/ElkaTech_Schema_Design.pdf](docs/ElkaTech_Schema_Design.pdf) | [docs/ElkaTech_Schema_Design.md](docs/ElkaTech_Schema_Design.md) |
+
+Regenerate the PDFs after editing any source:
+
+```sh
+python3 docs/build_pdfs.py
+```
 
 ## Features
 
@@ -19,12 +38,16 @@ This repository contains:
 - Product image carousels, specification tables, brochure links, and service-request entry points.
 - Dark/light theme support with persisted preference and theme-aware navbar variants.
 - Stable reveal animations designed to avoid refresh-time layout shift.
-- Protected customer portal for creating and tracking service requests.
-- Engineer queue and admin user-invitation views.
+- Protected customer portal for completing a service profile, choosing an assigned machine, creating service requests, attaching evidence, and tracking follow-up.
+- Engineer queue, support operations, owner controls, and admin user-invitation views.
 - Cookie-based sessions, CSRF protection, RBAC checks, and email notifications.
 - Firebase Authentication (email/password and Google) bridged to existing cookie sessions.
 - Admin approval workflow: new customer accounts land in `pending_approval` and cannot create service requests until an admin approves them.
 - Admin dashboard with approval counts, request load, and live service heartbeats.
+- Owner/support role model with shared permission helpers used by both gateway guards and frontend UI.
+- Customer Activity and Support dashboards for operational staff.
+- Admin/owner customer-machine inventory linked to customer accounts and request creation.
+- Cloudflare R2 direct uploads for request photo/video attachments, with graceful `501` fallback when storage is not configured.
 
 ## Tech Stack
 
@@ -35,7 +58,7 @@ This repository contains:
 | Motion | Framer Motion for controlled UI animation |
 | Backend | Fastify services, Zod validation |
 | Identity | Firebase Authentication (email/password + Google), Firebase Admin SDK on the server |
-| Data | PostgreSQL (local Docker or hosted via Neon), optional Redis-compatible cache |
+| Data | PostgreSQL (local Docker or hosted via Neon), optional Redis-compatible cache, Cloudflare R2 for request attachments |
 | Email | Nodemailer, Mailpit for local testing |
 | Tooling | npm workspaces, TypeScript, Vitest, ESLint |
 | Deployment config | Vercel configuration files and prebuilt serverless handlers |
@@ -91,13 +114,16 @@ flowchart TD
     Router --> Landing[Landing and category pages]
     Router --> Portal[Protected service portal]
     Web --> StaticAssets[public images and assets]
+    Web --> FirebaseWeb[Firebase Auth Web SDK]
     Web --> Gateway[services/gateway public API]
 
     Gateway --> Auth[services/auth]
     Gateway --> Catalog[services/catalog]
     Gateway --> Desk[services/service-desk]
+    Auth --> FirebaseAdmin[Firebase Admin SDK]
     Desk --> Auth
     Desk --> Catalog
+    Desk --> R2[(Cloudflare R2 attachments)]
 
     Auth --> AuthSchema[(Postgres auth schema)]
     Catalog --> CatalogSchema[(Postgres catalog schema)]
@@ -117,18 +143,72 @@ flowchart TD
 - `apps/web` uses `BrowserRouter`, client-side routes, and a single `ThemeProvider`.
 - The public product category pages are rendered from local component data.
 - The service portal catalog API is backed by PostgreSQL and seeded from `packages/contracts/src/index.ts`.
+- Customer service profiles are stored on `auth.users`; machine ownership and request attachments live in the `service_desk` schema.
+- Role permissions live in shared contracts and are imported by the gateway, service desk, and web app so server enforcement and UI visibility stay aligned.
 - Static images live under `apps/web/public/images`.
+- Request attachment bytes upload directly from the browser to Cloudflare R2 through presigned URLs; the database stores metadata only.
 - Local development uses separate HTTP services on ports `4000` through `4004`; Vite proxies `/api` to the gateway on port `4000`.
 - Root `vercel.json` rewrites API paths to bundled handlers in `api/*.mjs` and SPA routes to `index.html`.
+
+## Portal roles and permissions
+
+The platform has five portal roles. Permission rules live in one place —
+`packages/contracts/src/index.ts` (`canDeleteUsers`, `canApproveUsers`,
+`canSuspendUsers`, `canChangeRoles`, `canAssignRequests`,
+`canCreateRequestForCustomer`, `canViewCustomerActivity`, `assignableRolesFor`,
+`canManageTargetUser`, …). The **gateway** calls these helpers to enforce every
+sensitive endpoint (returning `403`), and the **web app** calls the same helpers
+to gate UI, so a hidden control always corresponds to a backend rejection.
+Permissions are never enforced in React alone.
+
+| Capability | Admin | Owner | Support | Engineer | Customer |
+| --- | --- | --- | --- | --- | --- |
+| Permanently delete / remove user data | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Approve / reject users | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Suspend / reactivate users | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Change roles | ✅ (any) | ✅ (not admin) | ❌ | ❌ | ❌ |
+| View Users management page | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Customer Activity dashboard | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Support dashboard | ✅ | ✅ | ✅ | ❌ | ❌ |
+| Assign / reassign requests | ✅ | ✅ | ✅ | claim only | ❌ |
+| Create request on behalf of a customer | ✅ | ✅ | ✅ | ❌ | own only |
+| Customer machine management | ✅ | ✅ | view only | ❌ | ❌ |
+| System Admin panel (health, danger zone) | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+- **Admin** — highest system role. Full access, including permanent deletion of
+  user/customer data and the system Admin panel.
+- **Owner** — business operations. Can approve/suspend users, change roles
+  (anything except admin — and never on an admin account), assign requests,
+  create requests for customers, and view all customer activity. **Cannot
+  permanently delete user/customer data** and has no access to the system Admin
+  danger zone. Owner hits a `403` ("Only admins can permanently delete user
+  data.") if the delete API is called directly.
+- **Support** — service operations. Views customer activity, creates requests
+  on behalf of customers, and assigns/reassigns requests to engineers. Cannot
+  approve, suspend, delete, or change roles, and never sees user-management
+  controls.
+- **Engineer** — handles assigned requests (unchanged); claims queue items.
+- **Customer** — creates and tracks their own requests (unchanged).
+
+Two dashboards serve the operational roles (admin/owner/support):
+`/app/customer-activity` (Customer Activity) and `/app/support` (Support
+operations + assignment). The database role check is relaxed by migration
+`008_owner_support_roles.sql`; existing users are never changed.
+
+> This feature branch was created from `dev`, and its PR targets `dev`. Never
+> branch from or push directly to `main`.
 
 ## Application Flow
 
 1. The browser loads `apps/web`, which mounts `ThemeProvider`, routing, toast providers, and scroll handling.
 2. Public users browse the landing page and static product-category routes.
-3. Portal users authenticate through the gateway, which sets the session and CSRF cookies.
-4. Protected routes resolve the session through `/api/auth/me`.
-5. Customers create service requests against catalog products; engineers/admins manage queue, messages, assignment, and status.
-6. Auth and request events enter outbox tables; the notification service polls those tables and sends emails.
+3. Portal users authenticate with Firebase or legacy auth through the gateway, which sets the session and CSRF cookies.
+4. Protected routes resolve the session through `/api/auth/me`, including role, approval, and profile-completion state.
+5. Customers complete their service profile before creating requests, then select one of their active assigned machines.
+6. Support, owner, and admin users can create requests on behalf of customers, view customer activity, and assign engineers.
+7. Engineers and admins manage workflow status; support/owner/admin users manage assignment.
+8. Request attachments upload directly to R2 through presigned URLs, then persist metadata in the service-desk schema.
+9. Auth, machine, and request events enter outbox tables; the notification service polls those tables and sends emails.
 
 ## Routing / Pages
 
@@ -159,9 +239,16 @@ flowchart TD
 | `/app/requests` | Customer requests or assigned work | Authenticated users |
 | `/app/requests/new` | Create service request | Authenticated users |
 | `/app/requests/:requestId` | Request detail, messages, history | Authenticated users with request access |
-| `/app/queue` | Open/assigned service queue | `engineer`, `admin` |
+| `/app/complete-profile` | Customer service-profile onboarding | Authenticated users |
+| `/app/account` | Current user's profile and account controls | Authenticated users |
+| `/app/queue` | Open/assigned service queue | `engineer`, `support`, `owner`, `admin` |
+| `/app/support` | Support operations dashboard and assignment view | `support`, `owner`, `admin` |
+| `/app/customer-activity` | Customer activity dashboard | `support`, `owner`, `admin` |
+| `/app/customer-activity/:customerId` | Customer activity detail | `support`, `owner`, `admin` |
 | `/app/admin` | Admin dashboard: approvals, requests, heartbeats | `admin` |
-| `/app/users` | User list, approvals, and staff invitations | `admin` |
+| `/app/users` | User list, approvals, and staff invitations | `owner`, `admin` |
+| `/app/machines` | Customer-machine inventory | `owner`, `admin` |
+| `/app/machines/:customerId` | Customer machine/profile detail | `owner`, `admin` |
 
 ## API / Data Layer
 
@@ -171,34 +258,61 @@ The frontend calls `/api/*` through `apps/web/src/lib/api.ts`. Mutating requests
 
 | Method | Endpoint | Purpose | Request schema / notes | Auth |
 | --- | --- | --- | --- | --- |
-| `POST` | `/api/auth/signup` | Create customer account or accept invite (legacy + invite path) | `signUpInputSchema` | Public |
+| `POST` | `/api/auth/signup` | Create customer account or accept invite | `signUpInputSchema`; invite path preserves invited role | Public |
 | `POST` | `/api/auth/login` | Create session and cookies (legacy path) | `loginInputSchema` | Public |
 | `POST` | `/api/auth/logout` | End session | Session cookie if present | Public |
-| `GET` | `/api/auth/me` | Resolve current session | Returns `{ user }` (includes `approvalStatus`) | Public |
+| `GET` | `/api/auth/me` | Resolve current session | Returns `{ user }`, including `role`, `approvalStatus`, `accountOrigin`, and `profileCompleted` | Public |
 | `POST` | `/api/auth/forgot-password` | Request reset email (legacy) | `forgotPasswordInputSchema` | Public |
 | `POST` | `/api/auth/reset-password` | Complete reset (legacy) | `resetPasswordInputSchema` | Public |
 | `POST` | `/api/auth/verify-email` | Verify email token (legacy) | `verifyEmailInputSchema` | Public |
-| `POST` | `/api/auth/firebase/session` | Verify a Firebase ID token and create the local session | `{ idToken }` | Public |
+| `POST` | `/api/auth/firebase/session` | Verify a Firebase ID token and create the local session | `{ idToken }`; creates/link users without overwriting moderator state | Public |
 | `GET` | `/api/auth/google/start` | Start legacy server-side Google OAuth flow | `?returnTo=&inviteToken=` | Public |
 | `GET` | `/api/auth/google/callback` | Legacy Google OAuth callback | Redirects after auth | Public |
 | `GET` | `/api/catalog/categories` | List catalog categories | Read-only | Public through gateway |
 | `GET` | `/api/catalog/products` | List products, optional `?category=` filter | Read-only | Public through gateway |
 | `GET` | `/api/catalog/products/:productId` | Read one product | Read-only | Public through gateway |
-| `POST` | `/api/requests` | Create service request | `createServiceRequestInputSchema` | Authenticated, verified email, approval status `approved` |
-| `GET` | `/api/requests` | List visible requests; optional `?scope=queue` | Role-aware response | Authenticated |
-| `GET` | `/api/requests/:requestId` | Read one request with messages/history | Role-aware visibility | Authenticated |
-| `POST` | `/api/requests/:requestId/messages` | Add message or internal note | `createRequestMessageInputSchema` | Authenticated |
-| `POST` | `/api/requests/:requestId/claim` | Claim a request | Engineer/admin only | Authenticated |
-| `POST` | `/api/requests/:requestId/assign` | Assign an engineer | `{ engineerId }` | Admin only |
-| `POST` | `/api/requests/:requestId/status` | Change status | `updateRequestStatusInputSchema` | Engineer/admin only |
-| `GET` | `/api/admin/users` | List users (includes `approvalStatus`) | Internal auth read | Admin only |
-| `GET` | `/api/admin/users/summary` | Approval-status counts for the dashboard | Internal auth read | Admin only |
-| `POST` | `/api/admin/users/invite` | Invite engineer/admin | `inviteUserInputSchema` | Admin only |
-| `POST` | `/api/admin/users/:userId/approve` | Approve a pending customer | `approvalActionInputSchema` | Admin only |
-| `POST` | `/api/admin/users/:userId/reject` | Reject a pending customer | `approvalActionInputSchema` | Admin only |
-| `POST` | `/api/admin/users/:userId/suspend` | Suspend an approved customer | `approvalActionInputSchema` | Admin only |
-| `POST` | `/api/admin/users/:userId/reactivate` | Reactivate a suspended/rejected customer | `approvalActionInputSchema` | Admin only |
-| `GET` | `/api/admin/health` | Service heartbeat snapshot for the admin dashboard | Read-only | Admin only |
+| `GET` | `/api/me/profile` | Read signed-in user's service profile | Customer workshop/contact profile | `customer`, `engineer`, `admin` |
+| `PATCH` | `/api/me/profile` | Update signed-in user's display/profile fields | `completeProfileInputSchema.partial()`; never mutates role/email/password/approval | `customer`, `engineer`, `admin` + CSRF |
+| `POST` | `/api/me/password-reset` | Send reset email to signed-in user's own email | Constant response; rate-limited | `customer`, `engineer`, `admin` + CSRF |
+| `GET` | `/api/me/machines` | List current user's active machine choices | Customer-safe machine view | `customer`, `engineer`, `admin` |
+| `POST` | `/api/requests` | Create service request | Machine-based `createCustomerRequestInputSchema` or legacy `createServiceRequestInputSchema`; requires approved + verified user; customers must complete profile | `customer`, `engineer`, `support`, `owner`, `admin` + CSRF |
+| `GET` | `/api/requests` | List visible requests; optional `?scope=queue` / `?statusGroup=` | Role-aware response | Authenticated portal roles |
+| `GET` | `/api/requests/:requestId` | Read one request with messages, history, participants, and attachments metadata | Role-aware visibility | Authenticated portal roles |
+| `PATCH` | `/api/requests/:requestId` | Update request fields | `updateServiceRequestInputSchema` | `customer`, `engineer`, `admin` + CSRF |
+| `POST` | `/api/requests/:requestId/messages` | Add customer-visible message or internal note | `createRequestMessageInputSchema`; customers cannot create internal notes | Authenticated portal roles + CSRF |
+| `POST` | `/api/requests/:requestId/claim` | Engineer self-claim | Returns `409` when already assigned | `engineer`, `admin` + CSRF |
+| `POST` | `/api/requests/:requestId/assign` | Assign/reassign an engineer | `{ engineerId }`; writes assigned/reassigned history | `support`, `owner`, `admin` + CSRF |
+| `POST` | `/api/requests/:requestId/status` | Change workflow status | `updateRequestStatusInputSchema`; transition map enforced in service desk | `engineer`, `admin` + CSRF |
+| `POST` | `/api/requests/:requestId/cancel` | Close/archive a request | `cancelRequestInputSchema` | `customer`, `engineer`, `admin` + CSRF |
+| `POST` | `/api/requests/:requestId/attachments/presign` | Issue short-lived direct-to-R2 upload target | `presignAttachmentInputSchema`; returns `501` when R2 is not configured | `customer`, `engineer`, `admin` + CSRF |
+| `POST` | `/api/requests/:requestId/attachments` | Confirm uploaded attachment metadata | `confirmAttachmentInputSchema`; validates object key prefix | `customer`, `engineer`, `admin` + CSRF |
+| `GET` | `/api/requests/:requestId/attachments` | List request attachment metadata/read URLs | Role-aware visibility | Authenticated portal roles |
+| `GET` | `/api/admin/users` | List users (includes role, approval, origin, profile status) | Internal auth read | `owner`, `admin` |
+| `GET` | `/api/admin/users/summary` | Approval-status counts for the admin dashboard | Internal auth read | `admin` |
+| `GET` | `/api/admin/users/:userId/profile` | Read a customer's service profile | Internal auth read | `admin` |
+| `PATCH` | `/api/admin/users/:userId/profile` | Edit customer profile fields | `adminUpdateProfileInputSchema` | `admin` + CSRF |
+| `POST` | `/api/admin/users/invite` | Invite customer/staff users | `inviteUserInputSchema`; owner cannot invite `admin` | `owner`, `admin` + CSRF |
+| `POST` | `/api/admin/users/:userId/approve` | Approve a pending account | Owner cannot act on admin accounts | `owner`, `admin` + CSRF |
+| `POST` | `/api/admin/users/:userId/reject` | Reject a pending account | Owner cannot act on admin accounts | `owner`, `admin` + CSRF |
+| `POST` | `/api/admin/users/:userId/suspend` | Suspend an account | Owner cannot act on admin accounts | `owner`, `admin` + CSRF |
+| `POST` | `/api/admin/users/:userId/reactivate` | Reactivate a suspended/rejected account | Owner cannot act on admin accounts | `owner`, `admin` + CSRF |
+| `POST` | `/api/admin/users/:userId/role` | Change a user's role | Admin can assign any role; owner can assign non-admin roles and cannot modify admins | `owner`, `admin` + CSRF |
+| `DELETE` | `/api/admin/users/:userId` | Permanently remove user/customer data | Admin-only; self/system/admin accounts protected | `admin` + CSRF |
+| `GET` | `/api/admin/users/:userId/machines` | List a customer's machines | Internal service-desk read | `owner`, `admin` |
+| `POST` | `/api/admin/users/:userId/machines` | Link a machine to a customer | `createCustomerMachineInputSchema` | `owner`, `admin` + CSRF |
+| `PATCH` | `/api/admin/machines/:machineId` | Update one customer machine | `updateCustomerMachineInputSchema` | `owner`, `admin` + CSRF |
+| `DELETE` | `/api/admin/machines/:machineId` | Deactivate one customer machine | Soft status change to `inactive` | `owner`, `admin` + CSRF |
+| `GET` | `/api/admin/customer-machines` | Global customer-machine dashboard list | Optional `customerId`, `productId`, `status` filters | `owner`, `admin` |
+| `POST` | `/api/admin/customer-machines` | Link a machine from the global dashboard | `adminLinkMachineInputSchema` | `owner`, `admin` + CSRF |
+| `PATCH` | `/api/admin/customer-machines/:machineId` | Update a global customer-machine row | `updateCustomerMachineInputSchema` | `owner`, `admin` + CSRF |
+| `DELETE` | `/api/admin/customer-machines/:machineId` | Deactivate a global customer-machine row | Soft status change to `inactive` | `owner`, `admin` + CSRF |
+| `GET` | `/api/admin/health` | Service heartbeat snapshot for the admin dashboard | Read-only | `admin` |
+| `GET` | `/api/customer-activity` | Customer activity dashboard aggregate | Joins auth directory with service-desk metrics | `support`, `owner`, `admin` |
+| `GET` | `/api/customer-activity/:customerId` | Customer activity detail | Profile, machines, request history | `support`, `owner`, `admin` |
+| `GET` | `/api/support/summary` | Support operations KPI summary | Queue and workload metrics | `support`, `owner`, `admin` |
+| `GET` | `/api/staff/customers` | Lightweight customer directory for staff request creation | No account-management fields | `support`, `owner`, `admin` |
+| `GET` | `/api/staff/customers/:customerId/machines` | Customer machine choices for staff-created requests | Customer-safe machine view | `support`, `owner`, `admin` |
+| `GET` | `/api/engineers` | Engineer directory for assignment | Internal auth read filtered to engineers | `support`, `owner`, `admin` |
 
 ### Internal service boundaries
 
@@ -228,6 +342,16 @@ All non-health internal endpoints expect `x-internal-token`.
 | `ApprovalStateCard` | Polished pending/rejected/suspended state surfaced to blocked customers |
 | `VerifyEmailNotice` | Friendly banner shown to signed-in users whose email is not yet verified |
 | `AdminDashboardPage` | `/app/admin` — approval counts, request load, recent activity, live heartbeats |
+| `AccountPage` | `/app/account` — profile summary, display-name update, self password reset |
+| `CompleteProfilePage` | `/app/complete-profile` — required customer workshop/contact onboarding |
+| `UsersPage` | `/app/users` — owner/admin user list, approvals, role changes, staff invites |
+| `MachinesPage` | `/app/machines` — owner/admin global customer-machine inventory |
+| `CustomerMachineProfilePage` | `/app/machines/:customerId` — customer machine and request history workspace |
+| `CustomerMachinesDialog` | Inline customer profile and machine management from the users page |
+| `MachineFormDialog` | Link/edit customer machines with catalog product snapshots |
+| `CustomerActivityPage` | `/app/customer-activity` — customer activity KPIs and customer detail |
+| `SupportDashboardPage` | `/app/support` — operational queue, customer lookup, engineer assignment |
+| `AdminCreateRequest` | Staff request creation flow for admin/owner/support users |
 
 ## Environment Variables
 
@@ -267,6 +391,14 @@ All non-health internal endpoints expect `x-internal-token`.
 | `VITE_FIREBASE_APP_ID` | No (web only) | Firebase web client app ID | empty |
 | `VITE_FIREBASE_STORAGE_BUCKET` | No (web only) | Firebase web client storage bucket | empty |
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | No (web only) | Firebase web client messaging sender ID | empty |
+| `R2_ACCOUNT_ID` | No | Cloudflare account ID used to derive the R2 S3 endpoint | empty |
+| `R2_ACCESS_KEY_ID` | No | R2 S3-compatible access key for presigned uploads/reads | empty |
+| `R2_SECRET_ACCESS_KEY` | No | R2 S3-compatible secret key | empty |
+| `R2_BUCKET_NAME` | No | R2 bucket that stores request attachments | empty |
+| `R2_ENDPOINT` | No | Explicit R2 S3 API endpoint override | derived from `R2_ACCOUNT_ID` |
+| `R2_PUBLIC_BASE_URL` | No | Optional public read base URL for attachment display | empty |
+| `MAX_REQUEST_ATTACHMENT_MB` | No | Per-file request attachment limit | `25` |
+| `ALLOWED_REQUEST_ATTACHMENT_TYPES` | No | Comma-separated upload content types | `image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm` |
 | `VERCEL` | Platform-provided | Enables Vercel runtime behavior | `1` on Vercel |
 | `VERCEL_URL` | Platform-provided | Preview/runtime URL input | provided by Vercel |
 | `VERCEL_PROJECT_PRODUCTION_URL` | Platform-provided | Preferred production URL input | provided by Vercel |
@@ -511,7 +643,7 @@ sequenceDiagram
     Layout-->>User: Render category, carousel, specs, CTAs
 ```
 
-### Service request creation flow
+### Customer profile and machine-based request flow
 
 ```mermaid
 sequenceDiagram
@@ -519,16 +651,26 @@ sequenceDiagram
     participant Web as Web portal
     participant Gateway
     participant Auth
-    participant Catalog
     participant Desk as Service desk
+    participant Catalog
     participant Outbox
     participant Notify as Notification
+    Customer->>Web: Complete service profile
+    Web->>Gateway: PATCH /api/me/profile + CSRF
+    Gateway->>Auth: PATCH /internal/users/:id/profile
+    Auth-->>Gateway: profileCompleted=true
+    Gateway-->>Web: Updated profile
+    Web->>Gateway: GET /api/me/machines
+    Gateway->>Desk: GET /me/machines
+    Desk-->>Gateway: Active customer-safe machines
+    Gateway-->>Web: Machine choices
     Customer->>Web: Submit service request
     Web->>Gateway: POST /api/requests + CSRF
     Gateway->>Auth: Resolve session
-    Auth-->>Gateway: User session
+    Auth-->>Gateway: Approved, verified, profile-complete user
     Gateway->>Desk: POST /requests
-    Desk->>Catalog: GET product snapshot
+    Desk->>Desk: Validate selected machine ownership
+    Desk->>Catalog: Use stored product snapshot
     Catalog-->>Desk: Product
     Desk->>Desk: Store request and history
     Desk->>Outbox: Emit request.created
@@ -536,6 +678,77 @@ sequenceDiagram
     Gateway-->>Web: Created request
     Notify->>Outbox: Poll event
     Notify-->>Customer: Confirmation email
+```
+
+### Owner role-management flow
+
+```mermaid
+sequenceDiagram
+    participant Owner
+    participant Web as UsersPage
+    participant Gateway
+    participant Contracts as Shared permission helpers
+    participant Auth
+    Owner->>Web: Invite or manage staff
+    Web->>Contracts: assignableRolesFor(owner)
+    Contracts-->>Web: customer, engineer, support, owner
+    Web->>Gateway: POST /api/admin/users/invite or /role + CSRF
+    Gateway->>Auth: Resolve session and target role
+    Auth-->>Gateway: actor=owner, target role
+    Gateway->>Contracts: canManageUsers / canChangeRoles / canManageTargetUser
+    Contracts-->>Gateway: Allowed unless target/admin role is protected
+    Gateway->>Auth: Forward internal mutation
+    Auth-->>Gateway: Updated user
+    Gateway-->>Web: Updated role/invite response
+```
+
+### Direct request attachment upload flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Web as Request detail UI
+    participant Gateway
+    participant Desk as Service desk
+    participant R2 as Cloudflare R2
+    User->>Web: Select image/video evidence
+    Web->>Gateway: POST /api/requests/:id/attachments/presign + CSRF
+    Gateway->>Desk: POST /requests/:id/attachments/presign
+    Desk->>Desk: Check visibility, type, size, request prefix
+    Desk-->>Gateway: uploadUrl, objectKey, headers
+    Gateway-->>Web: Upload ticket
+    Web->>R2: PUT bytes directly with signed URL
+    R2-->>Web: Upload complete
+    Web->>Gateway: POST /api/requests/:id/attachments + metadata
+    Gateway->>Desk: Persist metadata
+    Desk->>Desk: Add attachment_added history
+    Desk-->>Gateway: Attachment with read URL
+    Gateway-->>Web: Render attachment
+```
+
+### Staff support assignment flow
+
+```mermaid
+sequenceDiagram
+    participant Support
+    participant Web as Support dashboard
+    participant Gateway
+    participant Contracts as Shared permission helpers
+    participant Desk as Service desk
+    participant Auth
+    Support->>Web: Assign or reassign engineer
+    Web->>Gateway: GET /api/engineers
+    Gateway->>Auth: GET /internal/users?role=engineer
+    Auth-->>Gateway: Engineer directory
+    Gateway-->>Web: Engineer options
+    Support->>Web: Submit assignment
+    Web->>Gateway: POST /api/requests/:id/assign + CSRF
+    Gateway->>Contracts: canAssignRequests(support)
+    Contracts-->>Gateway: true
+    Gateway->>Desk: POST /requests/:id/assign
+    Desk->>Desk: Set assigned engineer and history event
+    Desk-->>Gateway: Updated request
+    Gateway-->>Web: Updated queue
 ```
 
 ## UML / Component Diagrams
@@ -557,7 +770,31 @@ flowchart TD
     ProductCategoryPage --> SiteHeader
     ProductCategoryPage --> ProductPageBackground
     ProductCategoryPage --> StableReveal
-    PortalShell --> PortalPages[Requests / New Request / Detail / Queue / Users]
+    PortalShell --> PortalPages[Requests / New Request / Detail / Queue / Users / Machines / Support / Customer Activity / Account]
+    PortalPages --> AdminCreateRequest
+    PortalPages --> CustomerMachinesDialog
+    PortalPages --> MachineFormDialog
+```
+
+### Role and permission architecture
+
+```mermaid
+flowchart TD
+    Contracts[packages/contracts roleSchema + permission helpers]
+    GatewayGuards[Gateway requireSession + route guards]
+    WebGates[ProtectedRoute + PortalShell + page controls]
+    DeskGuards[Service-desk operational guards]
+    AuthService[Auth role/session/invite logic]
+
+    Contracts --> GatewayGuards
+    Contracts --> WebGates
+    Contracts --> DeskGuards
+    Contracts --> AuthService
+
+    GatewayGuards --> AdminOnly[Admin-only: health, permanent user delete, admin role assignment]
+    GatewayGuards --> OwnerOps[Owner/Admin: users, approvals, machines, non-admin roles]
+    GatewayGuards --> SupportOps[Support/Owner/Admin: support dashboard, customer activity, assignment]
+    GatewayGuards --> PortalOps[All portal roles: visible requests, messages, attachment reads]
 ```
 
 ### Core data model
@@ -568,9 +805,12 @@ erDiagram
     AUTH_USERS ||--o{ AUTH_TOKENS : receives
     AUTH_USERS ||--o{ OAUTH_IDENTITIES : links
     AUTH_USERS ||--o{ SERVICE_REQUESTS : creates
+    AUTH_USERS ||--o{ CUSTOMER_MACHINES : owns
+    CUSTOMER_MACHINES ||--o{ SERVICE_REQUESTS : selected_for
     CATALOG_CATEGORIES ||--o{ CATALOG_PRODUCTS : contains
     SERVICE_REQUESTS ||--o{ REQUEST_MESSAGES : has
     SERVICE_REQUESTS ||--o{ REQUEST_HISTORY : records
+    SERVICE_REQUESTS ||--o{ REQUEST_ATTACHMENTS : has
     AUTH_OUTBOX ||--o{ NOTIFICATION_DELIVERIES : produces
     SERVICE_DESK_OUTBOX ||--o{ NOTIFICATION_DELIVERIES : produces
 
@@ -580,6 +820,10 @@ erDiagram
       text display_name
       text role
       boolean email_verified
+      text approval_status
+      boolean profile_completed
+      text company_name
+      text contact_phone
     }
     CATALOG_PRODUCTS {
       text id
@@ -588,10 +832,20 @@ erDiagram
       text name
       text price_display
     }
+    CUSTOMER_MACHINES {
+      uuid id
+      uuid customer_id
+      text product_id
+      jsonb product_snapshot
+      text display_label
+      text internal_serial_number
+      text status
+    }
     SERVICE_REQUESTS {
       uuid id
       text request_number
       uuid customer_id
+      uuid customer_machine_id
       text product_id
       jsonb product_snapshot
       text status
@@ -602,6 +856,14 @@ erDiagram
       uuid request_id
       uuid author_id
       text visibility
+    }
+    REQUEST_ATTACHMENTS {
+      uuid id
+      uuid request_id
+      uuid uploaded_by
+      text object_key
+      text content_type
+      text kind
     }
 ```
 
@@ -679,7 +941,7 @@ Neon is the recommended hosted Postgres. Free tier covers initial usage with no 
 
 ## Contribution Workflow
 
-1. Branch from `main`.
+1. Branch from the intended integration branch (`dev` for the current portal feature work, `main` for production hotfixes).
 2. Keep the change focused; avoid unrelated formatting churn.
 3. Update shared contracts and local public-page data together when changing catalog content.
 4. Run relevant build, typecheck, and tests before opening a pull request.
@@ -844,9 +1106,48 @@ The integration requests only `openid email profile` — minimal OpenID Connect 
 
 ## Recent Updates
 
-A summary of the work that has landed on `main` over the most recent
-iteration cycle. Each item refers to changes already in the codebase — see
-the git log for the exact commits.
+A summary of the work currently represented by this branch. Each item refers
+to changes already in the codebase — see the git log for the exact commits.
+
+### Owner/support operations, profiles, machines, and attachments
+
+- **Protected owner role.** `owner` is part of the shared role schema and the
+  database role constraints for `auth.users` and `auth.tokens`. Owner inherits
+  business-operations permissions from admin but remains blocked from
+  admin-only destructive/system controls.
+- **Shared RBAC helpers.** `packages/contracts/src/index.ts` is the source of
+  truth for role checks (`canManageUsers`, `canManageOperational`,
+  `canAssignRequests`, `canDeleteUsers`, `assignableRolesFor`,
+  `canManageTargetUser`, etc.). The gateway, service desk, and web app all
+  consume the same helpers so UI visibility and backend `403` behavior match.
+- **Owner safety rails.** Owner can approve/reject/suspend/reactivate users,
+  invite and assign non-admin roles, manage customer machines, view customer
+  activity, and assign requests. Owner cannot assign admin, modify admin
+  accounts, remove protected admin accounts, permanently delete user/customer
+  data, or access `/app/admin`.
+- **Support role.** `support` can view the support dashboard and customer
+  activity, create requests on behalf of customers, and assign/reassign
+  requests to engineers without seeing user-management controls.
+- **Customer service profiles.** Customer profile fields now capture company,
+  contact phone, alternate phone, and workshop address. `profileCompleted`
+  is derived server-side and blocks customer request creation until required
+  fields are present.
+- **Customer-machine inventory.** Admin/owner users can link catalog products
+  to customers as physical machines, store site/serial/install metadata, and
+  deactivate machines without deleting rows needed by historical requests.
+  Customers create requests by selecting an active assigned machine instead
+  of typing product/site details manually.
+- **Operational dashboards.** `/app/customer-activity`, `/app/support`,
+  `/app/machines`, and `/app/machines/:customerId` support the new staff
+  workflows, backed by gateway routes that join auth users with service-desk
+  request and machine aggregates.
+- **Request attachments.** Photo/video evidence is stored in Cloudflare R2
+  through the presign -> direct browser upload -> metadata confirm flow. The
+  backend enforces allowed types, max size, request visibility, and object-key
+  prefix validation; attachment history is recorded on the request timeline.
+- **Schema migrations.** The branch adds auth migrations for customer profile
+  fields and owner/support roles, plus service-desk migrations for customer
+  machines, request-machine links, and request attachments.
 
 ### Portal theme & UI polish
 

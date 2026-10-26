@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CustomerMachinePublic, IssueType, RequestPriority } from "@elkatech/contracts";
+import { canCreateRequestForCustomer } from "@elkatech/contracts";
 import { apiRequest } from "@/lib/api";
+import { PAGE_CONTAINER, PAGE_CONTAINER_READING } from "@/lib/page-layout";
 import { uploadRequestAttachment } from "@/lib/attachments";
 import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
@@ -89,7 +91,7 @@ const CustomerCreateRequest = () => {
 
   if (!machinesQuery.isLoading && machines.length === 0) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+      <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
         <PageHero
           icon={Wrench}
           title="Create service request"
@@ -115,7 +117,7 @@ const CustomerCreateRequest = () => {
   const canSubmit = Boolean(machineId && issueType && description.trim().length >= 5);
 
   return (
-    <div className="mx-auto max-w-7xl min-w-0 space-y-4 overflow-x-hidden">
+    <div className={cn(PAGE_CONTAINER, "overflow-x-hidden")}>
       <PageHero
         icon={Wrench}
         title="Create service request"
@@ -275,9 +277,9 @@ const RequestNewPage = () => {
   const { data: session } = useSession();
   const user = session?.user;
 
-  // Admins create requests on behalf of customers — never blocked by their own
-  // (empty) machine list.
-  if (user?.role === "admin") {
+  // Admin, owner and support create requests on behalf of customers — never
+  // blocked by their own (empty) machine list. Backend enforces the same.
+  if (user && canCreateRequestForCustomer(user.role)) {
     return <AdminCreateRequest />;
   }
 
@@ -286,7 +288,7 @@ const RequestNewPage = () => {
   const approvalBlocked = isCustomerActionBlocked(user);
   if (approvalBlocked && user && user.approvalStatus !== "approved") {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+      <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
         <PageHero
           icon={ShieldCheck}
           title={
@@ -306,7 +308,7 @@ const RequestNewPage = () => {
 
   if (user && !user.emailVerified) {
     return (
-      <div className="mx-auto max-w-3xl min-w-0 space-y-4 overflow-x-hidden">
+      <div className={cn(PAGE_CONTAINER_READING, "overflow-x-hidden")}>
         <PageHero
           icon={ShieldCheck}
           title="Verify your email first"
